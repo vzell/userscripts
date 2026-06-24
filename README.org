@@ -32,7 +32,7 @@ Write a userscript which parses the YEAR pages, and for each event follows the l
 event names. For the comparison to succeed
 
 - the "(The)" in front of a "," should be treated as being right after the date (which additionally should get a " - " added)
-- the comparison should be made by UPCASING the DETAILpage evetn name
+ comparison should be made by UPCASING the DETAIL page event name
  
 So e.g the two event names in the above table should be considered the same. In this case append a green checkmark after
 the event name on the YEAR page and a red cross if they differ.
@@ -103,7 +103,7 @@ Setlists have the following typical structure @debug/YEAR.org
 - songs have the string " / " between each other and are located inside a "<p>" container after the event name
 - every song is UPPERCASED
 - the HTML <strong> attribute should be ignored
-- optional additional musicians after the UPPERCAED song name should be ignored e.g. "(with Willie Nile and Jon Landau)"
+- optional additional musicians after the UPPERCASED song name should be ignored e.g. "(with Willie Nile and Jon Landau)"
 - sometimes an event has an additional "<p>" container which starts with a capitalized string like e.g. "Soundcheck:" and has the setlist after it with the same charactertistics as above
 
 Recording sessions have the following typical structure:
@@ -247,6 +247,116 @@ YEAR page entry http://brucebase.wikidot.com/2024#120524 doesn't recognize
 
 There could be more entries like this, instead of "Soundcheck:", "Pre-show:" or "with Willie Nile:" like in for example:
 http://brucebase.wikidot.com/2026#170126 and it's DETAIL page, they are alo not currently recognized
+
+** em
+
+YEAR page entry http://brucebase.wikidot.com/2024#190524 has song 'LONESOME DAY (parts)' where a descriptive string "parts" (NOT starting with "with)
+actually matches the DETAIL entry
+
+#+begin_example
+<li><a href="/song:lonesome-day">LONESOME DAY</a> <span style="font-size:80%;"><em>(parts)</em></span></li>
+#+end_example
+
+although it's inside a "<span><em>". For the comparison only the text parts in the DETAIL page should be used. If there
+is a match, the descriptive part "(<description>)" should not be rendered in "green", but stay as is.
+
+** with artists should still be rendered
+
+1.)
+
+the descriptive part "(<description>)" should not be rendered in "green" on DETAIL pages either
+
+2.)
+
+On YEAR pages, right now optional additional musicians after the UPPERCASED song in a setlist are ignored for comparison with the DETAIL entry e.g. "(with Willie Nile and Jon Landau)",
+but should still be renderded on YEAR pages although NOT rendered in "green" when present
+
+** two bugs
+
+two bugs:
+
+1.)
+
+
+YEAR page entry http://brucebase.wikidot.com/2003#011103 currently renders "With garland jeffreys:" after userscript execution instead of the original "With Garland Jeffreys:"
+The strings shouldn't be lowercased, but stay as on the original page. 
+
+2.)
+
+On YEAR pages '<sup><em>' containers like in
+
+#+begin_example
+<p>MYSTIC EYES<br>
+<sup><em>Setlist incomplete and may be inaccurate.</em></sup></p>
+#+end_example
+
+or
+
+#+begin_example
+<p>MY GENERATION<br>
+<sup><em>Incomplete setlist.</em></sup></p>
+#+end_example
+
+should be ignored when parsing the setlist, but still renderd after script execution
+
+** (le)
+
+When comparing event names on the YEAR pages and the corresponding DETAIL pages, we currently have the rule:
+
+- the "(The)" in front of a "," on the DETAIL page should be treated as being right after the date (which additionally should get a " - " added)
+
+Also treate the "(Le)" the same, so "1967-12-27 - LE TEENDEZVOUS, NEW SHREWSBURY, NJ" on a YEAR page should be treated equal to "1967-12-27 Teendezvous (Le), New Shrewsbury, NJ" on a DETAIL page
+
+** hmm
+
+YEAR page entry http://brucebase.wikidot.com/1968#000568a and it's DETAIL page seem to have the same setlist but it says it's ONLY on the YEAR page
+
+The "a" in the anchor "#000568a" means it's the first event on this day
+
+** hmm
+
+YEAR page entry http://brucebase.wikidot.com/1971#150571a renders the setlist in "green", although the DETAIL page is NOT rendered at all in "green"
+
+** console
+
+The console now says for all DETAIL pages e.g. http://brucebase.wikidot.com/gig:1971-05-15-newark-state-college-union-nj
+
+#+begin_example
+[BruceBase] Script starting on http://brucebase.wikidot.com/gig:1971-05-15-newark-state-college-union-nj
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:32 [BruceBase] Detected DETAIL page
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:32 [BruceBase] Fetching YEAR page for setlist comparison: http://brucebase.wikidot.com/1971
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:32 [BruceBase]   Fetching: http://brucebase.wikidot.com/1971
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:32 [BruceBase]   Response 200 for http://brucebase.wikidot.com/1971
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:33 [BruceBase] No matching event link found on YEAR page for path: gig:1971-05-15-newark-state-college-union-nj
+#+end_example
+
+These used to work before
+
+** used to work
+
+YEAR entry page http://brucebase.wikidot.com/1984#160284 render setlist in green but not the DETAIL page althought the console says:
+
+#+begin_example
+[BruceBase] Script starting on http://brucebase.wikidot.com/recording:1984-02-16-hit-factory-new-york-city-ny
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:32 [BruceBase] Detected DETAIL page
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:32 [BruceBase] Fetching YEAR page for setlist comparison: http://brucebase.wikidot.com/1984
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:32 [BruceBase]   Fetching: http://brucebase.wikidot.com/1984
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:32 [BruceBase]   Response 200 for http://brucebase.wikidot.com/1984
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:32 [BruceBase] Detail mode: 1 year songs, 1 detail songs
+#+end_example
+
+Add more debug logging how the actual event entry on the YEAR page is being found 
+
+** THE ESSENTIAL
+
+On the YEAR page after the event at http://brucebase.wikidot.com/2003#081103
+there is a "retail" link which gets interpreted as a SONG from a setlist
+
+#+begin_example
+<strong><a href="/retail:the-essential">THE ESSENTIAL</a></strong>
+#+end_example
+
+Don't ever include such items for setlist comparisons 
 
 * question
 ** initial
