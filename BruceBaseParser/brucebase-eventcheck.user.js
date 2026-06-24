@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         BruceBase Event Name Checker
 // @namespace    http://brucebase.wikidot.com/
-// @version      1.2
-// @description  Validates event name consistency between year overview and detail pages
+// @version      1.3
+// @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       Dr. Volker Zell
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/\d{4}(-list)?$/
+// @include      /^https?:\/\/brucebase\.wikidot\.com\/(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @connect      brucebase.wikidot.com
@@ -17,27 +18,22 @@
     'gig', 'interview', 'nogig', 'offstage', 'onstage', 'recording', 'rehearsal', 'soundcheck'
   ]);
 
-  // Matches any wikidot path of the form /type:YYYY-MM-DD-...
-  const EVENT_URL_RE = /\/([a-z]+):\d{4}-\d{2}-\d{2}/;
-
-  // Matches a year-page anchor link: .../YYYY#DDMMYY
-  const LIST_LINK_RE = /\/(\d{4})#([a-zA-Z0-9]+)$/;
-
-  // ── Logging ───────────────────────────────────────────────────────────────
+  const EVENT_URL_RE  = /\/([a-z]+):\d{4}-\d{2}-\d{2}/;
+  const LIST_LINK_RE  = /\/(\d{4})#([a-zA-Z0-9]+)$/;
+  const DETAIL_TYPE_RE = /^(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/;
 
   function log(...a)     { console.log  ('[BruceBase]', ...a); }
   function logWarn(...a) { console.warn ('[BruceBase]', ...a); }
   function logErr(...a)  { console.error('[BruceBase]', ...a); }
 
-  // ── Boot ──────────────────────────────────────────────────────────────────
-
   log('Script starting on', location.href);
   addStyles();
   createTooltipElement();
 
-  const path = location.pathname.replace(/^\//, ''); // "2024" or "2024-list"
-  const isListPage = /^\d{4}-list$/.test(path);
-  const isYearPage = /^\d{4}$/.test(path);
+  const path        = location.pathname.replace(/^\//, '');
+  const isListPage   = /^\d{4}-list$/.test(path);
+  const isYearPage   = /^\d{4}$/.test(path);
+  const isDetailPage = DETAIL_TYPE_RE.test(path);
 
   if (isListPage) {
     log('Detected YEAR OVERVIEW (list) page');
@@ -45,12 +41,15 @@
   } else if (isYearPage) {
     log('Detected YEAR page');
     await runYearPage();
+  } else if (isDetailPage) {
+    log('Detected DETAIL page');
+    await runDetailPage();
   } else {
     logWarn('Unrecognized page type for path:', path);
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  // YEAR PAGE MODE  — compare YEAR page event names with their DETAIL pages
+  // YEAR PAGE MODE
   // ════════════════════════════════════════════════════════════════════════════
 
   async function runYearPage() {
@@ -65,11 +64,10 @@
   }
 
   function extractYearPageEvents() {
-    const content = document.querySelector('#page-content') || document.body;
-    log('Scanning for event links inside', content.id ? '#' + content.id : content.tagName);
-
-    const allLinks = content.querySelectorAll('a[href]');
-    log(`Total <a> elements in content area: ${allLinks.length}`);
+    const content    = document.querySelector('#page-content') || document.body;
+    const allLinks   = [...content.querySelectorAll('a[href]')];
+    const allAnchors = [...content.querySelectorAll('a[name]')];
+    log(`Scanning content: ${allLinks.length} links, ${allAnchors.length} named anchors`);
 
     const results = [];
     allLinks.forEach(el => {
@@ -84,13 +82,84 @@
       if (!isKnown) logWarn(`Unknown event type "${eventType}" in URL: ${url}`);
       else          log(`[${eventType}] "${yearName}" → ${url}`);
 
-      results.push({ element: el, yearName, url, eventType, isKnown });
+      // Last named anchor that precedes this event link
+      let precedingAnchor    = null;
+      let precedingAnchorIdx = -1;
+      for (let i = 0; i < allAnchors.length; i++) {
+        if (allAnchors[i].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) {
+          precedingAnchor    = allAnchors[i];
+          precedingAnchorIdx = i;
+        }
+      }
+
+      // First named anchor that follows this event link (end boundary for setlist)
+      const nextAnchor = allAnchors.find(a =>
+        el.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING
+      );
+
+      const setlistEls = isKnown ? collectSetlistElements(el, nextAnchor, content) : [];
+
+      results.push({
+        element: el, yearName, url, eventType, isKnown,
+        anchorEl:   precedingAnchor,
+        anchorName: precedingAnchor ? precedingAnchor.getAttribute('name') : null,
+        setlistEls
+      });
     });
 
     const byType = {};
     results.forEach(({ eventType }) => { byType[eventType] = (byType[eventType] || 0) + 1; });
     log('Event type breakdown:', byType);
     return results;
+  }
+
+  // Returns all <p> and <blockquote> elements in content that follow
+  // eventLinkEl and precede nextAnchorEl, excluding event-name lines.
+  function collectSetlistElements(eventLinkEl, nextAnchorEl, content) {
+    return [...content.querySelectorAll('p, blockquote')].filter(el => {
+      if (!(eventLinkEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) return false;
+      if (nextAnchorEl && !(nextAnchorEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) return false;
+      const firstLink = el.querySelector('a[href]');
+      if (firstLink && EVENT_URL_RE.test(firstLink.getAttribute('href') || '')) return false;
+      return el.textContent.trim().length > 0;
+    });
+  }
+
+  // Section = { label: string, songs: string[], sourceEl: Element }
+  function parseYearSetlist(setlistEls) {
+    const sections = [];
+    for (const el of setlistEls) {
+      let label = 'show';
+      let text;
+
+      if (el.tagName === 'BLOCKQUOTE') {
+        label = 'recording';
+        const inner = el.querySelector('p');
+        text = inner ? inner.textContent : el.textContent;
+      } else {
+        text = el.textContent;
+        const m = text.match(/^([A-Z][a-z]+\w*):\s*/);
+        if (m) {
+          label = m[1].toLowerCase();
+          text  = text.slice(m[0].length);
+        }
+      }
+
+      const songs = text.split(' / ')
+        .map(s => cleanSongName(s.trim()))
+        .filter(s => s.length > 0);
+
+      if (songs.length > 0) sections.push({ label, songs, sourceEl: el });
+    }
+    return sections;
+  }
+
+  // Strips (with ...) and (x3) suffixes but preserves (41 SHOTS), (COME OUT TONIGHT) etc.
+  function cleanSongName(text) {
+    return text
+      .replace(/\s*\(with\b[^)]*\)/gi, '')
+      .replace(/\s*\(x\d+\)/gi, '')
+      .trim();
   }
 
   async function processYearEvents(events) {
@@ -103,7 +172,7 @@
     }
   }
 
-  async function processOneYearEvent({ element, yearName, url, eventType, isKnown }) {
+  async function processOneYearEvent({ element, yearName, url, eventType, isKnown, setlistEls }) {
     log(`Processing [${eventType}] "${yearName}"`);
     if (!isKnown) {
       logWarn(`  Skipping comparison for unknown event type "${eventType}"`);
@@ -112,24 +181,252 @@
     }
     try {
       const doc = await fetchPage(url);
-      const rawDetailName = extractDetailEventName(doc, url);
+
+      // ── Event name check ─────────────────────────────────────────────────
+      const rawDetailName       = extractDetailEventName(doc, url);
       const normalizedDetailName = normalizeDetailName(rawDetailName);
-      const yearNameUpper = yearName.trim().toUpperCase();
-      const match = yearNameUpper === normalizedDetailName.trim();
+      const yearNameUpper        = yearName.trim().toUpperCase();
+      const nameMatch            = yearNameUpper === normalizedDetailName.trim();
 
       log(`  YEAR   : "${yearNameUpper}"`);
       log(`  DETAIL : "${normalizedDetailName}"`);
-      log(`  Result : ${match ? 'MATCH ✅' : 'MISMATCH ❌'}`);
+      log(`  Result : ${nameMatch ? 'MATCH ✅' : 'MISMATCH ❌'}`);
 
-      addYearGlyph(element, match, yearNameUpper, normalizedDetailName, rawDetailName, eventType);
+      addYearGlyph(element, nameMatch, yearNameUpper, normalizedDetailName, rawDetailName, eventType);
+
+      // ── Setlist check ────────────────────────────────────────────────────
+      if (setlistEls.length > 0) {
+        const yearSections   = parseYearSetlist(setlistEls);
+        const detailSections = parseDetailSetlist(doc);
+        const yearFlat   = yearSections.flatMap(s => s.songs);
+        const detailFlat = detailSections.flatMap(s => s.songs);
+        log(`  Setlist: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
+
+        if (yearFlat.length > 0 || detailFlat.length > 0) {
+          const diffItems = mergeCharDiffs(lcsDiff(yearFlat, detailFlat));
+          renderYearSetlist(yearSections, diffItems);
+        }
+      }
     } catch (e) {
       logErr(`  Failed to process "${yearName}":`, e.message);
       addWarningGlyph(element, e.message);
     }
   }
 
+  // ── Setlist rendering — YEAR page ─────────────────────────────────────────
+
+  function renderYearSetlist(yearSections, diffItems) {
+    // posMap[yearSongFlatIdx] = sectionIdx
+    const posMap = [];
+    yearSections.forEach((sec, sIdx) => sec.songs.forEach(() => posMap.push(sIdx)));
+
+    let yearCursor = 0;
+    const sectionItems = yearSections.map(() => []);
+
+    for (const item of diffItems) {
+      if (item.type === 'detail-only') {
+        const sIdx = yearCursor < posMap.length ? posMap[yearCursor] : yearSections.length - 1;
+        sectionItems[sIdx].push(item);
+      } else {
+        if (yearCursor < posMap.length) {
+          sectionItems[posMap[yearCursor]].push(item);
+          yearCursor++;
+        }
+      }
+    }
+
+    yearSections.forEach((sec, sIdx) => renderSetlistElement(sec.sourceEl, sec.label, sectionItems[sIdx]));
+  }
+
+  function renderSetlistElement(el, label, items) {
+    let html    = '';
+    let isFirst = true;
+
+    if (label === 'soundcheck') {
+      html += '<span class="bb-section-label">Soundcheck: </span>';
+    } else if (label !== 'show' && label !== 'recording') {
+      const cap = label.charAt(0).toUpperCase() + label.slice(1);
+      html += `<span class="bb-section-label">${esc(cap)}: </span>`;
+    }
+
+    for (const item of items) {
+      if (!isFirst) html += '<span class="bb-sep"> / </span>';
+      isFirst = false;
+
+      if (item.type === 'match') {
+        html += `<span class="bb-song-match">${esc(item.yearSong)}</span>`;
+      } else if (item.type === 'year-only') {
+        html += `<span class="bb-song-year-only" data-year-song="${esc(item.yearSong)}">${esc(item.yearSong)}</span>`;
+      } else if (item.type === 'detail-only') {
+        html += `<span class="bb-song-detail-only" data-detail-song="${esc(item.detailSong)}">${esc(item.detailSong)}</span>`;
+      } else if (item.type === 'char-diff') {
+        const inner = buildCharDiffHtml(item.yearSong, item.detailSong);
+        html += `<span class="bb-song-char-diff" data-year-song="${esc(item.yearSong)}" data-detail-song="${esc(item.detailSong)}">${inner}</span>`;
+      }
+    }
+
+    el.innerHTML = html;
+
+    el.querySelectorAll('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff').forEach(span => {
+      span.addEventListener('mouseenter', e => showSongTooltip(e, span));
+      span.addEventListener('mouseleave', hideTooltip);
+    });
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
-  // YEAR LIST PAGE MODE  — compare LIST page event names with YEAR page
+  // DETAIL PAGE MODE
+  // ════════════════════════════════════════════════════════════════════════════
+
+  async function runDetailPage() {
+    const detailSections = parseDetailSetlist(document);
+    if (detailSections.length === 0) {
+      log('No setlist found on detail page');
+      return;
+    }
+
+    const info = detailPathToYearAndAnchor(path);
+    if (!info) {
+      logWarn('Could not derive year/anchor from path:', path);
+      return;
+    }
+
+    const yearPageUrl = `${location.protocol}//${location.host}/${info.year}`;
+    log(`Fetching YEAR page for setlist comparison: ${yearPageUrl}`);
+
+    let yearDoc;
+    try {
+      yearDoc = await fetchPage(yearPageUrl);
+    } catch (e) {
+      logErr('Failed to fetch YEAR page:', e.message);
+      return;
+    }
+
+    const yearContent   = yearDoc.querySelector('#page-content') || yearDoc.body;
+    const targetAnchor  = yearContent.querySelector(`a[name="${info.anchor}"]`);
+    if (!targetAnchor) {
+      logWarn(`Anchor #${info.anchor} not found on YEAR page`);
+      return;
+    }
+
+    const eventLink = [...yearContent.querySelectorAll('a[href]')]
+      .filter(a => EVENT_URL_RE.test(a.getAttribute('href') || ''))
+      .find(a => targetAnchor.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    if (!eventLink) {
+      logWarn('No event link found after anchor on YEAR page');
+      return;
+    }
+
+    const nextAnchor = [...yearContent.querySelectorAll('a[name]')]
+      .find(a => eventLink.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    const yearSections = parseYearSetlist(collectSetlistElements(eventLink, nextAnchor, yearContent));
+    const yearFlat     = yearSections.flatMap(s => s.songs);
+    const detailFlat   = detailSections.flatMap(s => s.songs);
+    log(`Detail mode: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
+
+    const diffItems = mergeCharDiffs(lcsDiff(yearFlat, detailFlat));
+    renderDetailSetlist(diffItems);
+  }
+
+  // "gig:2003-09-14-..." → { year: "2003", anchor: "140903" }
+  function detailPathToYearAndAnchor(p) {
+    const m = p.match(/:(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    const [, yyyy, mm, dd] = m;
+    return { year: yyyy, anchor: dd + mm + yyyy.slice(2) };
+  }
+
+  function renderDetailSetlist(diffItems) {
+    const td = document.querySelector('#wiki-tab-0-1 td');
+    if (!td) return;
+
+    const allLis = [...td.querySelectorAll('li')];
+    let liIdx = 0;
+
+    for (const item of diffItems) {
+      if (item.type === 'match' || item.type === 'char-diff' || item.type === 'detail-only') {
+        if (liIdx < allLis.length) {
+          styleDetailLi(allLis[liIdx], item);
+          liIdx++;
+        }
+      } else if (item.type === 'year-only') {
+        // Insert a new <li> for a song present on the year page but missing here
+        const newLi = document.createElement('li');
+        newLi.className = 'bb-song-year-only';
+        newLi.dataset.yearSong = item.yearSong;
+        newLi.textContent = item.yearSong;
+        newLi.addEventListener('mouseenter', e => showSongTooltip(e, newLi));
+        newLi.addEventListener('mouseleave', hideTooltip);
+
+        if (liIdx < allLis.length) {
+          allLis[liIdx].parentNode.insertBefore(newLi, allLis[liIdx]);
+        } else {
+          const lastList = td.querySelector('ol:last-of-type') || td.querySelector('ul:last-of-type');
+          if (lastList) lastList.appendChild(newLi);
+        }
+      }
+    }
+  }
+
+  function styleDetailLi(li, item) {
+    if (item.type === 'match') {
+      li.classList.add('bb-song-match');
+    } else if (item.type === 'detail-only') {
+      li.classList.add('bb-song-detail-only');
+      li.dataset.detailSong = item.detailSong;
+      li.addEventListener('mouseenter', e => showSongTooltip(e, li));
+      li.addEventListener('mouseleave', hideTooltip);
+    } else if (item.type === 'char-diff') {
+      li.classList.add('bb-song-char-diff');
+      li.dataset.yearSong   = item.yearSong;
+      li.dataset.detailSong = item.detailSong;
+      const a = li.querySelector('a');
+      if (a) a.innerHTML = buildCharDiffHtml(item.yearSong, item.detailSong);
+      li.addEventListener('mouseenter', e => showSongTooltip(e, li));
+      li.addEventListener('mouseleave', hideTooltip);
+    }
+  }
+
+  // ── Detail page setlist parser ────────────────────────────────────────────
+
+  // Parses #wiki-tab-0-1 → Section[]
+  // Section headers: <p><strong>Soundcheck</strong></p> etc.
+  // Songs: <a href="/song:..."> text, medleys joined with " - "
+  function parseDetailSetlist(doc) {
+    const td = doc.querySelector('#wiki-tab-0-1 td');
+    if (!td) {
+      logWarn('parseDetailSetlist: #wiki-tab-0-1 td not found');
+      return [];
+    }
+
+    const sections    = [];
+    let currentLabel  = 'show';
+
+    for (const child of td.children) {
+      if (child.tagName === 'P') {
+        const strong = child.querySelector('strong');
+        if (strong && child.textContent.trim() === strong.textContent.trim()) {
+          currentLabel = strong.textContent.trim().toLowerCase();
+        }
+      } else if (child.tagName === 'OL' || child.tagName === 'UL') {
+        const songs = [];
+        for (const li of child.querySelectorAll('li')) {
+          const links = [...li.querySelectorAll('a[href^="/song:"]')];
+          if (links.length > 0) {
+            const name = cleanSongName(links.map(a => a.textContent.trim()).join(' - '));
+            if (name) songs.push(name);
+          }
+        }
+        if (songs.length > 0) sections.push({ label: currentLabel, songs });
+      }
+    }
+
+    return sections;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // YEAR LIST PAGE MODE
   // ════════════════════════════════════════════════════════════════════════════
 
   async function runListPage(year) {
@@ -140,7 +437,6 @@
       return;
     }
 
-    // Fetch the YEAR page once; all list events point back to the same page.
     const yearPageUrl = `${location.protocol}//${location.host}/${year}`;
     log(`Fetching YEAR page (shared): ${yearPageUrl}`);
     let yearDoc;
@@ -161,32 +457,26 @@
   }
 
   function extractListPageEvents(year) {
-    const content = document.querySelector('#page-content') || document.body;
-    log('Scanning list page for event links inside', content.id ? '#' + content.id : content.tagName);
-
+    const content  = document.querySelector('#page-content') || document.body;
     const allLinks = content.querySelectorAll('a[href]');
-    log(`Total <a> elements in content area: ${allLinks.length}`);
+    const results  = [];
 
-    const results = [];
     allLinks.forEach(el => {
       const m = el.href.match(LIST_LINK_RE);
       if (!m || m[1] !== year) return;
 
-      const anchor     = m[2];
-      const rawName    = getLinkLineText(el);
-      const stripped   = stripListSuffix(rawName);
+      const anchor   = m[2];
+      const rawName  = getLinkLineText(el);
+      const stripped = stripListSuffix(rawName);
 
-      log(`[#${anchor}] raw="${rawName}"${rawName !== stripped ? ` stripped="${stripped}"` : ''} → ${el.href}`);
+      log(`[#${anchor}] raw="${rawName}"${rawName !== stripped ? ` stripped="${stripped}"` : ''}`);
       results.push({ element: el, rawName, strippedName: stripped, anchor });
     });
     return results;
   }
 
-  // Build a map of anchor name → YEAR page event name by pairing each
-  // <a name="…"> element with the first event link that follows it in
-  // document order.
   function buildAnchorToNameMap(yearDoc) {
-    const content = yearDoc.querySelector('#page-content') || yearDoc.body;
+    const content      = yearDoc.querySelector('#page-content') || yearDoc.body;
     const anchorEls    = [...content.querySelectorAll('a[name]')];
     const eventLinkEls = [...content.querySelectorAll('a[href]')]
       .filter(a => EVENT_URL_RE.test(a.getAttribute('href') || ''));
@@ -196,8 +486,6 @@
     const map = new Map();
     for (const anchorEl of anchorEls) {
       const anchorName = anchorEl.getAttribute('name');
-      // querySelectorAll returns elements in document order, so the first
-      // element in eventLinkEls that follows this anchor is the right one.
       const next = eventLinkEls.find(
         link => anchorEl.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING
       );
@@ -231,9 +519,6 @@
     addListGlyph(element, match, strippedName, rawName, yearName, anchor);
   }
 
-  // Collect the link's own text plus any immediately following text/inline-element
-  // siblings, so that a suffix like " (Golden Globe Awards)" that sits outside
-  // the <a> tag is still captured as part of the raw name.
   function getLinkLineText(el) {
     let text = el.textContent;
     let node = el.nextSibling;
@@ -250,11 +535,103 @@
     return text.trim();
   }
 
-  // Remove an optional trailing subtitle in parentheses from LIST page event names.
-  // e.g. "2024-01-07 - THE BEVERLY HILTON, BEVERLY HILLS, CA (Golden Globe Awards)"
-  //   →  "2024-01-07 - THE BEVERLY HILTON, BEVERLY HILLS, CA"
   function stripListSuffix(name) {
     return name.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // DIFF ALGORITHMS
+  // ════════════════════════════════════════════════════════════════════════════
+
+  // Standard LCS-based diff on song name arrays (case-insensitive).
+  // Returns DiffItem[]: { type: 'match'|'year-only'|'detail-only', yearSong?, detailSong? }
+  function lcsDiff(yearSongs, detailSongs) {
+    const a = yearSongs.map(s => s.toUpperCase());
+    const b = detailSongs.map(s => s.toUpperCase());
+    const m = a.length, n = b.length;
+
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+
+    const result = [];
+    let i = m, j = n;
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
+        result.unshift({ type: 'match', yearSong: yearSongs[i-1], detailSong: detailSongs[j-1] });
+        i--; j--;
+      } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+        result.unshift({ type: 'detail-only', detailSong: detailSongs[j-1] });
+        j--;
+      } else {
+        result.unshift({ type: 'year-only', yearSong: yearSongs[i-1] });
+        i--;
+      }
+    }
+    return result;
+  }
+
+  // Reclassify adjacent year-only + detail-only pairs as char-diff when
+  // edit distance is small (likely a typo/variant rather than a different song).
+  function mergeCharDiffs(items) {
+    const result = [...items];
+    let i = 0;
+    while (i < result.length - 1) {
+      if (result[i].type === 'year-only' && result[i+1].type === 'detail-only') {
+        const a = result[i].yearSong, b = result[i+1].detailSong;
+        if (editDistance(a.toUpperCase(), b.toUpperCase()) <= Math.max(3, 0.2 * a.length)) {
+          result.splice(i, 2, { type: 'char-diff', yearSong: a, detailSong: b });
+        }
+      }
+      i++;
+    }
+    return result;
+  }
+
+  function editDistance(a, b) {
+    const m = a.length, n = b.length;
+    const dp = [];
+    for (let i = 0; i <= m; i++) {
+      dp[i] = [i];
+      for (let j = 1; j <= n; j++) {
+        dp[i][j] = i === 0 ? j
+          : a[i-1] === b[j-1] ? dp[i-1][j-1]
+          : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+      }
+    }
+    return dp[m][n];
+  }
+
+  // Character-level LCS diff: returns HTML showing yearSong chars,
+  // with mismatched chars in .bb-char-diff and matching in .bb-char-match.
+  function buildCharDiffHtml(yearSong, detailSong) {
+    const a = yearSong.toUpperCase(), b = detailSong.toUpperCase();
+    const m = a.length, n = b.length;
+
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+
+    let i = m, j = n;
+    const chars = [];
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
+        chars.unshift({ ch: a[i-1], match: true });
+        i--; j--;
+      } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+        j--;
+      } else {
+        chars.unshift({ ch: a[i-1], match: false });
+        i--;
+      }
+    }
+
+    return chars.map(c => c.match
+      ? `<span class="bb-char-match">${esc(c.ch)}</span>`
+      : `<span class="bb-char-diff">${esc(c.ch)}</span>`
+    ).join('');
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -302,15 +679,6 @@
     return fromTitle;
   }
 
-  // Transforms a DETAIL page event name into the format used by YEAR pages so
-  // they can be compared case-insensitively.
-  //
-  // "(The)" appearing immediately before a comma is moved to the front of the
-  // venue name (as "THE "), a " - " separator is inserted between the date and
-  // the venue, and the whole string is uppercased.
-  //
-  // e.g. "2024-01-07 Beverly Hilton (The), Beverly Hills, CA"
-  //   →  "2024-01-07 - THE BEVERLY HILTON, BEVERLY HILLS, CA"
   function normalizeDetailName(name) {
     const m = name.match(/^(\d{4}-\d{2}-\d{2})\s+(.+)$/);
     if (!m) {
@@ -399,8 +767,8 @@
   function showListTooltip(evt, strippedName, rawName, yearName, anchor, match) {
     const tip = document.getElementById('bb-tooltip');
     if (!tip) return;
-    const listUpper = strippedName.toUpperCase();
-    const yearUpper = yearName.toUpperCase();
+    const listUpper    = strippedName.toUpperCase();
+    const yearUpper    = yearName.toUpperCase();
     const strippedHtml = match ? esc(listUpper) : buildDiffHtml(yearUpper, listUpper);
     const yearHtml     = match ? esc(yearUpper) : buildDiffHtml(listUpper, yearUpper);
     tip.innerHTML = `
@@ -413,6 +781,32 @@
           ? '<span class="bb-ok">Match ✅</span>'
           : '<span class="bb-fail">Mismatch ❌</span>'}</td></tr>
       </table>`;
+    positionTooltip(tip, evt);
+    tip.style.display = 'block';
+  }
+
+  function showSongTooltip(evt, el) {
+    const tip = document.getElementById('bb-tooltip');
+    if (!tip) return;
+    const cls        = el.className || '';
+    const yearSong   = el.dataset.yearSong   || '';
+    const detailSong = el.dataset.detailSong || '';
+    let html = '';
+
+    if (cls.includes('bb-song-year-only')) {
+      html = `<span class="bb-fail">Only on YEAR page (missing from detail):</span><br>${esc(yearSong || el.textContent.trim())}`;
+    } else if (cls.includes('bb-song-detail-only')) {
+      html = `<span class="bb-fail">Only on DETAIL page (missing from year):</span><br>${esc(detailSong || el.textContent.trim())}`;
+    } else if (cls.includes('bb-song-char-diff')) {
+      html = `<table class="bb-tip-table">
+        <tr><th>YEAR page:</th><td>${esc(yearSong)}</td></tr>
+        <tr><th>DETAIL page:</th><td>${esc(detailSong)}</td></tr>
+        <tr><th>Diff:</th><td>${buildDiffHtml(yearSong.toUpperCase(), detailSong.toUpperCase())}</td></tr>
+      </table>`;
+    }
+
+    if (!html) return;
+    tip.innerHTML = html;
     positionTooltip(tip, evt);
     tip.style.display = 'block';
   }
@@ -452,15 +846,12 @@
     document.body.appendChild(div);
   }
 
-  // ── Diff ──────────────────────────────────────────────────────────────────
+  // ── Token diff (for event name mismatch tooltips) ─────────────────────────
 
-  // Token-level diff: split both strings on whitespace and commas (keeping the
-  // delimiters as separate tokens) then walk in lockstep, wrapping mismatched
-  // tokens with a highlight span.
   function buildDiffHtml(a, b) {
     const tokA = a.split(/(\s+|,)/);
     const tokB = b.split(/(\s+|,)/);
-    const len = Math.max(tokA.length, tokB.length);
+    const len  = Math.max(tokA.length, tokB.length);
     let html = '';
     for (let i = 0; i < len; i++) {
       const ta = tokA[i] !== undefined ? tokA[i] : '';
@@ -511,6 +902,30 @@
       .bb-ok   { color: #6f6; }
       .bb-fail { color: #f66; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }
+
+      /* Setlist song states */
+      .bb-song-match       { color: #2a2; }
+      .bb-song-year-only   { background: #add8e6; border-radius: 3px; padding: 0 2px; cursor: default; }
+      .bb-song-detail-only { background: #ffff88; border-radius: 3px; padding: 0 2px; cursor: default; }
+      .bb-song-char-diff   { cursor: default; }
+
+      /* Character-level diff within a song name */
+      .bb-char-match { color: #2a2; }
+      .bb-char-diff  { color: #c00; font-weight: bold; }
+
+      /* Separator between songs on YEAR page */
+      .bb-sep          { color: #999; }
+      .bb-section-label { color: #888; font-style: italic; }
+
+      /* Year-only <li> rows inserted on detail pages */
+      li.bb-song-year-only {
+        background: #ffff88;
+        list-style-type: disc;
+        cursor: default;
+      }
+      li.bb-song-detail-only { background: #add8e6; }
+      li.bb-song-match a,
+      li.bb-song-match       { color: #2a2; }
     `);
   }
 
