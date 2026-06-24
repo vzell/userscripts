@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.14
+// @version      1.15
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -492,7 +492,7 @@
 
     const info = detailPathToYearAndAnchor(path);
     if (!info) {
-      logWarn('Could not derive year/anchor from path:', path);
+      logWarn('Could not derive year from path:', path);
       return;
     }
 
@@ -507,19 +507,17 @@
       return;
     }
 
-    const yearContent   = yearDoc.querySelector('#page-content') || yearDoc.body;
-    const targetAnchor  = yearContent.querySelector(`a[name="${info.anchor}"]`);
-    if (!targetAnchor) {
-      logWarn(`Anchor #${info.anchor} not found on YEAR page`);
-      return;
-    }
+    const yearContent = yearDoc.querySelector('#page-content') || yearDoc.body;
 
+    // Match by href rather than by derived anchor name — the DETAIL page URL may
+    // lack the a/b suffix that the YEAR page anchor carries (e.g. anchor "150571a"
+    // for URL "/gig:1971-05-15-…"), so anchor lookup would fail.
     const eventLink = [...yearContent.querySelectorAll('a[href]')]
       .filter(a => EVENT_URL_RE.test(a.getAttribute('href') || ''))
-      .find(a => targetAnchor.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
+      .find(a => a.getAttribute('href') === path);
 
     if (!eventLink) {
-      logWarn('No event link found after anchor on YEAR page');
+      logWarn('No matching event link found on YEAR page for path:', path);
       return;
     }
 
@@ -546,13 +544,11 @@
     insertDetailToggle(originalTdHtml);
   }
 
-  // "gig:2003-09-14-..." → { year: "2003", anchor: "140903" }
-  // "gig:1968-05-00a-..." → { year: "1968", anchor: "000568a" }
+  // "gig:2003-09-14-..." → { year: "2003" }  (anchor no longer needed)
   function detailPathToYearAndAnchor(p) {
-    const m = p.match(/:(\d{4})-(\d{2})-(\d{2})([a-z]?)/);
+    const m = p.match(/:(\d{4})-\d{2}-\d{2}/);
     if (!m) return null;
-    const [, yyyy, mm, dd, suffix] = m;
-    return { year: yyyy, anchor: dd + mm + yyyy.slice(2) + suffix };
+    return { year: m[1] };
   }
 
   // Returns the setlist container element for a (fetched or live) document.

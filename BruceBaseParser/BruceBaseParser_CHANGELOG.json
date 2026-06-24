@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.15",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fix DETAIL page setlist comparison failing when the YEAR page anchor carries a letter suffix (e.g. '150571a') that is absent from the DETAIL page URL. Previously runDetailPage derived the anchor from the URL, which could not reproduce the suffix, causing the anchor lookup to fail and the comparison to be silently skipped. Fix: locate the event link on the YEAR page by matching its href against the current page path directly, then read the next <a name> boundary from that link — eliminating any dependence on the anchor name."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.14",
         "date": "2026-06-25",
         "sections": [
