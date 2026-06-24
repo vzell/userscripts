@@ -1,5 +1,18 @@
 [
     {
+        "version": "1.5",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Stop collecting setlist elements when an inline event date header (<p> starting with YYYY-MM-DD - ) is encountered. Previously, events without their own named anchor (e.g. recording sessions listed inline on the year page) caused collectSetlistElements to sweep up setlists from dozens of subsequent unrelated events.",
+                    "Fall back to plain <li> text when parsing detail-page setlists for songs that have no dedicated /song: page link. Previously such songs (e.g. REFRIGERATOR BLUES) were silently dropped, causing an empty detailSections result, an early return, and a missing toggle button. Venue/date entries (YYYY-MM-DD prefix) are excluded from the fallback."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.4",
         "date": "2026-06-24",
         "sections": [

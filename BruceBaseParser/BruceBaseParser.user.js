@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.4
+// @version      1.5
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -271,18 +271,24 @@
 
   // Returns all <p> and <blockquote> elements in content that follow
   // eventLinkEl and precede nextAnchorEl, excluding event-name lines.
+  // Stops early when a <p> whose text starts with "YYYY-MM-DD - " is encountered:
+  // those are inline date headers for events that have no named anchor of their own,
+  // and everything after them belongs to a different event.
   function collectSetlistElements(eventLinkEl, nextAnchorEl, content) {
-    return [...content.querySelectorAll('p, blockquote')].filter(el => {
-      if (!(eventLinkEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) return false;
-      if (nextAnchorEl && !(nextAnchorEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) return false;
+    const INLINE_DATE_RE = /^\d{4}-\d{2}-\d{2}\s+-\s+/;
+    const result = [];
+    for (const el of content.querySelectorAll('p, blockquote')) {
+      if (!(eventLinkEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+      if (nextAnchorEl && !(nextAnchorEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) break;
+      if (el.tagName === 'P' && INLINE_DATE_RE.test(el.textContent.trim())) break;
       const firstLink = el.querySelector('a[href]');
-      if (firstLink && EVENT_URL_RE.test(firstLink.getAttribute('href') || '')) return false;
-      if (!el.textContent.trim()) return false;
-      // <p> elements without a ' / ' separator are prose descriptions, not setlists.
-      // <blockquote> elements are always recording sessions regardless.
-      if (el.tagName === 'P' && !el.textContent.includes(' / ')) return false;
-      return true;
-    });
+      if (firstLink && EVENT_URL_RE.test(firstLink.getAttribute('href') || '')) continue;
+      if (!el.textContent.trim()) continue;
+      // <p> without a ' / ' separator is prose, not a setlist; <blockquote> is always included.
+      if (el.tagName === 'P' && !el.textContent.includes(' / ')) continue;
+      result.push(el);
+    }
+    return result;
   }
 
   // Section = { label: string, songs: string[], sourceEl: Element }
@@ -579,10 +585,16 @@
         const songs = [];
         for (const li of child.querySelectorAll('li')) {
           const links = [...li.querySelectorAll('a[href^="/song:"]')];
+          let name;
           if (links.length > 0) {
-            const name = cleanSongName(links.map(a => a.textContent.trim()).join(' - '));
-            if (name) songs.push(name);
+            name = cleanSongName(links.map(a => a.textContent.trim()).join(' - '));
+          } else {
+            // Fall back to plain text for songs with no dedicated song page.
+            // Skip venue/date entries (e.g. "2004-04-18 Hit Factory, NY").
+            const text = li.textContent.trim();
+            if (text && !/^\d{4}-\d{2}-\d{2}/.test(text)) name = cleanSongName(text);
           }
+          if (name) songs.push(name);
         }
         if (songs.length > 0) sections.push({ label: currentLabel, songs });
       }
