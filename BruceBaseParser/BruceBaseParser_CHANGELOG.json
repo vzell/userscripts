@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.9",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Recognise hyphenated and lowercase label prefixes on YEAR page setlist entries (e.g. 'Pre-show: SONG', 'with Willie Nile: SONG'). The previous label-strip regex /^[A-Z][a-z]+\\w*:/ required a single PascalCase word and failed on hyphens or lowercase-starting labels, causing those entries to be discarded as prose. Changed to /^[^/:\\n]+:/ (anything up to the first colon) in both collectSetlistElements and parseYearSetlist."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.8",
         "date": "2026-06-24",
         "sections": [

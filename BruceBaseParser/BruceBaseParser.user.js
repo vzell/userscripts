@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.8
+// @version      1.9
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -298,7 +298,7 @@
         const slashIdx  = text.indexOf(' / ');
         const firstPart = slashIdx >= 0 ? text.slice(0, slashIdx) : text;
         const core      = firstPart
-          .replace(/^[A-Z][a-z]+\w*:\s*/, '')
+          .replace(/^[^/:\n]+:\s*/, '')
           .replace(/\s*\(with\b[^)]*\)/gi, '')
           .replace(/\s*\(x\d+\)/gi, '')
           .trim();
@@ -322,7 +322,7 @@
         text = inner ? inner.textContent : el.textContent;
       } else {
         text = el.textContent;
-        const m = text.match(/^([A-Z][a-z]+\w*):\s*/);
+        const m = text.match(/^([^/:\n]+):\s*/);
         if (m) {
           label = m[1].toLowerCase();
           text  = text.slice(m[0].length);
