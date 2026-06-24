@@ -121,7 +121,11 @@
       if (nextAnchorEl && !(nextAnchorEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) return false;
       const firstLink = el.querySelector('a[href]');
       if (firstLink && EVENT_URL_RE.test(firstLink.getAttribute('href') || '')) return false;
-      return el.textContent.trim().length > 0;
+      if (!el.textContent.trim()) return false;
+      // <p> elements without a ' / ' separator are prose descriptions, not setlists.
+      // <blockquote> elements are always recording sessions regardless.
+      if (el.tagName === 'P' && !el.textContent.includes(' / ')) return false;
+      return true;
     });
   }
 
