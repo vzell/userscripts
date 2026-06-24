@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.7",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Recognise single-song setlist entries on YEAR pages. The previous ' / ' separator check incorrectly treated all-caps single-song <p> elements (e.g. 'DANCING IN THE DARK') as prose. Replacement heuristic: strip any 'Label:' prefix and '(with …)'/'(xN)' qualifiers, then accept the <p> if no lowercase letters remain — prose always contains lowercase, brucebase song names are all-caps."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.6",
         "date": "2026-06-24",
         "sections": [

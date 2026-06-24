@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.6
+// @version      1.7
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -287,8 +287,20 @@
       const firstLink = el.querySelector('a[href]');
       if (firstLink && EVENT_URL_RE.test(firstLink.getAttribute('href') || '')) continue;
       if (!el.textContent.trim()) continue;
-      // <p> without a ' / ' separator is prose, not a setlist; <blockquote> is always included.
-      if (el.tagName === 'P' && !el.textContent.includes(' / ')) continue;
+      // Prose has lowercase letters; setlist entries are all-caps on brucebase.
+      // When there is no ' / ' separator, strip any label prefix ("Soundcheck: ")
+      // and qualifiers ("(with …)", "(x3)"), then reject if lowercase letters remain.
+      if (el.tagName === 'P') {
+        const text = el.textContent.trim();
+        if (!text.includes(' / ')) {
+          const core = text
+            .replace(/^[A-Z][a-z]+\w*:\s*/, '')
+            .replace(/\s*\(with\b[^)]*\)/gi, '')
+            .replace(/\s*\(x\d+\)/gi, '')
+            .trim();
+          if (!core || /[a-z]/.test(core)) continue;
+        }
+      }
       result.push(el);
     }
     return result;
