@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.17
+// @version      1.18
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -600,9 +600,15 @@
 
   function styleDetailLi(li, item) {
     if (item.type === 'match') {
-      // Add match class to song links only — not to the <li> itself — so
-      // descriptive <span> nodes like (parts) do not inherit the green colour.
-      li.querySelectorAll('a[href^="/song:"]').forEach(a => a.classList.add('bb-song-match'));
+      // Prefer adding the match class to individual song links so that
+      // descriptive <span> nodes (e.g. "(parts)") don't inherit the green colour.
+      // When no /song: link exists (plain-text <li>), fall back to the <li> itself.
+      const songLinks = [...li.querySelectorAll('a[href^="/song:"]')];
+      if (songLinks.length > 0) {
+        songLinks.forEach(a => a.classList.add('bb-song-match'));
+      } else {
+        li.classList.add('bb-song-match');
+      }
     } else if (item.type === 'detail-only') {
       li.classList.add('bb-song-detail-only');
       li.dataset.detailSong = item.detailSong;

@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.18",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Apply green match colour on DETAIL pages for plain-text <li> entries that have no /song: link (e.g. REFRIGERATOR BLUES). styleDetailLi now falls back to adding bb-song-match to the <li> itself when no song links are found, instead of silently doing nothing."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.17",
         "date": "2026-06-25",
         "sections": [
