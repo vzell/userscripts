@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.16
+// @version      1.17
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -520,17 +520,25 @@
       logWarn('No matching event link found on YEAR page for path:', path);
       return;
     }
+    log(`  Event link found: "${eventLink.textContent.trim()}" href="${eventLink.getAttribute('href')}"`);
 
     const nextAnchor = [...yearContent.querySelectorAll('a[name]')]
       .find(a => eventLink.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
+    log(`  Next anchor: ${nextAnchor ? `name="${nextAnchor.getAttribute('name')}"` : 'none (end of page)'}`);
 
-    const yearSections  = parseYearSetlist(collectSetlistElements(eventLink, nextAnchor, yearContent));
+    const setlistEls = collectSetlistElements(eventLink, nextAnchor, yearContent);
+    log(`  Collected ${setlistEls.length} setlist element(s) from YEAR page`);
+
+    const yearSections  = parseYearSetlist(setlistEls);
     const yearFlat      = yearSections.flatMap(s => s.songs);
     const yearRawFlat   = yearSections.flatMap(s => s.rawSongs);
     const detailFlat    = detailSections.flatMap(s => s.songs);
     log(`Detail mode: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
+    log(`  Year songs:   ${JSON.stringify(yearFlat)}`);
+    log(`  Detail songs: ${JSON.stringify(detailFlat)}`);
 
     const diffItems = mergeCharDiffs(lcsDiff(yearFlat, detailFlat));
+    log(`  Diff: ${diffItems.map(i => `${i.type}(${i.yearSong || i.detailSong})`).join(', ')}`);
     let yp = 0;
     for (const item of diffItems) {
       if (item.type !== 'detail-only') item.rawYearSong = yearRawFlat[yp++];

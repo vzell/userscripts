@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.17",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🔧 Refactor",
+                "items": [
+                    "Add detailed console logging in runDetailPage: matched event link text and href, next anchor name, number of collected setlist elements, year and detail song arrays, and per-item diff results."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.16",
         "date": "2026-06-25",
         "sections": [
