@@ -2,8 +2,7 @@
 
 ## Purpose
 
-Tampermonkey userscript (`brucebase-eventcheck.user.js`) that enriches
-`http://brucebase.wikidot.com/` pages by cross-checking data between different
+Tampermonkey userscript that enriches `http://brucebase.wikidot.com/` pages by cross-checking data between different
 page types and surfacing discrepancies with inline glyphs and hover tooltips.
 
 ---
