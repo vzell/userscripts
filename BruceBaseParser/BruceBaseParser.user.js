@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.13
+// @version      1.14
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -186,7 +186,7 @@
     const pageTitle = document.getElementById('page-title');
     if (!pageTitle) return;
 
-    const td = document.querySelector('#wiki-tab-0-1 td');
+    const td = getSetlistContainer(document);
     if (!td) return;
 
     // Move processed nodes (with their event listeners) into a wrapper div
@@ -539,7 +539,7 @@
     }
 
     // Snapshot the td content just before rendering so the original is unmodified
-    const td             = document.querySelector('#wiki-tab-0-1 td');
+    const td             = getSetlistContainer(document);
     const originalTdHtml = td ? td.innerHTML : '';
 
     renderDetailSetlist(diffItems);
@@ -547,15 +547,23 @@
   }
 
   // "gig:2003-09-14-..." → { year: "2003", anchor: "140903" }
+  // "gig:1968-05-00a-..." → { year: "1968", anchor: "000568a" }
   function detailPathToYearAndAnchor(p) {
-    const m = p.match(/:(\d{4})-(\d{2})-(\d{2})/);
+    const m = p.match(/:(\d{4})-(\d{2})-(\d{2})([a-z]?)/);
     if (!m) return null;
-    const [, yyyy, mm, dd] = m;
-    return { year: yyyy, anchor: dd + mm + yyyy.slice(2) };
+    const [, yyyy, mm, dd, suffix] = m;
+    return { year: yyyy, anchor: dd + mm + yyyy.slice(2) + suffix };
+  }
+
+  // Returns the setlist container element for a (fetched or live) document.
+  // Normally #wiki-tab-0-1 holds a <table><tr><td> layout; older/simpler pages
+  // place the <ol>/<ul> directly inside the div with no <td>.
+  function getSetlistContainer(doc) {
+    return doc.querySelector('#wiki-tab-0-1 td') || doc.querySelector('#wiki-tab-0-1');
   }
 
   function renderDetailSetlist(diffItems) {
-    const td = document.querySelector('#wiki-tab-0-1 td');
+    const td = getSetlistContainer(document);
     if (!td) return;
 
     const allLis = [...td.querySelectorAll('li')];
@@ -613,9 +621,9 @@
   // Section headers: <p><strong>Soundcheck</strong></p> etc.
   // Songs: <a href="/song:..."> text, medleys joined with " - "
   function parseDetailSetlist(doc) {
-    const td = doc.querySelector('#wiki-tab-0-1 td');
+    const td = getSetlistContainer(doc);
     if (!td) {
-      logWarn('parseDetailSetlist: #wiki-tab-0-1 td not found');
+      logWarn('parseDetailSetlist: #wiki-tab-0-1 container not found');
       return [];
     }
 

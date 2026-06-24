@@ -1,5 +1,18 @@
 [
     {
+        "version": "1.14",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Support DETAIL pages whose setlist is placed directly inside #wiki-tab-0-1 with no wrapping <table>/<td> (e.g. early-era gig pages). Add getSetlistContainer() helper that falls back from '#wiki-tab-0-1 td' to '#wiki-tab-0-1' itself; use it in parseDetailSetlist, renderDetailSetlist, insertDetailToggle, and the runDetailPage snapshot.",
+                    "Preserve letter suffixes (a, b, …) in YEAR-page anchor names derived from DETAIL page URLs. URLs like 'gig:1968-05-00a-…' now produce anchor '000568a' instead of '000568', correctly identifying multi-event days with unknown or zero day numbers."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.13",
         "date": "2026-06-24",
         "sections": [
