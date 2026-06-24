@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.7
+// @version      1.8
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -288,18 +288,21 @@
       if (firstLink && EVENT_URL_RE.test(firstLink.getAttribute('href') || '')) continue;
       if (!el.textContent.trim()) continue;
       // Prose has lowercase letters; setlist entries are all-caps on brucebase.
-      // When there is no ' / ' separator, strip any label prefix ("Soundcheck: ")
-      // and qualifiers ("(with …)", "(x3)"), then reject if lowercase letters remain.
+      // Examine the text up to the first ' / ' (the whole text for single-song
+      // entries). Strip any label prefix ("Soundcheck: ") and qualifiers
+      // ("(with …)", "(x3)"), then reject if lowercase letters remain.
+      // This handles both single-song entries (no ' / ') and prose that embeds
+      // quoted lyrics with '/' as line-breaks.
       if (el.tagName === 'P') {
-        const text = el.textContent.trim();
-        if (!text.includes(' / ')) {
-          const core = text
-            .replace(/^[A-Z][a-z]+\w*:\s*/, '')
-            .replace(/\s*\(with\b[^)]*\)/gi, '')
-            .replace(/\s*\(x\d+\)/gi, '')
-            .trim();
-          if (!core || /[a-z]/.test(core)) continue;
-        }
+        const text      = el.textContent.trim();
+        const slashIdx  = text.indexOf(' / ');
+        const firstPart = slashIdx >= 0 ? text.slice(0, slashIdx) : text;
+        const core      = firstPart
+          .replace(/^[A-Z][a-z]+\w*:\s*/, '')
+          .replace(/\s*\(with\b[^)]*\)/gi, '')
+          .replace(/\s*\(x\d+\)/gi, '')
+          .trim();
+        if (!core || /[a-z]/.test(core)) continue;
       }
       result.push(el);
     }

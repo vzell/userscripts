@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.8",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Reject prose <p> elements that embed quoted lyrics with '/' as line-breaks (e.g. show-notes paragraphs). Previously any <p> containing ' / ' was accepted as a setlist. Fix: examine only the text before the first ' / ' (the first would-be song name), strip label prefix and qualifiers, and reject if lowercase letters remain. Genuine setlist entries always start with an all-caps song name; prose sentences have lowercase before the first slash."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.7",
         "date": "2026-06-24",
         "sections": [
