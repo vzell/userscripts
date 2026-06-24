@@ -1,0 +1,113 @@
+http://brucebase.wikidot.com/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc
+#+begin_example
+<div id="wiki-tab-0-1" style="display: block;">
+<table style="width:80%;">
+<tbody><tr style="vertical-align: top;">
+<td style="width:50%;">
+<ol>
+<li><a href="/song:i-walk-the-line">I WALK THE LINE</a></li>
+<li><a href="/song:the-rising">THE RISING</a></li>
+<li><a href="/song:lonesome-day">LONESOME DAY</a></li>
+<li><a href="/song:candy-s-room">CANDY'S ROOM</a></li>
+<li><a href="/song:darkness-on-the-edge-of-town">DARKNESS ON THE EDGE OF TOWN</a></li>
+<li><a href="/song:empty-sky">EMPTY SKY</a></li>
+<li><a href="/song:you-re-missing">YOU'RE MISSING</a></li>
+<li><a href="/song:waitin-on-a-sunny-day">WAITIN' ON A SUNNY DAY</a></li>
+<li><a href="/song:darlington-county">DARLINGTON COUNTY</a></li>
+<li><strong><a href="/song:living-proof">LIVING PROOF</a></strong></li>
+<li><a href="/song:she-s-the-one">SHE'S THE ONE</a></li>
+<li><a href="/song:badlands">BADLANDS</a></li>
+<li><a href="/song:mary-s-place">MARY'S PLACE</a></li>
+<li><a href="/song:american-skin-41-shots">AMERICAN SKIN (41 SHOTS)</a></li>
+<li><a href="/song:jungleland">JUNGLELAND</a></li>
+<li><a href="/song:into-the-fire">INTO THE FIRE</a></li>
+<li><a href="/song:cadillac-ranch">CADILLAC RANCH</a></li>
+<li><a href="/song:hungry-heart">HUNGRY HEART</a></li>
+<li><a href="/song:glory-days">GLORY DAYS</a></li>
+<li><a href="/song:born-to-run">BORN TO RUN</a></li>
+<li><a href="/song:seven-nights-to-rock">SEVEN NIGHTS TO ROCK</a></li>
+<li><strong><a href="/song:brilliant-disguise">BRILLIANT DISGUISE</a></strong></li>
+<li><a href="/song:my-city-of-ruins">MY CITY OF RUINS</a></li>
+<li><a href="/song:born-in-the-u-s-a">BORN IN THE U.S.A.</a></li>
+<li><a href="/song:rosalita-come-out-tonight">ROSALITA (COME OUT TONIGHT)</a></li>
+<li><a href="/song:dancing-in-the-dark">DANCING IN THE DARK</a></li>
+</ol>
+</td>
+<td style="width:50%;"><br>
+<a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--resized-images/files:setlist-2003/20030914_Setlist_01_Handwritten.jpg/small.jpg" title="Handwritten Setlist" alt="20030914_Setlist_01_Handwritten.jpg" class="image"></a></td>
+</tr>
+</tbody></table>
+>
+#+end_example
+
+http://brucebase.wikidot.com/gig:2003-10-04-shea-stadium-new-york-city-ny
+#+begin_example
+<div id="wiki-tab-0-1" style="display: block;">
+<table style="width:80%;">
+<tbody><tr style="vertical-align: top;">
+<td style="width:50%;">
+<p><strong>Soundcheck</strong></p>
+<ul>
+<li><a href="/song:i-wish-i-were-blind">I WISH I WERE BLIND</a> <span style="font-size:80%;"><em>(x3)</em></span></li>
+<li><a href="/song:blood-brothers">BLOOD BROTHERS</a> <span style="font-size:80%;"><em>(x2)</em></span></li>
+<li><a href="/song:code-of-silence">CODE OF SILENCE</a></li>
+<li><a href="/song:back-in-your-arms">BACK IN YOUR ARMS</a></li>
+<li><a href="/song:johnny-99">JOHNNY 99</a></li>
+</ul>
+<p><strong>Show</strong></p>
+<ol>
+<li><a href="/song:code-of-silence">CODE OF SILENCE</a></li>
+<li><a href="/song:the-rising">THE RISING</a></li>
+<li><a href="/song:lonesome-day">LONESOME DAY</a></li>
+<li><a href="/song:roulette">ROULETTE</a></li>
+<li><a href="/song:night">NIGHT</a></li>
+<li><strong><a href="/song:i-wish-i-were-blind">I WISH I WERE BLIND</a></strong></li>
+<li><a href="/song:empty-sky">EMPTY SKY</a></li>
+<li><a href="/song:you-re-missing">YOU'RE MISSING</a></li>
+<li><a href="/song:waitin-on-a-sunny-day">WAITIN' ON A SUNNY DAY</a></li>
+<li><a href="/song:johnny-99">JOHNNY 99</a></li>
+<li><a href="/song:another-thin-line">ANOTHER THIN LINE</a></li>
+<li><a href="/song:tunnel-of-love">TUNNEL OF LOVE</a></li>
+<li><a href="/song:because-the-night">BECAUSE THE NIGHT</a></li>
+<li><a href="/song:badlands">BADLANDS</a></li>
+<li><a href="/song:prove-it-all-night">PROVE IT ALL NIGHT</a></li>
+<li><a href="/song:mary-s-place">MARY'S PLACE</a></li>
+<li><strong><a href="/song:back-in-your-arms">BACK IN YOUR ARMS</a></strong></li>
+<li><a href="/song:into-the-fire">INTO THE FIRE</a></li>
+<li><strong><a href="/song:light-of-day">LIGHT OF DAY</a></strong></li>
+<li><a href="/song:bobby-jean">BOBBY JEAN</a></li>
+<li><a href="/song:born-to-run">BORN TO RUN</a></li>
+<li><a href="/song:seven-nights-to-rock">SEVEN NIGHTS TO ROCK</a></li>
+<li><strong><a href="/song:highway-61-revisited">HIGHWAY 61 REVISITED</a></strong></li>
+<li><a href="/song:my-city-of-ruins">MY CITY OF RUINS</a></li>
+<li><a href="/song:land-of-hope-and-dreams">LAND OF HOPE AND DREAMS</a> - <a href="/song:people-get-ready">PEOPLE GET READY</a></li>
+<li><a href="/song:rosalita-come-out-tonight">ROSALITA (COME OUT TONIGHT)</a></li>
+<li><a href="/song:dancing-in-the-dark">DANCING IN THE DARK</a></li>
+<li><strong><a href="/song:quarter-to-three">QUARTER TO THREE</a></strong></li>
+<li><a href="/song:twist-and-shout">TWIST AND SHOUT</a></li>
+<li><strong><a href="/song:blood-brothers">BLOOD BROTHERS</a></strong></li>
+</ol>
+</td>
+<td style="width:50%;"><br>
+<a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--resized-images/files:setlist-2003/20031004_Setlist_01_Handwritten.jpg/small.jpg" title="Handwritten Setlist" alt="20031004_Setlist_01_Handwritten.jpg" class="image"></a></td>
+</tr>
+</tbody></table>
+</div>
+#+end_example
+
+http://brucebase.wikidot.com/recording:1984-01-12-hit-factory-new-york-city-ny
+#+begin_example
+<div id="wiki-tab-0-1" style="display: block;">
+<table style="width:80%;">
+<tbody><tr style="vertical-align: top;">
+<td style="width:50%;">
+<ul>
+<li><a href="/song:man-at-the-top">MAN AT THE TOP</a></li>
+<li><a href="/song:rockaway-the-days">ROCKAWAY THE DAYS</a></li>
+</ul>
+</td>
+<td style="width:50%;"><br></td>
+</tr>
+</tbody></table>
+</div>
+#+end_example

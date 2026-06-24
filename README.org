@@ -1,0 +1,320 @@
+* BruceBase parser
+** plan
+
+The BruceBase website at http://brucebase.wikidot.com/ renders everything related to Bruce Springsteen in a highly
+structured but HTML generated oriented way.
+
+The goal of this userscript is, it will parse different aspects from the underlying HTML data and checks for
+inconsistencies, by enriching the standard BrueBase pages with glyphs which shows discrepancies between different parts
+of the website.
+
+We will start with the generic YEAR event pages and check if the corresponding event DETAILS pages match with their
+event names.
+
+The URL structure for YEAR pages is
+
+#+begin_example
+http://brucebase.wikidot.com/<4 digit year>
+#+end_example
+
+e.g. "http://brucebase.wikidot.com/2024"
+
+Typical event name looks like (in all UPPERCAE and a "-" between the date and venue) and hyperlinked to their event
+DETAIL page (Capitalized and "The" inside "(" and ") before the ",") in
+
+| YEAR page (event name)                             | Anchor in YEAR page   | Link                                                                          | DETAIL page (event name)                                       |
+|----------------------------------------------------+-----------------------+-------------------------------------------------------------------------------+----------------------------------------------------|
+| 2024-01-07 - THE BEVERLY HILTON, BEVERLY HILLS, CA | <a name="070124"></a> | http://brucebase.wikidot.com/nogig:2024-01-07-beverly-hilton-beverly-hills-ca | 2024-01-07 Beverly Hilton (The), Beverly Hills, CA |
+| 2024-01-19 - FIVE RINGS FARM, WELLINGTON, FL       | <a name="190124"></a> | http://brucebase.wikidot.com/gig:2024-01-19-five-rings-farm-wellington-fl     | 2024-01-19 Five Rings Farm, Wellington, FL         |
+|                                                    |                       |                                                                               |                                                    |
+
+Write a userscript which parses the YEAR pages, and for each event follows the link to the detail page and compares the
+event names. For the comparison to succeed
+
+- the "(The)" in front of a "," should be treated as being right after the date (which additionally should get a " - " added)
+- the comparison should be made by UPCASING the DETAILpage evetn name
+ 
+So e.g the two event names in the above table should be considered the same. In this case append a green checkmark after
+the event name on the YEAR page and a red cross if they differ.
+
+In both cases when hovering over the YEAR page event name, display in a rich HTML based tooltip the differences (if any)
+in the event name (except if they differ in what we already discussed)
+
+** plan
+
+generate a plan
+
+** fixes
+
+The following event types are known:
+
+gig, interview, nogig, offstage, onstage, rehearsal, soundcheck
+
+Sdjust the code accordingly. If an unknonw event typ is detected, show a unicode "?" mark instead of the green checkmark
+or the red cross.
+
+Also add comprehensive debug logging during parsing
+
+** add "recording" to the know event-types
+
+add "recording" to the know event-types
+
+** YEAR overview
+
+Extend the userscript for YEAR OVERVIEW pages like
+
+#+begin_example
+http://brucebase.wikidot.com/<4 digit year>-list
+#+end_example
+
+e.g. http://brucebase.wikidot.com/2024-list
+
+there is again a list of events, e.g
+
+#+begin_example
+2024-01-07 - THE BEVERLY HILTON, BEVERLY HILLS, CA (Golden Globe Awards)
+#+end_example
+
+Follow the events back to the YEAR page via the link
+
+#+begin_example
+http://brucebase.wikidot.com/<4 digit year>#<anchor>
+#+end_example
+
+e.g.
+
+http://brucebase.wikidot.com/2024#070124
+
+and again compare the event titles.
+
+On YEAR OVERVIEW pages there is an optional detail appended to the event name like e.g. "(Golden Globe Awards)"
+this should not be taken into account when comparing to the event name on the YEAR page.
+
+** setlist check
+
+Add the functionality for "setlist/recording session" checks:
+
+1.)
+
+On YEAR pages for each event parse the "setlist/recording session" in an array of SONGS.
+
+Setlists have the following typical structure @debug/YEAR.org
+
+- songs have the string " / " between each other and are located inside a "<p>" container after the event name
+- every song is UPPERCASED
+- the HTML <strong> attribute should be ignored
+- optional additional musicians after the UPPERCAED song name should be ignored e.g. "(with Willie Nile and Jon Landau)"
+- sometimes an event has an additional "<p>" container which starts with a capitalized string like e.g. "Soundcheck:" and has the setlist after it with the same charactertistics as above
+
+Recording sessions have the following typical structure:
+
+http://brucebase.wikidot.com/1984#120184
+
+#+begin_example
+<blockquote>
+<p>MAN AT THE TOP / ROCKAWAY THE DAYS</p>
+</blockquote>
+#+end_example
+
+- the "<p>" container is addionally surrounded with a "<blockquote>" right after the event name
+
+2.)
+
+For each event follow the link to the detail page and again parse the "setlist/recording session" in an array of SONGS.
+
+DETAIL/RECORDING SESSIONS have the following typical structure @debug/DETAIL.org
+
+- songs are typically located inside a '<div id="wiki-tab-0-1"' container in an ordered list "<ol>" or unordered list "<ul>" in case of e.g. "Soundcheck" (see below)
+- each song is again UPPERCASED and hyperlinked, only the UPPERCASR TEXT part should be taken into account
+- sometimes when in the YEAR page the setlist starts with a capitalized string like e.g. "Soundcheck:", the DETAIL page 
+  has '<p><strong>Soundcheck</strong></p>' in front of the unordered list. In such a case the ordered setlist is typically preceded with '<p><strong>Show</strong></p>'  
+
+3.)
+
+For each event compare the two song arrays and when on the YEAR page
+
+- render a song title in "green" when they both match
+- render differing chars in a song title in RED, show a rich HTML based tooltip where both versions show up
+- render a missing song on the YEAR page (when it's additionally on the DETAIL page) with a background color like "yellow"
+- render an additional song on the YEAR page (when it's missing on the DETAIL page) with a background color like "light blue"
+- for the last two cases show a rich HTML tooltip on the songs explaining the fact
+
+4.)
+
+For each event compare the two song arrays and when on the DETAIL page, do the same as on the YEAR page but the other way around
+
+5.) Read more examples if it's not yet clear what I mean
+
+** bugs
+
+On YEAR pages, do not interpret any "<p>" container after a "setlist/recording session" as another "setlist/recording session" container.
+So e.g for the event http://brucebase.wikidot.com/2003#190203 currently the
+
+original text 
+
+#+begin_example
+<p>First of a two night benefit stand for <em>Doubletake Magazine</em>, featuring the world premiere of "<a href="/song:the-wall">The Wall</a>". Also included are a piano solo version of "<a href="/song:thunder-road">Thunder Road</a>", a 12-string guitar rendition of "<a href="/song:born-in-the-u-s-a">Born In The U.S.A.</a>", and the only known acoustic "<a href="/song:souls-of-the-departed">Souls Of The Departed</a>".</p>
+#+end_example
+
+after the setlist is rendered like
+
+#+begin_example
+<p><span class="bb-song-year-only" data-year-song="First of a two night benefit stand for Doubletake Magazine, featuring the world premiere of &quot;The Wall&quot;. Also included are a piano solo version of &quot;Thunder Road&quot;, a 12-string guitar rendition of &quot;Born In The U.S.A.&quot;, and the only known acoustic &quot;Souls Of The Departed&quot;.">First of a two night benefit stand for Doubletake Magazine, featuring the world premiere of "The Wall". Also included are a piano solo version of "Thunder Road", a 12-string guitar rendition of "Born In The U.S.A.", and the only known acoustic "Souls Of The Departed".</span></p>
+#+end_example
+
+but these descriptive event texts should be ingored when comparing setlists/recordings between YEAR and DETAIL pages
+
+** toggle
+
+1.)
+
+On each YEAR page include a toggle button after
+
+#+begin_example
+<div id="page-title">
+#+end_example
+
+which when pressed shows the original page before processing with our userscript. Pressing again switches to the userscript processed page
+
+2.)
+
+After each "<hr>" include another toggle button which switches just the content between two consecutive "<hr>" elements
+to the original page content before processing with our userscript and back to the userscript processed version
+
+** bugs
+
+1.) when clicking the "Show original page" button, everything below the button is NOT rendered anymore, but shows again when toggling
+
+2.) the toggle buttons after each "<hr>" do NOT have any visual effect except changing the button text when toggeling
+
+* question
+** initial
+
+I have the following directory
+
+#+begin_example
+└── userscripts
+    ├── BruceBaseParser
+    │   ├── BruceBaseParser.user.js
+    │   ├── CLAUDE.md
+    │   └── .git
+    │   └── debug
+    │       ├── DETAIL.org
+    │       └── YEAR.org
+    ├── CLAUDE.md
+    ├── .git
+    └── README.org
+#+end_example
+
+I started with a git repo in "BruceBaseParser", but decided to move the whole repo one level up to userscripts.
+I want to get rid of the .git folder in BruceBaseParser and instead have the whole git history under userscripts.
+Eventually there will be other Parsers later. Is this possible
+
+* Step-by-step
+** Back up first (just in case)
+
+#+begin_src bash
+ cd ~/git
+#+end_src
+
+#+begin_src bash
+cp -r userscripts userscripts.bak
+#+end_src
+
+** Rewrite the BruceBaseParser history so all paths are under BruceBaseParser/
+
+#+begin_src bash
+cd userscripts/BruceBaseParser
+#+end_src
+
+#+begin_src bash
+git filter-repo --to-subdirectory-filter BruceBaseParser
+#+end_src
+
+#+begin_example
+# Aborting: Refusing to destructively overwrite repo history since
+# this does not look like a fresh clone.
+#   (expected at most one entry in the reflog for HEAD)
+# Please operate on a fresh clone instead.  If you want to proceed
+# anyway, use --force.
+#+end_example
+
+#+begin_src bash
+git filter-repo --to-subdirectory-filter BruceBaseParser --force
+#+end_src
+
+#+begin_example
+# Parsed 8 commits
+# New history written in 0.05 seconds; now repacking/cleaning...
+# Repacking your repo and cleaning out old unneeded objects
+# HEAD is now at 0b74282 Rewrite CLAUDE.md with current v1.4 architecture
+# Enumerating objects: 33, done.
+# Counting objects: 100% (33/33), done.
+# Delta compression using up to 4 threads
+# Compressing objects: 100% (24/24), done.
+# Writing objects: 100% (33/33), done.
+# Total 33 (delta 11), reused 0 (delta 0), pack-reused 0
+# Completely finished after 0.18 seconds.
+#+end_example
+
+After this, the repo's history will look as if files always lived at BruceBaseParser/BruceBaseParser.user.js etc. — the prefix is braft into every commit.
+
+** Import that history into the top-level repo
+
+#+begin_src bash
+cd ../                                        # now in userscripts/
+#+end_src
+
+#+begin_src bash
+git remote add brucebase BruceBaseParser
+#+end_src
+
+#+begin_src bash
+git fetch brucebase
+#+end_src
+
+#+begin_example
+# remote: Enumerating objects: 33, done.        
+# remote: Counting objects: 100% (33/33), done.        
+# remote: Compressing objects: 100% (13/13), done.        
+# remote: Total 33 (delta 11), reused 33 (delta 11), pack-reused 0        
+# Unpacking objects: 100% (33/33), 22.22 KiB | 455.00 KiB/s, done.
+# From BruceBaseParser
+#  * [new branch]      master     -> brucebase/master
+#+end_example
+
+#+begin_src bash
+git merge --allow-unrelated-histories brucebase/master   # or 'master' if that's your branch name
+#+end_src
+
+#+begin_src bash
+git remote remove brucebase
+#+end_src
+
+
+** Remove the nested .git
+
+#+begin_src bash
+rm -rf BruceBaseParser/.git
+#+end_src
+
+** Verify
+
+#+begin_src bash
+git log --oneline          # full history visible
+#+end_src
+
+#+begin_example
+# 0b74282 (HEAD -> master) Rewrite CLAUDE.md with current v1.4 architecture
+# b661443 Fix global and per-section toggle buttons
+# 7d3b8d4 Add page-level and per-section toggle buttons on YEAR pages (v1.4)
+# 67bdde0 Ignore prose description <p>s when collecting setlist elements
+# 96ed940 Add setlist/recording session comparison (v1.3)
+# 17b22c3 Extend checker to YEAR OVERVIEW (list) pages and fix tooltip width
+# 5463623 Add BruceBase event name checker userscript
+# 0d98bf9 initial commit
+#+end_example
+
+#+begin_src bash
+git log -- BruceBaseParser/BruceBaseParser.user.js   # all old commits still attributed correctly
+#+end_src
