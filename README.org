@@ -217,6 +217,26 @@ some other tab again.
 What I really want: when on the "Setlist" tab and then pressing the "Show Original Page" button, the "Setlist" should
 stay activated, and show the original unprocessed data. Also switching tabs should be still supported.
 
+** why
+
+why on the YEAR URL http://brucebase.wikidot.com/1984#140284 the one song setlist matches with the DETAIL page entry
+but not on http://brucebase.wikidot.com/1984#160284 and it's DETAIL page (on the DETAIL page even the toggle button is missing)
+
+Read and parse the relevant URLs if neccessary
+
+** why
+
+YEAR page entry http://brucebase.wikidot.com/1984#120184 and it's DETAIL page seem to have the same setlist but still show differences 
+
+** why
+
+YEAR page entry http://brucebase.wikidot.com/1984#060684 and it's DETAIL page seem to have the same setlist but it says it's ONLY on the DETAIL page
+
+** /
+
+YEAR page entry http://brucebase.wikidot.com/1984#290684 has a descriptive text after the setlist which includes
+multiple "/". It is recognized as another setlist which should NOT happen.
+
 * question
 ** initial
 
