@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.9
+// @version      1.10
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -299,8 +299,7 @@
         const firstPart = slashIdx >= 0 ? text.slice(0, slashIdx) : text;
         const core      = firstPart
           .replace(/^[^/:\n]+:\s*/, '')
-          .replace(/\s*\(with\b[^)]*\)/gi, '')
-          .replace(/\s*\(x\d+\)/gi, '')
+          .replace(/\s*\([^)]*[a-z][^)]*\)/g, '') // strip parentheticals with lowercase (with/xN/parts/…)
           .trim();
         if (!core || /[a-z]/.test(core)) continue;
       }
@@ -329,20 +328,24 @@
         }
       }
 
-      const songs = text.split(' / ')
-        .map(s => cleanSongName(s.trim()))
-        .filter(s => s.length > 0);
+      const rawAndClean = text.split(' / ')
+        .map(s => s.trim())
+        .filter(s => s.length > 0)
+        .map(raw => ({ raw, clean: cleanSongName(raw) }))
+        .filter(p => p.clean.length > 0);
+      const songs    = rawAndClean.map(p => p.clean);
+      const rawSongs = rawAndClean.map(p => p.raw);
 
-      if (songs.length > 0) sections.push({ label, songs, sourceEl: el });
+      if (songs.length > 0) sections.push({ label, songs, rawSongs, sourceEl: el });
     }
     return sections;
   }
 
-  // Strips (with ...) and (x3) suffixes but preserves (41 SHOTS), (COME OUT TONIGHT) etc.
+  // Strips parentheticals containing any lowercase letter: (with …), (x3), (parts), (acoustic) etc.
+  // Preserves all-caps song-name parentheticals: (41 SHOTS), (COME OUT TONIGHT) etc.
   function cleanSongName(text) {
     return text
-      .replace(/\s*\(with\b[^)]*\)/gi, '')
-      .replace(/\s*\(x\d+\)/gi, '')
+      .replace(/\s*\([^)]*[a-z][^)]*\)/g, '')
       .trim();
   }
 
@@ -382,12 +385,17 @@
       if (setlistEls.length > 0) {
         const yearSections   = parseYearSetlist(setlistEls);
         const detailSections = parseDetailSetlist(doc);
-        const yearFlat   = yearSections.flatMap(s => s.songs);
-        const detailFlat = detailSections.flatMap(s => s.songs);
+        const yearFlat    = yearSections.flatMap(s => s.songs);
+        const yearRawFlat = yearSections.flatMap(s => s.rawSongs);
+        const detailFlat  = detailSections.flatMap(s => s.songs);
         log(`  Setlist: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
 
         if (yearFlat.length > 0 || detailFlat.length > 0) {
           const diffItems = mergeCharDiffs(lcsDiff(yearFlat, detailFlat));
+          let yp = 0;
+          for (const item of diffItems) {
+            if (item.type !== 'detail-only') item.rawYearSong = yearRawFlat[yp++];
+          }
           renderYearSetlist(yearSections, diffItems);
         }
       }
@@ -438,7 +446,8 @@
       isFirst = false;
 
       if (item.type === 'match') {
-        html += `<span class="bb-song-match">${esc(item.yearSong)}</span>`;
+        const rawSuffix = item.rawYearSong ? esc(item.rawYearSong.slice(item.yearSong.length)) : '';
+        html += `<span class="bb-song-match">${esc(item.yearSong)}</span>${rawSuffix}`;
       } else if (item.type === 'year-only') {
         html += `<span class="bb-song-year-only" data-year-song="${esc(item.yearSong)}">${esc(item.yearSong)}</span>`;
       } else if (item.type === 'detail-only') {
@@ -504,12 +513,17 @@
     const nextAnchor = [...yearContent.querySelectorAll('a[name]')]
       .find(a => eventLink.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-    const yearSections = parseYearSetlist(collectSetlistElements(eventLink, nextAnchor, yearContent));
-    const yearFlat     = yearSections.flatMap(s => s.songs);
-    const detailFlat   = detailSections.flatMap(s => s.songs);
+    const yearSections  = parseYearSetlist(collectSetlistElements(eventLink, nextAnchor, yearContent));
+    const yearFlat      = yearSections.flatMap(s => s.songs);
+    const yearRawFlat   = yearSections.flatMap(s => s.rawSongs);
+    const detailFlat    = detailSections.flatMap(s => s.songs);
     log(`Detail mode: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
 
     const diffItems = mergeCharDiffs(lcsDiff(yearFlat, detailFlat));
+    let yp = 0;
+    for (const item of diffItems) {
+      if (item.type !== 'detail-only') item.rawYearSong = yearRawFlat[yp++];
+    }
 
     // Snapshot the td content just before rendering so the original is unmodified
     const td             = document.querySelector('#wiki-tab-0-1 td');
@@ -1138,8 +1152,7 @@
         cursor: default;
       }
       li.bb-song-detail-only { background: #add8e6; }
-      li.bb-song-match a,
-      li.bb-song-match       { color: #2a2; }
+      li.bb-song-match a     { color: #2a2; }
     `);
   }
 

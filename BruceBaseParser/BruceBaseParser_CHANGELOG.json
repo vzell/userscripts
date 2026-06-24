@@ -1,5 +1,19 @@
 [
     {
+        "version": "1.10",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Strip generic lowercase descriptive parentheticals — such as '(parts)', '(acoustic)', '(instrumental)' — from song names before comparison, so YEAR page entries like 'LONESOME DAY (parts)' correctly match DETAIL page entries 'LONESOME DAY'. Previously only '(with …)' and '(xN)' were stripped; the same single regex now covers all parentheticals that contain at least one lowercase letter, preserving all-caps song-name qualifiers like '(41 SHOTS)' and '(COME OUT TONIGHT)'.",
+                    "On YEAR pages, render only the core song name inside the green bb-song-match span; any trailing qualifier such as '(parts)' is appended as plain uncoloured text outside the span.",
+                    "On DETAIL pages, apply match colour only to the <a> link inside a matched <li> (li.bb-song-match a), not to the entire <li>. This prevents descriptive <span> nodes such as '(parts)' from inheriting the green colour."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.9",
         "date": "2026-06-24",
         "sections": [
