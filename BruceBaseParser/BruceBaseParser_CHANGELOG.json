@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.16",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fix 'No matching event link found' on all DETAIL pages. The path variable strips the leading slash (location.pathname.replace(/^\\//, '')), so the href match '/' + path is required to compare against YEAR page anchors whose href attributes start with '/'."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.15",
         "date": "2026-06-25",
         "sections": [

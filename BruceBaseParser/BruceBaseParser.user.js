@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.15
+// @version      1.16
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -514,7 +514,7 @@
     // for URL "/gig:1971-05-15-…"), so anchor lookup would fail.
     const eventLink = [...yearContent.querySelectorAll('a[href]')]
       .filter(a => EVENT_URL_RE.test(a.getAttribute('href') || ''))
-      .find(a => a.getAttribute('href') === path);
+      .find(a => a.getAttribute('href') === '/' + path);
 
     if (!eventLink) {
       logWarn('No matching event link found on YEAR page for path:', path);
