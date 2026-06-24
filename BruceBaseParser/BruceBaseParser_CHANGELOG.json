@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.19",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Skip <p> and <blockquote> elements that are nested inside a <table> when collecting YEAR page setlist elements. Release/news announcement boxes (e.g. the /retail:the-essential box after 2003#081103) use <table> containers and their all-caps headings were passing the prose filter and being treated as setlist songs."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.18",
         "date": "2026-06-25",
         "sections": [

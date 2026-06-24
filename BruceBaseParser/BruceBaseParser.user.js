@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.18
+// @version      1.19
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -284,6 +284,10 @@
       // Skip <p> elements nested inside a <blockquote> — the blockquote is collected
       // as a unit and parseYearSetlist already reads its inner <p> text.
       if (el.tagName === 'P' && el.closest('blockquote')) continue;
+      // Skip anything inside a <table> — release/news announcement boxes use tables
+      // and their all-caps headings (e.g. "THE ESSENTIAL" from /retail: links)
+      // would otherwise pass the prose filter and be mistaken for setlist songs.
+      if (el.closest('table')) continue;
       const firstLink = el.querySelector('a[href]');
       if (firstLink && EVENT_URL_RE.test(firstLink.getAttribute('href') || '')) continue;
       if (!textWithoutSup(el).trim()) continue;
