@@ -318,3 +318,52 @@ git log --oneline          # full history visible
 #+begin_src bash
 git log -- BruceBaseParser/BruceBaseParser.user.js   # all old commits still attributed correctly
 #+end_src
+
+* add github repo
+
+** Step 1 — create the repo on GitHub.com (takes 30 seconds):
+  Go to https://github.com/new, name it smarttable-lib, set it Public, and do not initialize with a README or .gitignore (the repo needs to be empty).
+
+** Step 2 — add the remote and push. Run this here once the repo exists, replacing YOUR_USERNAME:
+
+  ! git -C /home/vzell/git/springsteen-site-parser remote add origin https://github.com/YOUR_USERNAME/smarttable-lib.git
+  ! git -C /home/vzell/git/springsteen-site-parser push -u origin main
+
+
+** Create the repo on GitHub (or with the gh CLI):
+
+#+begin_src bash
+cd ~/git/userscripts
+#+end_src
+
+#+begin_src bash
+gh repo create userscripts --public --source=. --remote=origin --push
+#+end_src
+
+#+begin_example
+# ✓ Created repository vzell/userscripts on github.com
+#   https://github.com/vzell/userscripts
+# ✓ Added remote git@github.com:vzell/userscripts.git
+# Enumerating objects: 48, done.
+# Counting objects: 100% (48/48), done.
+# Delta compression using up to 4 threads
+# Compressing objects: 100% (39/39), done.
+# Writing objects: 100% (48/48), 30.56 KiB | 3.06 MiB/s, done.
+# Total 48 (delta 16), reused 0 (delta 0), pack-reused 0
+# remote: Resolving deltas: 100% (16/16), done.        
+# To github.com:vzell/userscripts.git
+#  * [new branch]      HEAD -> master
+# branch 'master' set up to track 'origin/master'.
+# ✓ Pushed commits to git@github.com:vzell/userscripts.git
+#+end_example
+
+** That single command creates the repo, adds origin, and pushes in one shot. If you'd rather create it in the browser first and paste the URL, run:
+
+#+begin_src bash
+git remote add origin https://github.com/vzell/userscripts.git
+#+end_src
+
+#+begin_src bash
+git push -u origin master
+#+end_src
+
