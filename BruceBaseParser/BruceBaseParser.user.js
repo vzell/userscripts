@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.10
+// @version      1.11
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -575,7 +575,9 @@
 
   function styleDetailLi(li, item) {
     if (item.type === 'match') {
-      li.classList.add('bb-song-match');
+      // Add match class to song links only — not to the <li> itself — so
+      // descriptive <span> nodes like (parts) do not inherit the green colour.
+      li.querySelectorAll('a[href^="/song:"]').forEach(a => a.classList.add('bb-song-match'));
     } else if (item.type === 'detail-only') {
       li.classList.add('bb-song-detail-only');
       li.dataset.detailSong = item.detailSong;
@@ -1152,7 +1154,6 @@
         cursor: default;
       }
       li.bb-song-detail-only { background: #add8e6; }
-      li.bb-song-match a     { color: #2a2; }
     `);
   }
 

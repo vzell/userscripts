@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.11",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "On DETAIL pages, apply the match colour only to song <a> links (by adding bb-song-match directly to each a[href^='/song:'] inside the <li>), not to the <li> element itself. Previously, adding bb-song-match to the <li> caused the general .bb-song-match { color: #2a2 } CSS rule to make the entire list item green, including descriptive <span> nodes such as '(parts)'."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.10",
         "date": "2026-06-24",
         "sections": [
