@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.6",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Skip <p> elements nested inside a <blockquote> in collectSetlistElements. querySelectorAll('p, blockquote') returns both the <blockquote> and its inner <p>; when the <p> contains a ' / ' separator it passed the prose filter and was counted twice, doubling every recording-session song in yearFlat and producing spurious year-only mismatches."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.5",
         "date": "2026-06-24",
         "sections": [

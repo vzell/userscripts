@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.5
+// @version      1.6
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -281,6 +281,9 @@
       if (!(eventLinkEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
       if (nextAnchorEl && !(nextAnchorEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) break;
       if (el.tagName === 'P' && INLINE_DATE_RE.test(el.textContent.trim())) break;
+      // Skip <p> elements nested inside a <blockquote> — the blockquote is collected
+      // as a unit and parseYearSetlist already reads its inner <p> text.
+      if (el.tagName === 'P' && el.closest('blockquote')) continue;
       const firstLink = el.querySelector('a[href]');
       if (firstLink && EVENT_URL_RE.test(firstLink.getAttribute('href') || '')) continue;
       if (!el.textContent.trim()) continue;
