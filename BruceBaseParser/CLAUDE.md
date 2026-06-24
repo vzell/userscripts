@@ -1,40 +1,201 @@
-# CLAUDE.md — BruceBase parser context
+# CLAUDE.md — BruceBase Event Checker
 
-The BruceBase website at http://brucebase.wikidot.com/ renders everything related to Bruce Springsteen in a highly
-structured but HTML generated oriented way.
+## Purpose
 
-The goal of this userscript is, it will parse different aspects from the underlying HTML data and checks for
-inconsistencies, by enriching the standard BrueBase pages with glyphs which shows discrepancies between different parts
-of the website.
+Tampermonkey userscript (`brucebase-eventcheck.user.js`) that enriches
+`http://brucebase.wikidot.com/` pages by cross-checking data between different
+page types and surfacing discrepancies with inline glyphs and hover tooltips.
 
-We will start with the generic YEAR event pages and check if the corresponding event DETAILS pages match with their
-event names.
+---
 
-The URL structure for YEAR pages is
+## Page types and URL patterns
 
-#+begin_example
-http://brucebase.wikidot.com/<4 digit year>
-#+end_example
+| Page type        | URL pattern                          | `@include` regex |
+|------------------|--------------------------------------|------------------|
+| YEAR page        | `/YYYY`                              | `\d{4}$` |
+| YEAR LIST page   | `/YYYY-list`                         | `\d{4}-list$` |
+| DETAIL page      | `/type:YYYY-MM-DD-slug`              | `(gig\|nogig\|recording\|…):` |
 
-e.g. "http://brucebase.wikidot.com/2024"
+Known event types (anything else gets a ❓ glyph):
+`gig`, `interview`, `nogig`, `offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck`
 
-Typical event names look like (in all UPPERCAE and a "-" between the date and venue) and hyperlinked to their event
-DETAIL page (Capitalized and "The" inside "(" and ") before the ",") in
+---
 
-| YEAR page (event name)                             | Anchor in YEAR page   | Link                                                                          | DETAIL page (event name)                                       |
-|----------------------------------------------------+-----------------------+-------------------------------------------------------------------------------+----------------------------------------------------|
-| 2024-01-07 - THE BEVERLY HILTON, BEVERLY HILLS, CA | <a name="070124"></a> | http://brucebase.wikidot.com/nogig:2024-01-07-beverly-hilton-beverly-hills-ca | 2024-01-07 Beverly Hilton (The), Beverly Hills, CA |
-| 2024-01-19 - FIVE RINGS FARM, WELLINGTON, FL       | <a name="190124"></a> | http://brucebase.wikidot.com/gig:2024-01-19-five-rings-farm-wellington-fl     | 2024-01-19 Five Rings Farm, Wellington, FL         |
-|                                                    |                       |                                                                               |                                                    |
+## Boot flow
 
-Write a userscript which parses the YEAR pages, and for each event follows the link to the detail page and compares the
-event names. For the comparison to succeed
+```
+location.pathname
+  → /YYYY        → runYearPage()
+  → /YYYY-list   → runListPage(year)
+  → /type:…      → runDetailPage()
+```
 
-- the "(The)" in front of a "," should be treated as being right after the date (which additionally should get a " - " added)
-- the comparison should be made by UPCASING the DETAILpage evetn name
- 
-So e.g the two event names in the above table should be considered the same. In this case append a green checkmark after
-the event name on the YEAR page and a red cross if they differ.
+`addStyles()` and `createTooltipElement()` always run first.
 
-In both cases when hovering over the YEAR page event name, display in a rich HTML based tooltip the differences (if any)
-in the event name (except if they differ in what we already discussed)
+---
+
+## YEAR page mode (`runYearPage`)
+
+### Processing pipeline
+
+1. **Snapshot** `#page-content.innerHTML` (pre-processing, for global toggle).
+2. **`wrapYearSections(content)`** — wraps content between each consecutive pair
+   of `<hr>` direct children into a `<div class="bb-section-processed">`.
+   Serialises the original HTML as a plain string *before* moving nodes (not as
+   a DOM clone) so that the snapshot cannot be found by `querySelectorAll` and
+   accidentally re-processed.
+3. **`extractYearPageEvents()`** — scans all `<a href>` in `#page-content`,
+   matches `EVENT_URL_RE = /\/([a-z]+):\d{4}-\d{2}-\d{2}/`, and for each hit:
+   - finds the last preceding `<a name="…">` anchor (DDMMYY format)
+   - finds the next following anchor (end boundary)
+   - calls `collectSetlistElements(eventLink, nextAnchor, content)` to collect
+     `<p>` and `<blockquote>` elements between the two anchors
+   - `<p>` elements without a ` / ` separator are prose descriptions and are
+     skipped (only paragraphs that split on ` / ` are setlists)
+4. **`processYearEvents(events)`** — batches 3 events at a time with 500 ms
+   between batches; each calls `processOneYearEvent(event)`.
+5. After all events: **`insertGlobalToggle`** and **`insertSectionToggle`** for
+   each wrapped section.
+
+### Per-event processing (`processOneYearEvent`)
+
+Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
+
+**Event name check:**
+- Extracts name from `#page-title` (fallback: `h1.page-title`, `h1`, `<title>`)
+- `normalizeDetailName()`: moves `(The)` before a comma to the front as `THE `,
+  inserts ` - ` after the date, uppercases everything
+- Compares with the uppercased YEAR page name
+- Appends ✅ or ❌ glyph; hover shows a tooltip with both names and a
+  token-level diff (`buildDiffHtml`)
+
+**Setlist check** (when setlist elements were found):
+- `parseYearSetlist(setlistEls)` → `Section[]` where
+  `Section = { label, songs: string[], sourceEl }`
+  - `<blockquote>` → `label = 'recording'`
+  - `<p>` starting with `Word:` → `label = 'soundcheck'` (or other label)
+  - plain `<p>` → `label = 'show'`
+  - each token is cleaned with `cleanSongName()`: strips `(with …)` and `(x3)`
+    but preserves `(41 SHOTS)`, `(COME OUT TONIGHT)` etc.
+- `parseDetailSetlist(doc)` → reads `#wiki-tab-0-1 td` children:
+  - `<p><strong>Soundcheck</strong></p>` etc. set the current section label
+  - `<ol>`/`<ul>` produce a section; song names come from `<a href="/song:…">`
+    text, medleys (multiple `<a>` in one `<li>`) joined with ` - `
+- Flattens both section arrays to `string[]` and runs `lcsDiff(yearFlat, detailFlat)`
+- `mergeCharDiffs()` reclassifies adjacent `year-only` + `detail-only` pairs
+  as `char-diff` when Levenshtein distance ≤ max(3, 20 % of song length)
+- `renderYearSetlist(yearSections, diffItems)` assigns diff items back to their
+  source `<p>`/`<blockquote>` elements (tracking a year-song cursor through the
+  flat diff), then calls `renderSetlistElement(el, label, items)` which replaces
+  each element's `innerHTML` with colour-coded spans
+
+### Setlist colour coding (YEAR page)
+
+| CSS class              | Meaning                     | Visual          |
+|------------------------|-----------------------------|-----------------|
+| `.bb-song-match`       | same in both pages          | green text      |
+| `.bb-song-year-only`   | in year, not detail         | light-blue bg   |
+| `.bb-song-detail-only` | in detail, not year (inserted) | yellow bg    |
+| `.bb-song-char-diff`   | similar but slightly different | char-level red/green |
+| `.bb-char-match`       | matching char within diff   | green           |
+| `.bb-char-diff`        | differing char              | red bold        |
+
+Hover over any non-match span shows `showSongTooltip()` with year/detail names
+and a word-level diff.
+
+### Toggle controls (YEAR page only)
+
+**Global toggle** (button after `#page-title`):
+- `insertGlobalToggle(content, originalHtml)` creates `<div id="bb-page-original">`
+  with the pre-processing HTML, inserted as a sibling of `#page-content`.
+- Toggle alternates `display: block / none` on the two divs.
+- `#page-content` is never replaced, so all event listeners survive.
+
+**Per-section toggle** (button after each `<hr>`):
+- `insertSectionToggle(hr, processedDiv, sectionOriginalHtml)` creates
+  `<div class="bb-section-original">` with the serialised pre-processing HTML
+  and inserts it immediately before `processedDiv`.
+- IMPORTANT: this div is created *after* `processYearEvents` completes, so
+  `querySelectorAll` during event extraction never finds the cloned `<a>` links
+  inside it (which would cause duplicate processing and destroy the diff).
+- Toggle alternates `display: block / none` between the two sibling divs.
+
+---
+
+## YEAR LIST page mode (`runListPage`)
+
+Pages like `/2024-list` contain links of the form `/2024#DDMMYY` pointing to
+anchors on the YEAR page.
+
+1. Fetches the YEAR page once.
+2. `buildAnchorToNameMap(yearDoc)` pairs each `<a name="…">` anchor with the
+   first following event link using `compareDocumentPosition`.
+3. For each list link, extracts the raw name via `getLinkLineText()` (captures
+   sibling text nodes after `<a>` for suffixes like "(Golden Globe Awards)"),
+   strips the optional trailing `(…)` suffix with `stripListSuffix()`, compares
+   uppercased with the YEAR page anchor map entry.
+4. Appends ✅/❌ glyph; hover shows a tooltip with both names.
+
+---
+
+## DETAIL page mode (`runDetailPage`)
+
+Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
+
+1. `parseDetailSetlist(document)` reads the `#wiki-tab-0-1 td` setlist.
+2. `detailPathToYearAndAnchor(path)` derives the YEAR page URL and anchor
+   (`gig:2003-09-14-…` → `{ year: '2003', anchor: '140903' }`).
+3. Fetches the YEAR page, finds the anchor, collects and parses the year-side
+   setlist with `collectSetlistElements` + `parseYearSetlist`.
+4. Runs `lcsDiff` + `mergeCharDiffs`.
+5. `renderDetailSetlist(diffItems)`:
+   - `match` → adds `.bb-song-match` class to the `<li>` (green text)
+   - `detail-only` → adds `.bb-song-detail-only` (light-blue bg)
+   - `char-diff` → adds `.bb-song-char-diff`, replaces `<a>` innerHTML with
+     character-level coloured spans
+   - `year-only` → inserts a new `<li class="bb-song-year-only">` before the
+     current list position (yellow bg, song name from year page)
+
+---
+
+## Shared utilities
+
+| Function | Purpose |
+|---|---|
+| `fetchPage(url)` | `GM_xmlhttpRequest` wrapper; returns a `DOMParser` document |
+| `extractDetailEventName(doc, url)` | `#page-title` → `h1.page-title` → `h1` → `<title>` |
+| `normalizeDetailName(name)` | `(The)` rewrite + `YYYY-MM-DD - VENUE` uppercase |
+| `cleanSongName(text)` | Strips `(with …)` and `(x\d+)`; preserves `(41 SHOTS)` etc. |
+| `buildDiffHtml(a, b)` | Token-level diff on whitespace/comma splits (for name tooltips) |
+| `buildCharDiffHtml(a, b)` | Char-level LCS diff; shows year song chars with red/green spans |
+| `lcsDiff(yearSongs, detailSongs)` | Standard LCS producing `match`/`year-only`/`detail-only` items |
+| `mergeCharDiffs(items)` | Adjacent `year-only`+`detail-only` → `char-diff` when close enough |
+| `editDistance(a, b)` | Standard O(mn) Levenshtein |
+| `esc(str)` | HTML-escapes `& < > "` |
+| `delay(ms)` | `Promise`-based sleep |
+
+---
+
+## Anchor format
+
+Named anchors on YEAR pages use `DDMMYY` order:
+- `<a name="140903">` = September 14, 2003
+- `<a name="070124">` = January 7, 2024
+
+`detailPathToYearAndAnchor` derives the anchor from the DETAIL page URL date
+segment using `dd + mm + yyyy.slice(2)`.
+
+---
+
+## Name normalisation rules
+
+DETAIL page names are in "Title Case With (The) Before Comma" form.
+YEAR page names are in `YYYY-MM-DD - ALL CAPS VENUE, CITY, ST` form.
+
+Normalisation steps applied to the DETAIL name before comparison:
+1. Match `YYYY-MM-DD` date prefix
+2. If rest matches `VENUE (The), SUFFIX` → rewrite as `The VENUE, SUFFIX`
+3. Insert ` - ` between date and venue
+4. Uppercase the whole string
+
+Result must equal the YEAR page name (already uppercase) exactly.
