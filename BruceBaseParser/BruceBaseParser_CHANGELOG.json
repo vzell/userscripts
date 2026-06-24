@@ -1,0 +1,79 @@
+[
+    {
+        "version": "1.3",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Add setlist/recording session comparison between YEAR and DETAIL pages using LCS diff with Levenshtein char-diff reclassification for near-misses.",
+                    "Parse YEAR page inline setlists (<p> / <blockquote>) per-event using anchor boundaries.",
+                    "Parse DETAIL page setlists from #wiki-tab-0-1 <ol>/<ul> with section labels from <p><strong> headers.",
+                    "Colour-code setlist diffs: green (match), light-blue (year-only), yellow (detail-only), red (char-diff).",
+                    "Rich hover tooltips on non-matching songs via showSongTooltip.",
+                    "DETAIL page mode: style existing <li>s and insert missing year-only songs inline.",
+                    "Extend @include to match DETAIL pages (gig/nogig/recording/interview/offstage/onstage/rehearsal/soundcheck).",
+                    "Add page-level global toggle button (after #page-title) to switch entire #page-content between original and processed view.",
+                    "Add per-section toggle buttons (after each <hr>) to flip individual year-page sections between original and processed state."
+                ]
+            },
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Ignore prose description <p>s when collecting setlist elements — only <p> elements containing the ' / ' song-list delimiter qualify; <blockquote> containers are always included.",
+                    "Fix global toggle blank screen: use explicit 'block'/'none' values instead of clearing inline style, which left the CSS hide rule in effect.",
+                    "Fix per-section toggle no visual effect: serialise original HTML as a plain string in wrapYearSections and only create the originalDiv node inside insertSectionToggle (after processing), preventing extractYearPageEvents from finding cloned <a> links and producing duplicate diffs."
+                ]
+            },
+            {
+                "label": "🔧 Refactor",
+                "items": [
+                    "Rename script from brucebase-eventcheck.user.js to BruceBaseParser.user.js and reorganise repository layout.",
+                    "Add new CSS classes: .bb-song-{match,year-only,detail-only,char-diff}, .bb-char-{match,diff}, .bb-sep, .bb-section-label, .bb-toggle-btn."
+                ]
+            },
+            {
+                "label": "📝 Docs",
+                "items": [
+                    "Rewrite CLAUDE.md with full v1.3/v1.4 architecture documentation covering all three page modes, processing pipeline, LCS diff algorithm, colour-coding scheme, anchor format, name normalisation rules, and shared utility functions."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.2",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Add support for YYYY-list pages: fetch the corresponding YEAR page once, build an anchor→name map, and compare each list event name (after stripping optional subtitle suffix) against the YEAR page entry.",
+                    "Collect sibling text nodes after the <a> tag so suffixes like '(Golden Globe Awards)' are included in raw name capture."
+                ]
+            },
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Tooltip box now auto-sizes to content with no line-wrapping."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.1",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Initial release of BruceBase event name checker userscript.",
+                    "Validates event name consistency between YEAR overview pages and their DETAIL pages.",
+                    "Flags matches (✅), mismatches (❌), unknown event types (❓), and fetch failures (⚠️) with inline glyphs and rich diff tooltips.",
+                    "Supports all known event types: gig, interview, nogig, offstage, onstage, recording, rehearsal, soundcheck.",
+                    "Name normalisation: moves '(The)' suffix before comma to front, inserts ' - ' after date, uppercases for comparison.",
+                    "Token-level diff displayed in hover tooltips via buildDiffHtml."
+                ]
+            }
+        ]
+    }
+]

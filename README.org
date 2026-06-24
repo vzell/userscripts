@@ -187,6 +187,10 @@ to the original page content before processing with our userscript and back to t
 
 2.) the toggle buttons after each "<hr>" do NOT have any visual effect except changing the button text when toggeling
 
+** add a changelog file
+
+add a changelog file BruceBaseParser/BruceBaseParser_CHANGELOG.json file wich corresponds to the commit history
+
 * question
 ** initial
 
@@ -209,6 +213,7 @@ I have the following directory
 I started with a git repo in "BruceBaseParser", but decided to move the whole repo one level up to userscripts.
 I want to get rid of the .git folder in BruceBaseParser and instead have the whole git history under userscripts.
 Eventually there will be other Parsers later. Is this possible
+
 
 * Step-by-step
 ** Back up first (just in case)
@@ -291,7 +296,6 @@ git merge --allow-unrelated-histories brucebase/master   # or 'master' if that's
 git remote remove brucebase
 #+end_src
 
-
 ** Remove the nested .git
 
 #+begin_src bash
@@ -318,6 +322,7 @@ git log --oneline          # full history visible
 #+begin_src bash
 git log -- BruceBaseParser/BruceBaseParser.user.js   # all old commits still attributed correctly
 #+end_src
+
 
 * add github repo
 
