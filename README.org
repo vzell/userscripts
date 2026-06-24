@@ -237,6 +237,17 @@ YEAR page entry http://brucebase.wikidot.com/1984#060684 and it's DETAIL page se
 YEAR page entry http://brucebase.wikidot.com/1984#290684 has a descriptive text after the setlist which includes
 multiple "/". It is recognized as another setlist which should NOT happen.
 
+** missing
+
+YEAR page entry http://brucebase.wikidot.com/2024#120524 doesn't recognize
+
+#+begin_example
+<p>Pre-show: THIS HARD LAND</p>
+#+end_example
+
+There could be more entries like this, instead of "Soundcheck:", "Pre-show:" or "with Willie Nile:" like in for example:
+http://brucebase.wikidot.com/2026#170126 and it's DETAIL page, they are alo not currently recognized
+
 * question
 ** initial
 
