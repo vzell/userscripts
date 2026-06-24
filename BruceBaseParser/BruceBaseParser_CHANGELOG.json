@@ -1,5 +1,18 @@
 [
     {
+        "version": "1.12",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Preserve original label case on YEAR pages. Previously the label prefix (e.g. 'With Garland Jeffreys:') was stored as all-lowercase and then only the first character was re-capitalised on render, producing 'With garland jeffreys:'. Fix: store the raw label text as-is and use case-insensitive comparisons for the 'show'/'recording'/'soundcheck' special cases.",
+                    "Ignore <sup><em> footnote nodes (e.g. 'Setlist incomplete and may be inaccurate.') when parsing YEAR page setlists. Previously el.textContent included the footnote text, causing its lowercase letters to trigger the prose-rejection filter and silently drop the setlist entry. Fix: a new textWithoutSup() helper strips <sup> children before extracting text for both the prose filter and song-name parsing. The footnote HTML is re-appended after <br> when renderSetlistElement rewrites the element, so it remains visible in the processed view."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.11",
         "date": "2026-06-24",
         "sections": [

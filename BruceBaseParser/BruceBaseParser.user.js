@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.11
+// @version      1.12
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -286,15 +286,17 @@
       if (el.tagName === 'P' && el.closest('blockquote')) continue;
       const firstLink = el.querySelector('a[href]');
       if (firstLink && EVENT_URL_RE.test(firstLink.getAttribute('href') || '')) continue;
-      if (!el.textContent.trim()) continue;
+      if (!textWithoutSup(el).trim()) continue;
       // Prose has lowercase letters; setlist entries are all-caps on brucebase.
       // Examine the text up to the first ' / ' (the whole text for single-song
       // entries). Strip any label prefix ("Soundcheck: ") and qualifiers
       // ("(with …)", "(x3)"), then reject if lowercase letters remain.
       // This handles both single-song entries (no ' / ') and prose that embeds
       // quoted lyrics with '/' as line-breaks.
+      // <sup><em> footnotes ("Setlist incomplete.") are excluded from the text
+      // so their lowercase content doesn't cause the entry to be rejected.
       if (el.tagName === 'P') {
-        const text      = el.textContent.trim();
+        const text      = textWithoutSup(el).trim();
         const slashIdx  = text.indexOf(' / ');
         const firstPart = slashIdx >= 0 ? text.slice(0, slashIdx) : text;
         const core      = firstPart
@@ -318,12 +320,12 @@
       if (el.tagName === 'BLOCKQUOTE') {
         label = 'recording';
         const inner = el.querySelector('p');
-        text = inner ? inner.textContent : el.textContent;
+        text = inner ? textWithoutSup(inner) : textWithoutSup(el);
       } else {
-        text = el.textContent;
+        text = textWithoutSup(el);
         const m = text.match(/^([^/:\n]+):\s*/);
         if (m) {
-          label = m[1].toLowerCase();
+          label = m[1].trim();  // preserve original case ("With Garland Jeffreys")
           text  = text.slice(m[0].length);
         }
       }
@@ -339,6 +341,14 @@
       if (songs.length > 0) sections.push({ label, songs, rawSongs, sourceEl: el });
     }
     return sections;
+  }
+
+  // Returns el.textContent with all <sup> child elements excluded, so that
+  // footnote-style notes ("Setlist incomplete.") don't corrupt song name parsing.
+  function textWithoutSup(el) {
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('sup').forEach(s => s.remove());
+    return clone.textContent;
   }
 
   // Strips parentheticals containing any lowercase letter: (with …), (x3), (parts), (acoustic) etc.
@@ -434,11 +444,11 @@
     let html    = '';
     let isFirst = true;
 
-    if (label === 'soundcheck') {
+    const labelLc = label.toLowerCase();
+    if (labelLc === 'soundcheck') {
       html += '<span class="bb-section-label">Soundcheck: </span>';
-    } else if (label !== 'show' && label !== 'recording') {
-      const cap = label.charAt(0).toUpperCase() + label.slice(1);
-      html += `<span class="bb-section-label">${esc(cap)}: </span>`;
+    } else if (labelLc !== 'show' && labelLc !== 'recording') {
+      html += `<span class="bb-section-label">${esc(label)}: </span>`;
     }
 
     for (const item of items) {
@@ -458,7 +468,10 @@
       }
     }
 
-    el.innerHTML = html;
+    // Preserve <sup><em> footnote nodes (e.g. "Setlist incomplete.") that were
+    // inside the element before we overwrite innerHTML.
+    const supHtml = [...el.querySelectorAll('sup')].map(s => s.outerHTML).join('');
+    el.innerHTML = supHtml ? html + '<br>' + supHtml : html;
 
     el.querySelectorAll('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff').forEach(span => {
       span.addEventListener('mouseenter', e => showSongTooltip(e, span));
