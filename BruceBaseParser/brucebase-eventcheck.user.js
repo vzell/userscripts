@@ -72,24 +72,25 @@
 
     // Insert toggle controls now that processing is complete
     insertGlobalToggle(content, originalHtml);
-    sections.forEach(({ hr, processedDiv, originalDiv }) =>
-      insertSectionToggle(hr, processedDiv, originalDiv)
+    sections.forEach(({ hr, processedDiv, sectionOriginalHtml }) =>
+      insertSectionToggle(hr, processedDiv, sectionOriginalHtml)
     );
 
     log('All events processed');
   }
 
   // Wraps the content that follows each <hr> (up to the next <hr>) inside a
-  // pair of sibling divs: .bb-section-original (hidden clone, pre-processing)
-  // and .bb-section-processed (live, receives all modifications).
+  // .bb-section-processed div, and returns a snapshot of the original HTML.
+  // The original-view div is NOT created here — it is created by insertSectionToggle
+  // AFTER processing completes, so that querySelectorAll during event extraction
+  // does not pick up cloned <a> elements and process them twice.
   function wrapYearSections(content) {
-    // Only consider <hr> elements that are direct children of the content area
     const hrs = [...content.querySelectorAll('hr')].filter(el => el.parentElement === content);
     const result = [];
 
     for (let k = 0; k < hrs.length; k++) {
-      const hr      = hrs[k];
-      const nextHr  = hrs[k + 1] || null;
+      const hr     = hrs[k];
+      const nextHr = hrs[k + 1] || null;
 
       // Collect all direct-child siblings between this hr and the next
       const toWrap = [];
@@ -100,28 +101,27 @@
       }
       if (toWrap.length === 0) continue;
 
-      // Build processed wrapper around the live content
+      // Serialize original HTML *before* any node moves
+      const sectionOriginalHtml = toWrap.map(n =>
+        n.nodeType === Node.TEXT_NODE    ? n.textContent :
+        n.nodeType === Node.ELEMENT_NODE ? n.outerHTML   : ''
+      ).join('');
+
+      // Wrap live nodes in a processed container (the only copy in the DOM)
       const processedDiv = document.createElement('div');
       processedDiv.className = 'bb-section-processed';
       content.insertBefore(processedDiv, toWrap[0]);
       toWrap.forEach(n => processedDiv.appendChild(n));
 
-      // Build original wrapper as a hidden clone (event-listener-free)
-      const originalDiv = document.createElement('div');
-      originalDiv.className = 'bb-section-original';
-      originalDiv.innerHTML = processedDiv.innerHTML;
-      originalDiv.style.display = 'none';
-      content.insertBefore(originalDiv, processedDiv);
-
-      result.push({ hr, processedDiv, originalDiv });
+      result.push({ hr, processedDiv, sectionOriginalHtml });
     }
 
     return result;
   }
 
   // Creates a full-page toggle button after #page-title.
-  // Uses a separate hidden DOM tree for the original so event listeners in the
-  // processed content area are never lost on toggle.
+  // The original view is a separate hidden div inserted beside #page-content so
+  // that all event listeners on the processed content area survive toggling.
   function insertGlobalToggle(content, originalHtml) {
     const pageTitle = document.getElementById('page-title');
     if (!pageTitle) return;
@@ -140,8 +140,8 @@
     let showingOriginal = false;
     btn.addEventListener('click', () => {
       showingOriginal = !showingOriginal;
-      content.style.display    = showingOriginal ? 'none' : '';
-      originalEl.style.display = showingOriginal ? ''     : 'none';
+      content.style.display    = showingOriginal ? 'none'  : 'block';
+      originalEl.style.display = showingOriginal ? 'block' : 'none';
       btn.textContent = showingOriginal ? '⇄ Show Processed Page' : '⇄ Show Original Page';
     });
 
@@ -149,8 +149,15 @@
   }
 
   // Inserts a per-section toggle button immediately after the given <hr>.
-  // Shows/hides processedDiv and originalDiv in alternation.
-  function insertSectionToggle(hr, processedDiv, originalDiv) {
+  // Creates the original-view div here (after processing) so that
+  // extractYearPageEvents never encounters duplicate <a> links inside it.
+  function insertSectionToggle(hr, processedDiv, sectionOriginalHtml) {
+    const originalDiv = document.createElement('div');
+    originalDiv.className = 'bb-section-original';
+    originalDiv.innerHTML = sectionOriginalHtml;
+    originalDiv.style.display = 'none';
+    processedDiv.parentNode.insertBefore(originalDiv, processedDiv);
+
     const btn = document.createElement('button');
     btn.className = 'bb-toggle-btn bb-section-toggle';
     btn.textContent = '⇄ Original';
@@ -158,8 +165,8 @@
     let showingOriginal = false;
     btn.addEventListener('click', () => {
       showingOriginal = !showingOriginal;
-      processedDiv.style.display = showingOriginal ? 'none' : '';
-      originalDiv.style.display  = showingOriginal ? ''     : 'none';
+      processedDiv.style.display = showingOriginal ? 'none'  : 'block';
+      originalDiv.style.display  = showingOriginal ? 'block' : 'none';
       btn.textContent = showingOriginal ? '⇄ Processed' : '⇄ Original';
     });
 
@@ -1027,7 +1034,6 @@
       .bb-toggle-btn:hover { background: #357abd; }
       #bb-global-toggle { margin: 6px 0 2px 0; display: block; }
       .bb-section-toggle { margin-left: 0; }
-      #bb-page-original  { display: none; }
 
       /* Setlist song states */
       .bb-song-match       { color: #2a2; }
