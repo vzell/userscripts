@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.12
+// @version      1.13
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -912,9 +912,9 @@
     }
     const date = m[1];
     let rest = m[2];
-    const beforeThe = rest;
-    rest = rest.replace(/^(.+?)\s*\(The\)(,.*)?$/, (_, venue, suffix) => 'The ' + venue + (suffix || ''));
-    if (rest !== beforeThe) log(`  (The) rewrite: "${beforeThe}" → "${rest}"`);
+    const beforeArticle = rest;
+    rest = rest.replace(/^(.+?)\s*\((The|Le)\)(,.*)?$/, (_, venue, article, suffix) => article + ' ' + venue + (suffix || ''));
+    if (rest !== beforeArticle) log(`  article rewrite: "${beforeArticle}" → "${rest}"`);
     const normalized = (date + ' - ' + rest).toUpperCase();
     log(`  Normalized: "${name}" → "${normalized}"`);
     return normalized;

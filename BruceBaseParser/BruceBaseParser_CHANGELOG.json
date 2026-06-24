@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.13",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Extend DETAIL-page name normalisation to handle the French article '(Le)' in addition to '(The)'. A DETAIL name like '1967-12-27 Teendezvous (Le), New Shrewsbury, NJ' is now rewritten to '1967-12-27 - LE TEENDEZVOUS, NEW SHREWSBURY, NJ' and correctly matches the YEAR page entry."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.12",
         "date": "2026-06-24",
         "sections": [
