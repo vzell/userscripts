@@ -18,7 +18,7 @@ http://brucebase.wikidot.com/<4 digit year>
 
 e.g. "http://brucebase.wikidot.com/2024"
 
-Typical event name looks like (in all UPPERCAE and a "-" between the date and venue) and hyperlinked to their event
+Typical event names look like (in all UPPERCAE and a "-" between the date and venue) and hyperlinked to their event
 DETAIL page (Capitalized and "The" inside "(" and ") before the ",") in
 
 | YEAR page (event name)                             | Anchor in YEAR page   | Link                                                                          | DETAIL page (event name)                                       |
