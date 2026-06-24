@@ -191,6 +191,32 @@ to the original page content before processing with our userscript and back to t
 
 add a changelog file BruceBaseParser/BruceBaseParser_CHANGELOG.json file wich corresponds to the commit history
 
+** add button
+
+on the DETAIL pages also add a toggle button like on the YEAR pages after the
+
+#+begin_example
+<div id="page-title">
+#+end_example
+
+which when pressed shows the original page before processing with our userscript. Pressing again switches to the userscript processed page
+
+** bug with tab
+
+On the DETAIL pages, data is presented by activating a specific tab. E.g. the "Setlist" tab when activated looks like
+
+#+begin_example
+<li title="active" class="selected"><a href="javascript:;"><em>Setlist</em></a></li>
+#+end_example
+
+The final rendered page always shows the first tab as active. The toggle button is rendered fine. When activating the
+"Setlist" tab I see the userscript processed setlist items. When pressing now the "Show Original Page" button, the
+button text changes to "Show Processed Page", but the first tab is again activated and it's NOT possible to activate
+some other tab again.
+
+What I really want: when on the "Setlist" tab and then pressing the "Show Original Page" button, the "Setlist" should
+stay activated, and show the original unprocessed data. Also switching tabs should be still supported.
+
 * question
 ** initial
 

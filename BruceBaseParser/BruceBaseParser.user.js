@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.3
+// @version      1.4
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -177,6 +177,46 @@
     });
 
     hr.after(btn);
+  }
+
+  // Inserts a toggle button after #page-title on DETAIL pages.
+  // Wraps the processed td children and an original snapshot in show/hide divs
+  // so wikidot's tab-switching JavaScript and all tooltip listeners survive toggling.
+  function insertDetailToggle(originalTdHtml) {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+
+    const td = document.querySelector('#wiki-tab-0-1 td');
+    if (!td) return;
+
+    // Move processed nodes (with their event listeners) into a wrapper div
+    const processedDiv = document.createElement('div');
+    processedDiv.className = 'bb-detail-processed';
+    while (td.firstChild) processedDiv.appendChild(td.firstChild);
+
+    // Hidden div holds the original (unprocessed) snapshot
+    const originalDiv = document.createElement('div');
+    originalDiv.className = 'bb-detail-original';
+    originalDiv.style.display = 'none';
+    originalDiv.innerHTML = originalTdHtml;
+
+    td.appendChild(processedDiv);
+    td.appendChild(originalDiv);
+
+    const btn = document.createElement('button');
+    btn.id = 'bb-global-toggle';
+    btn.className = 'bb-toggle-btn';
+    btn.textContent = '⇄ Show Original Page';
+
+    let showingOriginal = false;
+    btn.addEventListener('click', () => {
+      showingOriginal = !showingOriginal;
+      processedDiv.style.display = showingOriginal ? 'none'  : 'block';
+      originalDiv.style.display  = showingOriginal ? 'block' : 'none';
+      btn.textContent = showingOriginal ? '⇄ Show Processed Page' : '⇄ Show Original Page';
+    });
+
+    pageTitle.after(btn);
   }
 
   function extractYearPageEvents() {
@@ -446,7 +486,13 @@
     log(`Detail mode: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
 
     const diffItems = mergeCharDiffs(lcsDiff(yearFlat, detailFlat));
+
+    // Snapshot the td content just before rendering so the original is unmodified
+    const td             = document.querySelector('#wiki-tab-0-1 td');
+    const originalTdHtml = td ? td.innerHTML : '';
+
     renderDetailSetlist(diffItems);
+    insertDetailToggle(originalTdHtml);
   }
 
   // "gig:2003-09-14-..." → { year: "2003", anchor: "140903" }

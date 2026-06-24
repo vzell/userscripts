@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.4",
+        "date": "2026-06-24",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Add toggle button on DETAIL pages (after #page-title) to switch the active setlist tab between the original unprocessed content and the userscript-processed diff view. Uses show/hide on wrapper divs inside the setlist td rather than replacing #page-content, so wikidot tab-switching and all tooltip event listeners remain functional."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.3",
         "date": "2026-06-24",
         "sections": [
