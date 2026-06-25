@@ -1,12 +1,30 @@
 [
     {
+        "version": "1.38",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Mismatched space characters in char-diff names are now rendered as a light-blue pill (.bb-char-diff-space, background #b0c8ff) so extra or missing spaces are immediately visible rather than invisible against the red background."
+                ]
+            },
+            {
+                "label": "🔧 Refactor",
+                "items": [
+                    "Reverted v1.37 multi-space collapsing in normalizeDetailName: whitespace differences are now shown explicitly in the char-diff view instead of being silently hidden."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.37",
         "date": "2026-06-25",
         "sections": [
             {
                 "label": "🐛 Fix",
                 "items": [
-                    "normalizeDetailName now collapses runs of multiple spaces to a single space before comparison. Detail page titles with accidental double spaces (e.g. 'University Of Maryland,  College Park') no longer produce false-positive mismatches against the single-spaced YEAR page entry."
+                    "normalizeDetailName collapsed runs of multiple spaces to a single space. Reverted in v1.38 in favour of explicit whitespace highlighting."
                 ]
             },
             {

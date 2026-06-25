@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.37
+// @version      1.38
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1354,10 +1354,11 @@
       }
     }
 
-    return chars.map(c => c.match
-      ? `<span class="bb-char-match">${esc(c.ch)}</span>`
-      : `<span class="bb-char-diff">${esc(c.ch)}</span>`
-    ).join('');
+    return chars.map(c => {
+      if (c.match) return `<span class="bb-char-match">${esc(c.ch)}</span>`;
+      if (c.ch === ' ') return `<span class="bb-char-diff bb-char-diff-space">&nbsp;</span>`;
+      return `<span class="bb-char-diff">${esc(c.ch)}</span>`;
+    }).join('');
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -1416,7 +1417,7 @@
     const beforeArticle = rest;
     rest = rest.replace(/^(.+?)\s*\((The|Le|De)\)(,.*)?$/, (_, venue, article, suffix) => article + ' ' + venue + (suffix || ''));
     if (rest !== beforeArticle) log(`  article rewrite: "${beforeArticle}" → "${rest}"`);
-    const normalized = (date + ' - ' + rest).toUpperCase().replace(/  +/g, ' ');
+    const normalized = (date + ' - ' + rest).toUpperCase();
     log(`  Normalized: "${name}" → "${normalized}"`);
     return normalized;
   }
@@ -1738,8 +1739,9 @@
       .bb-song-char-diff   { cursor: default; }
 
       /* Character-level diff within a song name */
-      .bb-char-match { color: #2a2; }
-      .bb-char-diff  { color: #c00; font-weight: bold; background: #ffe0e0; border-radius: 2px; }
+      .bb-char-match      { color: #2a2; }
+      .bb-char-diff       { color: #c00; font-weight: bold; background: #ffe0e0; border-radius: 2px; }
+      .bb-char-diff-space { background: #b0c8ff; border-radius: 2px; }
 
       /* Separator between songs on YEAR page */
       .bb-sep          { color: #999; }
