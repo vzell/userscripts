@@ -1,5 +1,83 @@
 [
     {
+        "version": "1.25",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fix '⚡ Mismatches Only' filter having no effect: <a name> anchors on YEAR pages are inside <p> elements, not direct children of .bb-section-processed, so the anchor-based splitting loop never fired. Rewrote applyMismatchFilter to treat each .bb-section-processed div as one event block (which it is, since every event is separated by its own <hr>), and to also hide/restore the preceding <hr> and section-toggle button so orphaned separators don't remain visible."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.24",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Add '⚡ Mismatches Only' filter toggle on YEAR pages (placed after the global toggle, after #page-title). When active, hides all event blocks that have no name mismatch (❌), no setlist discrepancy (year-only/detail-only/char-diff), and no warning symbol (⚠️/❓). Pressing again restores all events."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.23",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Render match/mismatch colours on DETAIL pages where songs are in <p> elements (not <li>): renderDetailSetlist now collects <p> song elements as a fallback when no <li> exist, and inserts year-only entries as <p> nodes to match the surrounding format."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Flag songs that use the unusual paragraph format (<p><a href=\"/song:…\">) with a ⚠️ warning symbol on both YEAR and DETAIL pages. Hovering the symbol shows a tooltip explaining the structural anomaly."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.22",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Parse setlists on old detail pages (e.g. 1974 gigs) where songs are listed as bare <p><a href=\"/song:…\"> elements rather than inside <ol>/<ul>. parseDetailSetlist now collects song links from <p> children and emits them as a section alongside the existing OL/UL path."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.21",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Parse setlists on old detail pages where the <ol>/<ul> is nested inside a <div> within #page-content rather than being a direct child. parseDetailSetlist now widens its element search to td.querySelectorAll('ol, ul') when no lists appear as direct children of the container."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.20",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fall back to #page-content as the setlist container for very old detail pages (e.g. 1974 gigs) that have no #wiki-tab-0-1 tab widget. Previously these pages logged 'No setlist found' and skipped comparison entirely."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.19",
         "date": "2026-06-25",
         "sections": [

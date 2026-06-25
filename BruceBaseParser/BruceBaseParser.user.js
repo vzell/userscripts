@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.19
+// @version      1.25
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -78,6 +78,7 @@
 
     // Insert toggle controls now that processing is complete
     insertGlobalToggle(content, originalHtml);
+    insertMismatchFilterToggle();
     sections.forEach(({ hr, processedDiv, sectionOriginalHtml }) =>
       insertSectionToggle(hr, processedDiv, sectionOriginalHtml)
     );
@@ -177,6 +178,56 @@
     });
 
     hr.after(btn);
+  }
+
+  // Inserts a "Mismatches Only" filter toggle after #bb-global-toggle on YEAR pages.
+  // When active, hides every event block that has no name mismatch, no setlist
+  // discrepancy, and no ⚠️/❓ warning so only problem events remain visible.
+  function insertMismatchFilterToggle() {
+    const anchor = document.getElementById('bb-global-toggle');
+    if (!anchor) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'bb-mismatch-toggle';
+    btn.className = 'bb-toggle-btn';
+    btn.textContent = '⚡ Mismatches Only';
+
+    let filterActive = false;
+    btn.addEventListener('click', () => {
+      filterActive = !filterActive;
+      btn.textContent = filterActive ? '⚡ All Events' : '⚡ Mismatches Only';
+      applyMismatchFilter(filterActive);
+    });
+
+    anchor.after(btn);
+  }
+
+  // Shows or hides event blocks on YEAR pages.
+  // Each .bb-section-processed div wraps exactly one event (the content between
+  // two <hr> separators).  We also hide/restore the <hr> and section-toggle button
+  // that precede it so the page doesn't show orphaned separators.
+  // A block is a mismatch when it contains:
+  //   - a .bb-glyph with ❌, ⚠️, or ❓
+  //   - a .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, or .bb-para-warn span
+  function applyMismatchFilter(active) {
+    for (const processedDiv of document.querySelectorAll('.bb-section-processed')) {
+      const hasMismatch =
+        [...processedDiv.querySelectorAll('.bb-glyph')]
+          .some(g => ['❌', '⚠️', '❓'].some(ch => g.textContent.includes(ch))) ||
+        !!processedDiv.querySelector(
+          '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn'
+        );
+
+      const hide = active && !hasMismatch;
+      processedDiv.style.display = hide ? 'none' : '';
+
+      // Walk backward: [<hr>] [.bb-section-toggle] [.bb-section-original] [processedDiv]
+      // Skip bb-section-original (it has its own independent display state).
+      let el = processedDiv.previousElementSibling;
+      if (el && el.classList.contains('bb-section-original')) el = el.previousElementSibling;
+      if (el && el.classList.contains('bb-section-toggle'))  { el.style.display = hide ? 'none' : ''; el = el.previousElementSibling; }
+      if (el && el.tagName === 'HR')                          { el.style.display = hide ? 'none' : ''; }
+    }
   }
 
   // Inserts a toggle button after #page-title on DETAIL pages.
@@ -406,9 +457,11 @@
 
         if (yearFlat.length > 0 || detailFlat.length > 0) {
           const diffItems = mergeCharDiffs(lcsDiff(yearFlat, detailFlat));
-          let yp = 0;
+          const detailParaFlat = detailSections.flatMap(s => s.songs.map(() => !!s.paragraphBased));
+          let yp = 0, dp = 0;
           for (const item of diffItems) {
             if (item.type !== 'detail-only') item.rawYearSong = yearRawFlat[yp++];
+            if (item.type !== 'year-only')   item.paragraphBased = detailParaFlat[dp++];
           }
           renderYearSetlist(yearSections, diffItems);
         }
@@ -459,16 +512,19 @@
       if (!isFirst) html += '<span class="bb-sep"> / </span>';
       isFirst = false;
 
+      const paraWarn = item.paragraphBased
+        ? ` <span class="bb-para-warn" data-msg="Detail page lists this song as a paragraph (&lt;p&gt;) instead of a list item (&lt;ol&gt;/&lt;li&gt;). Setlist may be incomplete.">⚠️</span>`
+        : '';
       if (item.type === 'match') {
         const rawSuffix = item.rawYearSong ? esc(item.rawYearSong.slice(item.yearSong.length)) : '';
-        html += `<span class="bb-song-match">${esc(item.yearSong)}</span>${rawSuffix}`;
+        html += `<span class="bb-song-match">${esc(item.yearSong)}</span>${rawSuffix}${paraWarn}`;
       } else if (item.type === 'year-only') {
         html += `<span class="bb-song-year-only" data-year-song="${esc(item.yearSong)}">${esc(item.yearSong)}</span>`;
       } else if (item.type === 'detail-only') {
-        html += `<span class="bb-song-detail-only" data-detail-song="${esc(item.detailSong)}">${esc(item.detailSong)}</span>`;
+        html += `<span class="bb-song-detail-only" data-detail-song="${esc(item.detailSong)}">${esc(item.detailSong)}</span>${paraWarn}`;
       } else if (item.type === 'char-diff') {
         const inner = buildCharDiffHtml(item.yearSong, item.detailSong);
-        html += `<span class="bb-song-char-diff" data-year-song="${esc(item.yearSong)}" data-detail-song="${esc(item.detailSong)}">${inner}</span>`;
+        html += `<span class="bb-song-char-diff" data-year-song="${esc(item.yearSong)}" data-detail-song="${esc(item.detailSong)}">${inner}</span>${paraWarn}`;
       }
     }
 
@@ -479,6 +535,10 @@
 
     el.querySelectorAll('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff').forEach(span => {
       span.addEventListener('mouseenter', e => showSongTooltip(e, span));
+      span.addEventListener('mouseleave', hideTooltip);
+    });
+    el.querySelectorAll('.bb-para-warn').forEach(span => {
+      span.addEventListener('mouseenter', e => showErrorTooltip(e, span.dataset.msg));
       span.addEventListener('mouseleave', hideTooltip);
     });
   }
@@ -543,9 +603,11 @@
 
     const diffItems = mergeCharDiffs(lcsDiff(yearFlat, detailFlat));
     log(`  Diff: ${diffItems.map(i => `${i.type}(${i.yearSong || i.detailSong})`).join(', ')}`);
-    let yp = 0;
+    const detailParaFlat = detailSections.flatMap(s => s.songs.map(() => !!s.paragraphBased));
+    let yp = 0, dp = 0;
     for (const item of diffItems) {
       if (item.type !== 'detail-only') item.rawYearSong = yearRawFlat[yp++];
+      if (item.type !== 'year-only')   item.paragraphBased = detailParaFlat[dp++];
     }
 
     // Snapshot the td content just before rendering so the original is unmodified
@@ -566,40 +628,62 @@
   // Returns the setlist container element for a (fetched or live) document.
   // Normally #wiki-tab-0-1 holds a <table><tr><td> layout; older/simpler pages
   // place the <ol>/<ul> directly inside the div with no <td>.
+  // Very old pages (e.g. 1974) have no tab widget at all — fall back to #page-content.
   function getSetlistContainer(doc) {
-    return doc.querySelector('#wiki-tab-0-1 td') || doc.querySelector('#wiki-tab-0-1');
+    return doc.querySelector('#wiki-tab-0-1 td')
+        || doc.querySelector('#wiki-tab-0-1')
+        || doc.querySelector('#page-content');
   }
 
   function renderDetailSetlist(diffItems) {
     const td = getSetlistContainer(document);
     if (!td) return;
 
-    const allLis = [...td.querySelectorAll('li')];
+    // Standard pages use <li> elements; old pages (e.g. 1974) list songs as bare <p> elements.
+    const isParagraphBased = !td.querySelector('li');
+    const allLis = isParagraphBased
+      ? [...td.querySelectorAll('p')].filter(p => p.querySelector('a[href^="/song:"]'))
+      : [...td.querySelectorAll('li')];
     let liIdx = 0;
 
     for (const item of diffItems) {
       if (item.type === 'match' || item.type === 'char-diff' || item.type === 'detail-only') {
         if (liIdx < allLis.length) {
-          styleDetailLi(allLis[liIdx], item);
+          const el = allLis[liIdx];
+          styleDetailLi(el, item);
+          if (isParagraphBased) addParaStructureWarning(el);
           liIdx++;
         }
       } else if (item.type === 'year-only') {
-        // Insert a new <li> for a song present on the year page but missing here
-        const newLi = document.createElement('li');
-        newLi.className = 'bb-song-year-only';
-        newLi.dataset.yearSong = item.yearSong;
-        newLi.textContent = item.yearSong;
-        newLi.addEventListener('mouseenter', e => showSongTooltip(e, newLi));
-        newLi.addEventListener('mouseleave', hideTooltip);
+        // Insert a new element for a song present on the year page but missing here.
+        // Use <p> on paragraph-based pages so the inserted node matches surrounding format.
+        const newEl = document.createElement(isParagraphBased ? 'p' : 'li');
+        newEl.className = 'bb-song-year-only';
+        newEl.dataset.yearSong = item.yearSong;
+        newEl.textContent = item.yearSong;
+        newEl.addEventListener('mouseenter', e => showSongTooltip(e, newEl));
+        newEl.addEventListener('mouseleave', hideTooltip);
 
         if (liIdx < allLis.length) {
-          allLis[liIdx].parentNode.insertBefore(newLi, allLis[liIdx]);
+          allLis[liIdx].parentNode.insertBefore(newEl, allLis[liIdx]);
+        } else if (isParagraphBased) {
+          td.appendChild(newEl);
         } else {
           const lastList = td.querySelector('ol:last-of-type') || td.querySelector('ul:last-of-type');
-          if (lastList) lastList.appendChild(newLi);
+          if (lastList) lastList.appendChild(newEl);
         }
       }
     }
+  }
+
+  function addParaStructureWarning(el) {
+    const span = document.createElement('span');
+    span.className = 'bb-para-warn';
+    span.textContent = ' ⚠️';
+    span.dataset.msg = 'Unusual format: song listed as a paragraph (<p>) instead of a list item (<ol>/<li>). Setlist may be incomplete.';
+    span.addEventListener('mouseenter', e => showErrorTooltip(e, span.dataset.msg));
+    span.addEventListener('mouseleave', hideTooltip);
+    el.appendChild(span);
   }
 
   function styleDetailLi(li, item) {
@@ -637,34 +721,70 @@
   function parseDetailSetlist(doc) {
     const td = getSetlistContainer(doc);
     if (!td) {
-      logWarn('parseDetailSetlist: #wiki-tab-0-1 container not found');
+      logWarn('parseDetailSetlist: no setlist container found (#wiki-tab-0-1 or #page-content)');
       return [];
     }
 
     const sections    = [];
     let currentLabel  = 'show';
+    let pendingSongs  = [];   // songs collected from <p><a href="/song:…"> (old pages)
 
+    function flushPending() {
+      if (pendingSongs.length > 0) {
+        sections.push({ label: currentLabel, songs: pendingSongs, paragraphBased: true });
+        pendingSongs = [];
+      }
+    }
+
+    function parseSongsFromList(listEl) {
+      const songs = [];
+      for (const li of listEl.querySelectorAll('li')) {
+        const links = [...li.querySelectorAll('a[href^="/song:"]')];
+        let name;
+        if (links.length > 0) {
+          name = cleanSongName(links.map(a => a.textContent.trim()).join(' - '));
+        } else {
+          // Fall back to plain text for songs with no dedicated song page.
+          // Skip venue/date entries (e.g. "2004-04-18 Hit Factory, NY").
+          const text = li.textContent.trim();
+          if (text && !/^\d{4}-\d{2}-\d{2}/.test(text)) name = cleanSongName(text);
+        }
+        if (name) songs.push(name);
+      }
+      return songs;
+    }
+
+    // First pass: iterate direct children.
+    // Handles three layouts:
+    //   (a) standard: <p><strong>Label</strong></p> + <ol>/<ul>
+    //   (b) old pages: <p><a href="/song:…">SONG</a></p> (p-based setlist)
     for (const child of td.children) {
       if (child.tagName === 'P') {
         const strong = child.querySelector('strong');
         if (strong && child.textContent.trim() === strong.textContent.trim()) {
+          flushPending();
           currentLabel = strong.textContent.trim().toLowerCase();
+        } else {
+          // Old-style setlist: song link in a bare <p>
+          const links = [...child.querySelectorAll('a[href^="/song:"]')];
+          if (links.length > 0) {
+            const name = cleanSongName(links.map(a => a.textContent.trim()).join(' - '));
+            if (name) pendingSongs.push(name);
+          }
         }
       } else if (child.tagName === 'OL' || child.tagName === 'UL') {
-        const songs = [];
-        for (const li of child.querySelectorAll('li')) {
-          const links = [...li.querySelectorAll('a[href^="/song:"]')];
-          let name;
-          if (links.length > 0) {
-            name = cleanSongName(links.map(a => a.textContent.trim()).join(' - '));
-          } else {
-            // Fall back to plain text for songs with no dedicated song page.
-            // Skip venue/date entries (e.g. "2004-04-18 Hit Factory, NY").
-            const text = li.textContent.trim();
-            if (text && !/^\d{4}-\d{2}-\d{2}/.test(text)) name = cleanSongName(text);
-          }
-          if (name) songs.push(name);
-        }
+        flushPending();
+        const songs = parseSongsFromList(child);
+        if (songs.length > 0) sections.push({ label: currentLabel, songs });
+      }
+    }
+    flushPending();
+
+    // Second pass: if still empty, widen to all descendant lists
+    // (handles pages where the <ol> is nested inside a <div> within #page-content).
+    if (sections.length === 0) {
+      for (const list of td.querySelectorAll('ol, ul')) {
+        const songs = parseSongsFromList(list);
         if (songs.length > 0) sections.push({ label: currentLabel, songs });
       }
     }
@@ -1165,7 +1285,7 @@
         vertical-align: middle;
       }
       .bb-toggle-btn:hover { background: #357abd; }
-      #bb-global-toggle { margin: 6px 0 2px 0; display: block; }
+      #bb-global-toggle { margin: 6px 6px 2px 0; }
       .bb-section-toggle { margin-left: 0; }
 
       /* Setlist song states */
@@ -1181,6 +1301,7 @@
       /* Separator between songs on YEAR page */
       .bb-sep          { color: #999; }
       .bb-section-label { color: #888; font-style: italic; }
+      .bb-para-warn    { cursor: help; }
 
       /* Year-only <li> rows inserted on detail pages */
       li.bb-song-year-only {
