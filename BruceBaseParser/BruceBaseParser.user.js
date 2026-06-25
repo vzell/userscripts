@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.34
+// @version      1.35
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1515,7 +1515,7 @@
     const resultHtml = match
       ? '<span class="bb-ok">Match ✅</span>'
       : isEarlyLate
-        ? '<span class="bb-warn">Show variant ⚠️</span>'
+        ? '<span class="bb-warn">Event variant on same day ⚠️</span>'
         : '<span class="bb-fail">Mismatch ❌</span>';
     tip.innerHTML = `
       <table class="bb-tip-table">
