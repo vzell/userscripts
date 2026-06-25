@@ -796,7 +796,7 @@ The special handling for "(Early)" and "(Late)" should be extended to "Afternoon
 
 why does e.g the following DETAIL page http://brucebase.wikidot.com/gig:1971-01-08-upstage-asbury-park-nj-early not have the comparison glyph at the end of the event name
 
-** and/or - http://brucebase.wikidot.com/1983#180183
+** DONE and/or - http://brucebase.wikidot.com/1983#180183
 
 On e.g. http://brucebase.wikidot.com/1983#180183 and the DETAIL page the lowercase ", and/or" inside the
 
@@ -816,7 +816,20 @@ So in essence these should actually match
 
 ** don't flag inside of event notes
 
-http://brucebase.wikidot.com/1969#020469
+On the YEAR page http://brucebase.wikidot.com/1969#020469
+in the event notes
+
+#+begin_example
+<p>In his <a href="/gig:1993-01-12-century-plaza-hotel-los-angeles-ca">1993 speech</a> inducting Creedence Clearwater Revival .....
+#+end_example
+
+the "1993 speech" gets rendered as 
+
+#+begin_example
+<p>In his <a href="/gig:1993-01-12-century-plaza-hotel-los-angeles-ca">1993 speech</a><span class="bb-event-type"> (gig)</span><span class="bb-glyph"> ❌</span> inducting Creedence Clearwater Revival .....
+#+end_example
+
+which should bever happen inside event nodes
 
 ** why
 
@@ -832,6 +845,107 @@ mismatched chars should not only be renderd in "bold red", but should also get a
 
 actually revert the collaps multiple spaces stuff and instead highlight that difference with a special background color
 
+** DONE The
+
+On the YEAR page http://brucebase.wikidot.com/2025#141025 the title is
+
+#+begin_example
+2025-10-14 - SPOTIFY HQ, THE ADELPHI, LONDON, ENGLAND
+#+end_example
+
+on the DETAIL page
+
+#+begin_example
+2025-10-14 Spotify HQ, Adelphi (The), London, England
+#+end_example
+
+These should also be treated as the same.
+
+** DONE (solo acoustic)
+
+On YEAR page http://brucebase.wikidot.com/2013#310513
+we have a label "Pre-show (solo acoustic):" and on DETAIL
+
+#+begin_example
+<p><strong>Pre-show</strong> <span style="font-size:80%;"><em>(solo acoustic)</em></span></p>
+#+end_example
+
+They also should be considered the same, right now it's somehow associated with 'DETAIL page has "Show"' tooltip 
+
+** MRS. McGrath
+
+"MRS. McGRATH" is present in the YEAR page http://brucebase.wikidot.com/2006#190606 setlist
+
+#+begin_example
+<p>JOHN HENRY / O MARY DON'T YOU WEEP / JOHNNY 99 / OLD DAN TUCKER / EYES ON THE PRIZE / JESSE JAMES / ADAM RAISED A CAIN / ERIE CANAL / MY OKLAHOMA HOME / FURTHER ON (UP THE ROAD) / MRS. McGRATH / HOW CAN A POOR MAN STAND SUCH TIMES AND LIVE? / JACOB'S LADDER / WE SHALL OVERCOME / OPEN ALL NIGHT / PAY ME MY MONEY DOWN / BRING 'EM HOME / BUFFALO GALS / YOU CAN LOOK (BUT YOU BETTER NOT TOUCH) / WHEN THE SAINTS GO MARCHING IN</p>
+#+end_example
+
+but flagged as being present only on the DETAIL page, which is wrong, as it's there
+
+#+begin_example
+<li><a href="/song:mrs-mcgrath">MRS. McGRATH</a></li>
+#+end_example
+
+** tab colorization
+
+1.)
+
+The "Setlist" tab on a DETAIL page
+
+#+begin_example
+<li title="active" class="selected"><a href="javascript:;"><em>Setlist</em></a></li>
+#+end_example
+
+should get either rendered "Setlist" in green (when there's no mismatch/problem in the "Setlist/Recording session" list
+detected, or it should get the warning symbol appended when there is some kind of mismatch
+
+2.)
+
+The button
+
+#+begin_example
+<button class="bb-toggle-btn bb-section-toggle">⇄ Original</button>
+#+end_example
+
+on YEAR pages should be rendered right away for a processed event, not at the end of processing all elvents as it is rigth now
+
+** bug
+
+1.)
+
+The DETAIL "Setlist" tab changes do NOT work, at least not visible. Btw the activation state of the tab '<li
+title="active"'> or just '<li title'> is not important the "colorization/warning symbol" should be independent if the
+tab is seleced or not
+
+2.)
+
+The following button
+
+#+begin_example
+<button id="bb-mismatch-toggle" class="bb-toggle-btn">⚡ Mismatches Only</button>
+#+end_example
+
+should have it's text changed to "⚡ Mismatches Only (<total number of mismatches>)
+
+and
+
+#+begin_example
+<button id="bb-mismatch-toggle" class="bb-toggle-btn">⚡ All Events</button>
+#+end_example
+
+to "⚡ All Events (<total number of YEAR events>)
+
+** bug
+
+The "green" colorization now works, but there is a breaking bug for mismatches
+
+#+begin_example
+<li class="selected" title="active"><a href="javascript:;"><em>Setlist</em><span> ⚠️</span></a></li>
+#+end_example
+
+the "⚠️" symbol breaks in a new line below the text "Setlist".
+
+I want it to be "<em>Setlist ⚠️</em>" without the new span
 
 * question
 ** initial
