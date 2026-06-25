@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.44
+// @version      1.45
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -431,11 +431,24 @@
   // Wires up the pre-existing #bb-mismatch-toggle button.
   // When active, hides every event block that has no name mismatch, no setlist
   // discrepancy, and no ⚠️/❓ warning so only problem events remain visible.
+  // Counts are computed once (all processing is done by the time this is called)
+  // and embedded in the button label.
   function setupMismatchFilter(btn) {
+    const sections = [...document.querySelectorAll('.bb-section-processed')];
+    const totalEvents = sections.length;
+    const mismatchCount = sections.filter(div =>
+      [...div.querySelectorAll('.bb-glyph')].some(g => ['❌', '⚠️', '❓'].some(ch => g.textContent.includes(ch))) ||
+      !!div.querySelector('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn')
+    ).length;
+
+    btn.textContent = `⚡ Mismatches Only (${mismatchCount})`;
+
     let filterActive = false;
     btn.addEventListener('click', () => {
       filterActive = !filterActive;
-      btn.textContent = filterActive ? '⚡ All Events' : '⚡ Mismatches Only';
+      btn.textContent = filterActive
+        ? `⚡ All Events (${totalEvents})`
+        : `⚡ Mismatches Only (${mismatchCount})`;
       applyMismatchFilter(filterActive);
     });
   }
@@ -508,13 +521,14 @@
     pageTitle.after(btn);
   }
 
-  // Colours the active "Setlist" tab green when everything matches, or appends ⚠️
-  // when there is any name mismatch or setlist discrepancy on the DETAIL page.
+  // Annotates the "Setlist" tab in the wikidot navigation regardless of whether
+  // it is currently selected: green inline style when everything matches, ⚠️ appended
+  // when any name or setlist mismatch is detected.
   function annotateSetlistTab(nameMatch, hasSetlist) {
-    const li = [...document.querySelectorAll('li[title="active"]')]
-      .find(el => /setlist/i.test(el.textContent));
-    if (!li) return;
-    const em = li.querySelector('em');
+    // Find the <em> whose text is exactly "Setlist" — works whether the tab is
+    // active/selected or not (li[title="active"] only exists for the current tab).
+    const em = [...document.querySelectorAll('li em')]
+      .find(el => /^\s*setlist\s*$/i.test(el.textContent));
     if (!em) return;
     const hasSetlistMismatch = hasSetlist && !!document.querySelector(
       '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-section-label-warn'
@@ -524,7 +538,9 @@
       warn.textContent = ' ⚠️';
       em.after(warn);
     } else {
-      em.classList.add('bb-tab-ok');
+      // Inline style overrides wikidot's tab CSS specificity.
+      em.style.color      = '#2a2';
+      em.style.fontWeight = 'bold';
     }
   }
 
@@ -1743,10 +1759,9 @@
         border-radius: 2px;
         padding: 0 2px;
       }
-      .bb-ok     { color: #6f6; }
-      .bb-warn   { color: #c80; }
-      .bb-fail   { color: #f66; }
-      .bb-tab-ok { color: #2a2; font-weight: bold; }
+      .bb-ok   { color: #6f6; }
+      .bb-warn { color: #c80; }
+      .bb-fail { color: #f66; }
       .bb-event-type        { color: #888; font-style: italic; font-weight: normal; }
       .bb-event-type-detail { font-size: 0.6em; font-weight: normal; color: #666; font-style: italic; vertical-align: middle; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }

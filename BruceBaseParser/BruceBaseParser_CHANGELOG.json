@@ -1,5 +1,18 @@
 [
     {
+        "version": "1.45",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "annotateSetlistTab: was searching li[title=\"active\"] (only the currently selected tab), so the annotation was invisible when the script ran. Now finds the <em> element whose text is exactly 'Setlist' regardless of tab selection state. Also switched from a CSS class to inline style (color/font-weight) to override wikidot's tab CSS specificity.",
+                    "setupMismatchFilter: mismatch and total-event counts are now computed once (after all processing) and embedded in the button labels — '⚡ Mismatches Only (N)' when showing all events, '⚡ All Events (M)' when the filter is active."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.44",
         "date": "2026-06-25",
         "sections": [
