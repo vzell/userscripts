@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.40
+// @version      1.41
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -529,6 +529,14 @@
       const eventType = m[1];
       const yearName  = el.textContent.trim();
       const url       = el.href;
+
+      // Prose paragraphs can contain links to other events (e.g. "1993 speech").
+      // Only treat a link as an event heading if its text starts with YYYY-MM-DD.
+      if (!/^\d{4}-\d{2}-\d{2}/.test(yearName)) {
+        log(`Skipping prose event link: "${yearName}" → ${url}`);
+        return;
+      }
+
       const isKnown   = KNOWN_EVENT_TYPES.has(eventType);
 
       if (!isKnown) logWarn(`Unknown event type "${eventType}" in URL: ${url}`);

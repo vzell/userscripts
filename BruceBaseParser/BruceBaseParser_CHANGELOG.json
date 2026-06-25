@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.41",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "extractYearPageEvents now skips event-URL links whose text does not start with YYYY-MM-DD. Prose links inside event notes (e.g. '<a href=\"/gig:1993-01-12-...\">1993 speech</a>') were incorrectly collected as event headings and annotated with a (gig) ❌ glyph. Event heading links always start with the date, so the date-prefix check reliably excludes prose links."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.40",
         "date": "2026-06-25",
         "sections": [
