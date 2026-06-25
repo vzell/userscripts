@@ -86,15 +86,19 @@
     pageTitle.after(filterBtn);
     pageTitle.after(fetchBtn);
 
-    // ── Progress + results container ────────────────────────────────────────
+    // ── Progress, timer, and results container ──────────────────────────────
     const progressEl = document.createElement('p');
     progressEl.id = 'bb-fetch-progress';
+
+    const timerEl = document.createElement('p');
+    timerEl.id = 'bb-fetch-timer';
 
     const resultsEl = document.createElement('div');
     resultsEl.id = 'bb-home-results';
 
     filterBtn.after(progressEl);
-    progressEl.after(resultsEl);
+    progressEl.after(timerEl);
+    timerEl.after(resultsEl);
 
     // ── Fetch handler ────────────────────────────────────────────────────────
     let fetching = false;
@@ -106,13 +110,22 @@
       filterBtn.disabled = true;
       resultsEl.innerHTML = '';
 
+      const startTime = Date.now();
+      timerEl.textContent = 'Elapsed: 0:00';
+      const timerId = setInterval(() => {
+        timerEl.textContent = `Elapsed: ${fmtElapsed(Date.now() - startTime)}`;
+      }, 1000);
+
       for (let i = 0; i < slugs.length; i++) {
         progressEl.textContent = `${slugs[i]}  (${i + 1} / ${slugs.length})`;
         await fetchAndProcessYear(slugs[i], resultsEl,
           msg => { progressEl.textContent = msg; });
       }
 
+      clearInterval(timerId);
+      const totalMs = Date.now() - startTime;
       progressEl.textContent = `Done — ${slugs.length} year pages processed.`;
+      timerEl.textContent = `Total time: ${fmtElapsed(totalMs)}`;
       fetchBtn.textContent = 'Fetch All Gig Pages';
       fetchBtn.disabled = false;
       filterBtn.disabled = false;
@@ -1460,6 +1473,7 @@
       .bb-year-header a { color: inherit; text-decoration: none; }
       .bb-year-header a:hover { text-decoration: underline; }
       #bb-fetch-progress { color: #666; font-style: italic; margin: 4px 0; }
+      #bb-fetch-timer    { color: #888; font-style: italic; margin: 0; font-size: 0.9em; }
 
       /* Setlist song states */
       .bb-song-match       { color: #2a2; }
@@ -1487,6 +1501,11 @@
   }
 
   // ── Utilities ─────────────────────────────────────────────────────────────
+
+  function fmtElapsed(ms) {
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
 
   function esc(str) {
     return String(str)
