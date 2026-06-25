@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.42
+// @version      1.43
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -643,7 +643,7 @@
         .filter(s => s.length > 0)
         .map(raw => ({ raw, compareKey: songCompareKey(raw) }))
         .filter(p => p.compareKey.length > 0)
-        .filter(p => !/[a-z]/.test(p.compareKey)); // prose tokens still containing lowercase are not song names
+        .filter(p => !/[a-z]{2,}/.test(p.compareKey)); // prose has runs of lowercase; isolated "c" in "McGRATH" is OK
       const songs    = rawAndClean.map(p => p.compareKey);
       const rawSongs = rawAndClean.map(p => p.raw);
 

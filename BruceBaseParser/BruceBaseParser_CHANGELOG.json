@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.43",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "parseYearSetlist prose token filter: relax from 'any lowercase letter' to '2+ consecutive lowercase letters'. Songs like 'MRS. McGRATH' contain a single isolated lowercase letter (the 'c' in the Scottish Mc prefix) that is not prose. Real prose tokens (e.g. 'Show length is 3:07.', 'Concert noted in...') always contain runs of 2+ consecutive lowercase characters in normal English words, so the tighter threshold correctly rejects prose while preserving mixed-case proper nouns."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.42",
         "date": "2026-06-25",
         "sections": [
