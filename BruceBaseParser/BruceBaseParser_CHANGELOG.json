@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.40",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "normalizeDetailName: article rewrite now handles (The)/(Le)/(De) appearing mid-string (e.g. 'Spotify HQ, Adelphi (The), London'). The old anchored regex moved the article to the very front of the whole venue string; the new in-place replacement moves each article to precede only its own venue name, so 'Spotify HQ, Adelphi (The), London, England' correctly normalises to 'SPOTIFY HQ, THE ADELPHI, LONDON, ENGLAND'."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.39",
         "date": "2026-06-25",
         "sections": [

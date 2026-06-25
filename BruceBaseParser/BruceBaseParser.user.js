@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.39
+// @version      1.40
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1447,7 +1447,10 @@
     const date = m[1];
     let rest = m[2];
     const beforeArticle = rest;
-    rest = rest.replace(/^(.+?)\s*\((The|Le|De)\)(,.*)?$/, (_, venue, article, suffix) => article + ' ' + venue + (suffix || ''));
+    // Move articles from suffix position to prefix: "Adelphi (The)" → "The Adelphi".
+    // Uses a non-anchored in-place replacement so it works for multi-venue strings like
+    // "Spotify HQ, Adelphi (The), London" where (The) is not at the end of the whole string.
+    rest = rest.replace(/\b([^,(]+?)\s*\((The|Le|De)\)/g, (_, venue, article) => article + ' ' + venue.trim());
     if (rest !== beforeArticle) log(`  article rewrite: "${beforeArticle}" → "${rest}"`);
     const normalized = (date + ' - ' + rest).toUpperCase();
     log(`  Normalized: "${name}" → "${normalized}"`);
