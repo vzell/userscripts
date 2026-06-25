@@ -641,10 +641,6 @@ Also treate the "(De)" the same
 #+end_example
 
 ** DONE stickiness
-** don't flag inside of event notes
-
-http://brucebase.wikidot.com/1969#020469
-
 ** DONE timing per YEAR page
 
 1.)
@@ -747,16 +743,6 @@ is marked with a tooltip "Only on YEAR page ..."
 
 This should never happen
 
-** and/or - http://brucebase.wikidot.com/1983#180183
-
-On e.g. http://brucebase.wikidot.com/1983#180183 and the DETAIL page the lowercase ", and/or" inside the
-
-#+begin_example
-DON'T BACK DOWN, DON'T BACK DOWN ON OUR LOVE, and/or BLACK MOUNTAIN BALLAD / SUGARLAND
-#+end_example
-
-should never be used in song title comparisons, but still be rendered in the original color  
-
 ** DONE (de)
 
 When comparing event names on the YEAR pages and the corresponding DETAIL pages, we currently have the rule:
@@ -810,6 +796,41 @@ The special handling for "(Early)" and "(Late)" should be extended to "Afternoon
 
 why does e.g the following DETAIL page http://brucebase.wikidot.com/gig:1971-01-08-upstage-asbury-park-nj-early not have the comparison glyph at the end of the event name
 
+** and/or - http://brucebase.wikidot.com/1983#180183
+
+On e.g. http://brucebase.wikidot.com/1983#180183 and the DETAIL page the lowercase ", and/or" inside the
+
+#+begin_example
+DON'T BACK DOWN, DON'T BACK DOWN ON OUR LOVE, and/or BLACK MOUNTAIN BALLAD / SUGARLAND
+#+end_example
+
+should never be used in song title comparisons, but still be rendered in the original color  
+
+Right now it renders wrongly on the YEAR page
+
+#+begin_example
+<blockquote><span class="bb-song-detail-only" data-detail-song="DON'T BACK DOWN - DON'T BACK DOWN ON OUR LOVE - BLACK MOUNTAIN BALLAD">DON'T BACK DOWN - DON'T BACK DOWN ON OUR LOVE - BLACK MOUNTAIN BALLAD</span><span class="bb-sep"> / </span><span class="bb-song-match">SUGARLAND</span></blockquote>
+#+end_example
+
+So in essence these should actually match
+
+** don't flag inside of event notes
+
+http://brucebase.wikidot.com/1969#020469
+
+** why
+
+1.)
+
+where exactly at the YEAR page http://brucebase.wikidot.com/1973#280473b and it's DETAIL page is the mismatch, as it's flagged as such. I can't see it.
+
+2.)
+
+mismatched chars should not only be renderd in "bold red", but should also get a light red background, so that "." for example is easy spottable
+
+** actually revert the collaps multiple spaces stuff and instead highlight that difference with a special background color
+
+actually revert the collaps multiple spaces stuff and instead highlight that difference with a special background color
 
 
 * question
