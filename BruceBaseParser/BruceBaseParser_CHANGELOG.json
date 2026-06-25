@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.42",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "parseDetailSetlist: recognise section-label paragraphs of the form '<p><strong>Pre-show</strong> <span>(solo acoustic)</span></p>' where supplementary text lives in a <span> rather than directly in the <strong>. The old condition required the full <p> text to equal the <strong> text exactly; the new branch accepts <p> elements whose child nodes are only STRONG, SPAN, or whitespace, and uses the full text content ('Pre-show (solo acoustic)') as the label — matching the YEAR-page label 'Pre-show (solo acoustic):' exactly."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.41",
         "date": "2026-06-25",
         "sections": [

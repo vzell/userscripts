@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.41
+// @version      1.42
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1163,6 +1163,15 @@
         if (strong && child.textContent.trim() === strong.textContent.trim()) {
           flushPending();
           currentLabel = strong.textContent.trim();  // original case preserved for mismatch messages
+        } else if (strong && !child.querySelector('a[href^="/song:"]') &&
+                   [...child.childNodes].every(n =>
+                     (n.nodeType === Node.TEXT_NODE && /^\s*$/.test(n.textContent)) ||
+                     n.nodeName === 'STRONG' || n.nodeName === 'SPAN'
+                   )) {
+          // e.g. <p><strong>Pre-show</strong> <span style="font-size:80%"><em>(solo acoustic)</em></span></p>
+          // Full text used as label so it matches the YEAR-page label "Pre-show (solo acoustic):".
+          flushPending();
+          currentLabel = child.textContent.trim();
         } else {
           // Old-style setlist: song link in a bare <p>
           const links = [...child.querySelectorAll('a[href^="/song:"]')];
