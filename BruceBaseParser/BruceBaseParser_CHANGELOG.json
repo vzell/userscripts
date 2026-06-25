@@ -1,5 +1,19 @@
 [
     {
+        "version": "1.28",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fix false-positive section-label mismatch flag on YEAR pages for 'recording' sections: recording sessions on YEAR pages (<blockquote>) always appear as part of 'show' on DETAIL pages, so their section label should never be compared.",
+                    "Switch section-label comparison from case-insensitive to case-sensitive (except for the implicit 'show'/'show' pairing) so capitalisation differences like 'with Willie Nile' (YEAR) vs 'With Willie Nile' (DETAIL) are correctly flagged on both YEAR and DETAIL pages.",
+                    "Extend event-name article rewrite in normalizeDetailName to also handle '(De)' in addition to '(The)' and '(Le)'."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.27",
         "date": "2026-06-25",
         "sections": [

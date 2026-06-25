@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.27
+// @version      1.28
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -678,13 +678,20 @@
       html += `<span class="bb-section-label">${esc(label)}: </span>`;
     }
 
-    // Section-label mismatch warning (YEAR page mode only, when detailLabel is set)
-    if (detailLabel !== undefined) {
+    // Section-label mismatch warning (YEAR page mode only, when detailLabel is set).
+    // Rules:
+    //  - 'recording' sections appear as part of 'show' on DETAIL pages — never flag.
+    //  - 'show' vs 'show' (the implicit default) — no flag regardless of case.
+    //  - All other labels use case-sensitive comparison so capitalisation differences
+    //    (e.g. 'with Willie Nile' vs 'With Willie Nile') are caught.
+    if (detailLabel !== undefined && labelLc !== 'recording') {
       let labelWarnMsg = null;
       if (detailLabel === null) {
         labelWarnMsg = `Section "${label}" exists on YEAR page but DETAIL page has no corresponding section`;
-      } else if (labelLc !== detailLabel.toLowerCase()) {
-        labelWarnMsg = `Section label mismatch: YEAR page has "${label}", DETAIL page has "${detailLabel}"`;
+      } else if (!(labelLc === 'show' && detailLabel.toLowerCase() === 'show')) {
+        if (label !== detailLabel) {
+          labelWarnMsg = `Section label mismatch: YEAR page has "${label}", DETAIL page has "${detailLabel}"`;
+        }
       }
       if (labelWarnMsg) {
         html += `<span class="bb-section-label-warn bb-para-warn" data-msg="${esc(labelWarnMsg)}">⚠️</span> `;
@@ -826,9 +833,15 @@
       const yearSec = yearSections[i];
 
       let msg = null;
+      const yearLabelLc = yearSec ? yearSec.label.toLowerCase() : null;
       if (!yearSec) {
         msg = `DETAIL page has section "${detailLabel}" but YEAR page has no corresponding section`;
-      } else if (yearSec.label.toLowerCase() !== detailLabel.toLowerCase()) {
+      } else if (yearLabelLc === 'recording') {
+        // Recording sections appear as 'show' on DETAIL pages — skip
+      } else if (yearLabelLc === 'show' && detailLabel.toLowerCase() === 'show') {
+        // Both are the implicit default section — no flag
+      } else if (yearSec.label !== detailLabel) {
+        // Case-sensitive — catches capitalisation differences (e.g. 'with' vs 'With')
         msg = `Section label mismatch: YEAR page has "${yearSec.label}", DETAIL page has "${detailLabel}"`;
       }
 
@@ -1289,7 +1302,7 @@
     const date = m[1];
     let rest = m[2];
     const beforeArticle = rest;
-    rest = rest.replace(/^(.+?)\s*\((The|Le)\)(,.*)?$/, (_, venue, article, suffix) => article + ' ' + venue + (suffix || ''));
+    rest = rest.replace(/^(.+?)\s*\((The|Le|De)\)(,.*)?$/, (_, venue, article, suffix) => article + ' ' + venue + (suffix || ''));
     if (rest !== beforeArticle) log(`  article rewrite: "${beforeArticle}" → "${rest}"`);
     const normalized = (date + ' - ' + rest).toUpperCase();
     log(`  Normalized: "${name}" → "${normalized}"`);
