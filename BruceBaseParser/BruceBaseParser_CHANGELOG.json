@@ -1,5 +1,18 @@
 [
     {
+        "version": "1.31",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR pages: add scrollbar-gutter:stable to #side-bar so the scrollbar reserves space before appearing, preventing sidebar content from narrowing and breaking year-link lines.",
+                    "YEAR pages: remove <br> elements from #bb-pre-events (the sticky header band) to eliminate wasted vertical space from the large year heading."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.30",
         "date": "2026-06-25",
         "sections": [

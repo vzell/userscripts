@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.30
+// @version      1.31
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -338,6 +338,9 @@
         const preEventsDiv = document.createElement('div');
         preEventsDiv.id = 'bb-pre-events';
         preHrNodes.forEach(n => preEventsDiv.appendChild(n));
+        // Remove <br> elements — they only add wasteful vertical space in the
+        // compact sticky bar (e.g. the <br>2012<br> inside the year heading).
+        for (const br of [...preEventsDiv.querySelectorAll('br')]) br.remove();
         stickyBar.appendChild(preEventsDiv);
       }
     }
@@ -1637,6 +1640,7 @@
         align-self: flex-start;
         max-height: calc(100vh - var(--bb-header-h));
         overflow-y: auto;
+        scrollbar-gutter: stable;
       }
       #bb-sticky-bar {
         position: sticky;
