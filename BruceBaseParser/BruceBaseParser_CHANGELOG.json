@@ -1,5 +1,24 @@
 [
     {
+        "version": "1.33",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR pages: render event type (e.g. '(gig)') in italics after each event name link, before the comparison glyph. Applies to all event types including unknown (❓) and fetch-error (⚠️) cases.",
+                    "DETAIL pages: render event type in a smaller italic font inside the page title heading, followed by the name-comparison glyph (✅/⚠️/❌). Hover shows the same tooltip as on YEAR pages."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR and DETAIL pages: event names that differ only by an '(Early)' or '(Late)' suffix on the DETAIL page now show ⚠️ instead of ❌, with an amber 'Early/Late variant' result row in the tooltip."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.32",
         "date": "2026-06-25",
         "sections": [

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.32
+// @version      1.33
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -689,12 +689,19 @@
       const normalizedDetailName = normalizeDetailName(rawDetailName);
       const yearNameUpper        = yearName.trim().toUpperCase();
       const nameMatch            = yearNameUpper === normalizedDetailName.trim();
+      // Names that differ only by an (Early)/(Late) suffix on the detail page
+      // are expected for split shows — flag with ⚠️ rather than ❌.
+      const normTrimmed = normalizedDetailName.trim();
+      const isEarlyLate = !nameMatch && (
+        normTrimmed === yearNameUpper + ' (EARLY)' ||
+        normTrimmed === yearNameUpper + ' (LATE)'
+      );
 
       log(`  YEAR   : "${yearNameUpper}"`);
       log(`  DETAIL : "${normalizedDetailName}"`);
-      log(`  Result : ${nameMatch ? 'MATCH ✅' : 'MISMATCH ❌'}`);
+      log(`  Result : ${nameMatch ? 'MATCH ✅' : isEarlyLate ? 'EARLY/LATE ⚠️' : 'MISMATCH ❌'}`);
 
-      addYearGlyph(element, nameMatch, yearNameUpper, normalizedDetailName, rawDetailName, eventType);
+      addYearGlyph(element, nameMatch, isEarlyLate, yearNameUpper, normalizedDetailName, rawDetailName, eventType);
 
       // ── Setlist check ────────────────────────────────────────────────────
       if (setlistEls.length > 0) {
@@ -723,7 +730,7 @@
       }
     } catch (e) {
       logErr(`  Failed to process "${yearName}":`, e.message);
-      addWarningGlyph(element, e.message);
+      addWarningGlyph(element, e.message, eventType);
     }
   }
 
@@ -831,6 +838,13 @@
       return;
     }
 
+    // Extract event type and raw detail name before any DOM modifications
+    // so that extractDetailEventName reads a clean #page-title.
+    const detailTypeM    = path.match(/^([a-z]+):/);
+    const detailEventType = detailTypeM ? detailTypeM[1] : 'unknown';
+    const rawDetailName  = extractDetailEventName(document, location.pathname);
+    const normalizedDetailName = normalizeDetailName(rawDetailName);
+
     const info = detailPathToYearAndAnchor(path);
     if (!info) {
       logWarn('Could not derive year from path:', path);
@@ -862,6 +876,19 @@
       return;
     }
     log(`  Event link found: "${eventLink.textContent.trim()}" href="${eventLink.getAttribute('href')}"`);
+
+    // ── Event name check on DETAIL page ────────────────────────────────────
+    const yearNameUpper = eventLink.textContent.trim().toUpperCase();
+    const nameMatch     = yearNameUpper === normalizedDetailName.trim();
+    const normTrimmed   = normalizedDetailName.trim();
+    const isEarlyLate   = !nameMatch && (
+      normTrimmed === yearNameUpper + ' (EARLY)' ||
+      normTrimmed === yearNameUpper + ' (LATE)'
+    );
+    log(`  YEAR   : "${yearNameUpper}"`);
+    log(`  DETAIL : "${normalizedDetailName}"`);
+    log(`  Result : ${nameMatch ? 'MATCH ✅' : isEarlyLate ? 'EARLY/LATE ⚠️' : 'MISMATCH ❌'}`);
+    addDetailTitleAnnotation(detailEventType, yearNameUpper, normalizedDetailName, rawDetailName, nameMatch, isEarlyLate);
 
     const nextAnchor = [...yearContent.querySelectorAll('a[name]')]
       .find(a => eventLink.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -1398,11 +1425,13 @@
 
   // ── DOM mutation ──────────────────────────────────────────────────────────
 
-  function addYearGlyph(element, match, yearName, normalizedDetailName, rawDetailName, eventType) {
-    const span = makeGlyphSpan(match ? '✅' : '❌');
-    element.after(span);
-    const enter = e => showYearTooltip(e, yearName, normalizedDetailName, rawDetailName, eventType, match);
-    [element, span].forEach(n => {
+  function addYearGlyph(element, match, isEarlyLate, yearName, normalizedDetailName, rawDetailName, eventType) {
+    const glyph     = match ? '✅' : isEarlyLate ? '⚠️' : '❌';
+    const typeSpan  = makeEventTypeSpan(eventType);
+    const glyphSpan = makeGlyphSpan(glyph);
+    element.after(typeSpan, glyphSpan);
+    const enter = e => showYearTooltip(e, yearName, normalizedDetailName, rawDetailName, eventType, match, isEarlyLate);
+    [element, typeSpan, glyphSpan].forEach(n => {
       n.addEventListener('mouseenter', enter);
       n.addEventListener('mouseleave', hideTooltip);
     });
@@ -1418,21 +1447,25 @@
     });
   }
 
-  function addWarningGlyph(element, reason) {
-    const span = makeGlyphSpan('⚠️');
-    element.after(span);
+  function addWarningGlyph(element, reason, eventType = null) {
+    const glyphSpan = makeGlyphSpan('⚠️');
+    if (eventType) {
+      element.after(makeEventTypeSpan(eventType), glyphSpan);
+    } else {
+      element.after(glyphSpan);
+    }
     const msg = 'Error: ' + reason;
-    [element, span].forEach(n => {
+    [element, glyphSpan].forEach(n => {
       n.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
       n.addEventListener('mouseleave', hideTooltip);
     });
   }
 
   function addUnknownGlyph(element, eventType, url) {
-    const span = makeGlyphSpan('❓');
-    element.after(span);
+    const glyphSpan = makeGlyphSpan('❓');
+    element.after(makeEventTypeSpan(eventType), glyphSpan);
     const msg = `Unknown event type: "${eventType}"\n${url}`;
-    [element, span].forEach(n => {
+    [element, glyphSpan].forEach(n => {
       n.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
       n.addEventListener('mouseleave', hideTooltip);
     });
@@ -1445,21 +1478,55 @@
     return span;
   }
 
+  function makeEventTypeSpan(type) {
+    const span = document.createElement('span');
+    span.className = 'bb-event-type';
+    span.textContent = ` (${type})`;
+    return span;
+  }
+
+  // Annotates #page-title on the current DETAIL page with the event type tag
+  // and a name-comparison glyph.  Must be called AFTER extractDetailEventName()
+  // so the snapshot is taken before any DOM changes.
+  function addDetailTitleAnnotation(eventType, yearNameUpper, normalizedDetailName, rawDetailName, nameMatch, isEarlyLate) {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+    const h1 = pageTitle.querySelector('h1') || pageTitle;
+
+    const typeSpan = document.createElement('span');
+    typeSpan.className = 'bb-event-type-detail';
+    typeSpan.textContent = ` (${eventType})`;
+    h1.appendChild(typeSpan);
+
+    const glyph     = nameMatch ? '✅' : isEarlyLate ? '⚠️' : '❌';
+    const glyphSpan = makeGlyphSpan(glyph);
+    h1.appendChild(glyphSpan);
+
+    const enter = e => showYearTooltip(e, yearNameUpper, normalizedDetailName, rawDetailName, eventType, nameMatch, isEarlyLate);
+    [typeSpan, glyphSpan].forEach(n => {
+      n.addEventListener('mouseenter', enter);
+      n.addEventListener('mouseleave', hideTooltip);
+    });
+  }
+
   // ── Tooltip ───────────────────────────────────────────────────────────────
 
-  function showYearTooltip(evt, yearName, normalizedDetailName, rawDetailName, eventType, match) {
+  function showYearTooltip(evt, yearName, normalizedDetailName, rawDetailName, eventType, match, isEarlyLate = false) {
     const tip = document.getElementById('bb-tooltip');
     if (!tip) return;
     const detailHtml = match ? esc(normalizedDetailName) : buildDiffHtml(yearName, normalizedDetailName);
+    const resultHtml = match
+      ? '<span class="bb-ok">Match ✅</span>'
+      : isEarlyLate
+        ? '<span class="bb-warn">Early/Late variant ⚠️</span>'
+        : '<span class="bb-fail">Mismatch ❌</span>';
     tip.innerHTML = `
       <table class="bb-tip-table">
         <tr><th>Event type:</th><td>${esc(eventType)}</td></tr>
         <tr><th>YEAR page:</th><td>${esc(yearName)}</td></tr>
         <tr><th>DETAIL page (raw):</th><td>${esc(rawDetailName)}</td></tr>
         <tr><th>DETAIL page (normalized):</th><td>${detailHtml}</td></tr>
-        <tr><th>Result:</th><td>${match
-          ? '<span class="bb-ok">Match ✅</span>'
-          : '<span class="bb-fail">Mismatch ❌</span>'}</td></tr>
+        <tr><th>Result:</th><td>${resultHtml}</td></tr>
       </table>`;
     positionTooltip(tip, evt);
     tip.style.display = 'block';
@@ -1601,7 +1668,10 @@
         padding: 0 2px;
       }
       .bb-ok   { color: #6f6; }
+      .bb-warn { color: #c80; }
       .bb-fail { color: #f66; }
+      .bb-event-type        { color: #888; font-style: italic; font-weight: normal; }
+      .bb-event-type-detail { font-size: 0.6em; font-weight: normal; color: #666; font-style: italic; vertical-align: middle; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }
 
       /* Toggle buttons */
