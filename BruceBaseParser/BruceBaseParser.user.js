@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.31
+// @version      1.32
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1638,9 +1638,6 @@
         position: sticky;
         top: var(--bb-header-h);
         align-self: flex-start;
-        max-height: calc(100vh - var(--bb-header-h));
-        overflow-y: auto;
-        scrollbar-gutter: stable;
       }
       #bb-sticky-bar {
         position: sticky;

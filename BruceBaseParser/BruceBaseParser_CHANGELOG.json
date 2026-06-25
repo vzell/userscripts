@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.32",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR pages: remove max-height/overflow-y/scrollbar-gutter from #side-bar — these caused the sidebar to be permanently narrower than wikidot intended, breaking year-link lines. Sticky positioning works without internal scrolling."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.31",
         "date": "2026-06-25",
         "sections": [
