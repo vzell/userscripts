@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.28
+// @version      1.29
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -224,11 +224,10 @@
 
   async function runYearPage() {
     const content = document.querySelector('#page-content') || document.body;
-
-    // Snapshot original HTML before any DOM modifications
     const originalHtml = content.innerHTML;
 
-    // Wrap content between <hr>s so per-section toggles can show/hide each slice
+    hideJumpToRecentBox(content);
+
     const sections = wrapYearSections(content);
     log(`Wrapped ${sections.length} year section(s) for toggling`);
 
@@ -238,16 +237,74 @@
       logWarn('No event links found — check selector / page structure');
       return;
     }
-    await processYearEvents(events);
 
-    // Insert toggle controls now that processing is complete
-    insertGlobalToggle(content, originalHtml);
-    insertMismatchFilterToggle();
+    // ── Button container — shown immediately, disabled until processing is done ──
+    const pageTitle = document.getElementById('page-title');
+    const btnContainer = document.createElement('div');
+    btnContainer.id = 'bb-btn-container';
+
+    const globalBtn = document.createElement('button');
+    globalBtn.id = 'bb-global-toggle';
+    globalBtn.className = 'bb-toggle-btn';
+    globalBtn.textContent = '⇄ Show Original Page';
+    globalBtn.disabled = true;
+
+    const mismatchBtn = document.createElement('button');
+    mismatchBtn.id = 'bb-mismatch-toggle';
+    mismatchBtn.className = 'bb-toggle-btn';
+    mismatchBtn.textContent = '⚡ Mismatches Only';
+    mismatchBtn.disabled = true;
+
+    btnContainer.append(globalBtn, mismatchBtn);
+    if (pageTitle) pageTitle.after(btnContainer);
+
+    // ── Processing indicator ─────────────────────────────────────────────────
+    const progressEl = document.createElement('p');
+    progressEl.id = 'bb-year-progress';
+    const timerSpan = document.createElement('span');
+    timerSpan.id = 'bb-year-timer';
+    timerSpan.textContent = '0:00';
+    progressEl.append('Starting… ', timerSpan);
+    if (pageTitle) btnContainer.after(progressEl);
+
+    const startTime = Date.now();
+    const timerId = setInterval(() => {
+      timerSpan.textContent = fmtElapsed(Date.now() - startTime);
+    }, 1000);
+
+    // ── Process events ───────────────────────────────────────────────────────
+    await processYearEvents(events, (idx, name, total) => {
+      while (progressEl.firstChild) progressEl.removeChild(progressEl.firstChild);
+      progressEl.append(`Processing event "${idx} - ${name}" / ${total} … `, timerSpan);
+    });
+
+    // ── Finalise ─────────────────────────────────────────────────────────────
+    clearInterval(timerId);
+    while (progressEl.firstChild) progressEl.removeChild(progressEl.firstChild);
+    progressEl.append(`Done — ${events.length} events processed in `, timerSpan);
+    timerSpan.textContent = fmtElapsed(Date.now() - startTime);
+
+    setupGlobalToggle(globalBtn, content, originalHtml);
+    setupMismatchFilter(mismatchBtn);
+    globalBtn.disabled = false;
+    mismatchBtn.disabled = false;
+
     sections.forEach(({ hr, processedDiv, sectionOriginalHtml }) =>
       insertSectionToggle(hr, processedDiv, sectionOriginalHtml)
     );
 
     log('All events processed');
+  }
+
+  // Hides the "Jump to most recent show/event" navigation box injected by wikidot
+  // at the top of YEAR pages — it's not useful when the script renders its own UI.
+  function hideJumpToRecentBox(content) {
+    for (const box of content.querySelectorAll('.list-pages-box')) {
+      if (box.textContent.includes('most recent')) {
+        box.style.display = 'none';
+        break;
+      }
+    }
   }
 
   // Wraps the content that follows each <hr> (up to the next <hr>) inside a
@@ -290,23 +347,15 @@
     return result;
   }
 
-  // Creates a full-page toggle button after #page-title.
-  // The original view is a separate hidden div inserted beside #page-content so
-  // that all event listeners on the processed content area survive toggling.
-  function insertGlobalToggle(content, originalHtml) {
-    const pageTitle = document.getElementById('page-title');
-    if (!pageTitle) return;
-
+  // Wires up the pre-existing #bb-global-toggle button.
+  // Creates the hidden original-view div beside #page-content so that all event
+  // listeners on the processed content survive toggling.
+  function setupGlobalToggle(btn, content, originalHtml) {
     const originalEl = document.createElement('div');
     originalEl.id = 'bb-page-original';
     originalEl.innerHTML = originalHtml;
     originalEl.style.display = 'none';
     content.parentNode.insertBefore(originalEl, content.nextSibling);
-
-    const btn = document.createElement('button');
-    btn.id = 'bb-global-toggle';
-    btn.className = 'bb-toggle-btn';
-    btn.textContent = '⇄ Show Original Page';
 
     let showingOriginal = false;
     btn.addEventListener('click', () => {
@@ -315,8 +364,6 @@
       originalEl.style.display = showingOriginal ? 'block' : 'none';
       btn.textContent = showingOriginal ? '⇄ Show Processed Page' : '⇄ Show Original Page';
     });
-
-    pageTitle.after(btn);
   }
 
   // Inserts a per-section toggle button immediately after the given <hr>.
@@ -344,26 +391,16 @@
     hr.after(btn);
   }
 
-  // Inserts a "Mismatches Only" filter toggle after #bb-global-toggle on YEAR pages.
+  // Wires up the pre-existing #bb-mismatch-toggle button.
   // When active, hides every event block that has no name mismatch, no setlist
   // discrepancy, and no ⚠️/❓ warning so only problem events remain visible.
-  function insertMismatchFilterToggle() {
-    const anchor = document.getElementById('bb-global-toggle');
-    if (!anchor) return;
-
-    const btn = document.createElement('button');
-    btn.id = 'bb-mismatch-toggle';
-    btn.className = 'bb-toggle-btn';
-    btn.textContent = '⚡ Mismatches Only';
-
+  function setupMismatchFilter(btn) {
     let filterActive = false;
     btn.addEventListener('click', () => {
       filterActive = !filterActive;
       btn.textContent = filterActive ? '⚡ All Events' : '⚡ Mismatches Only';
       applyMismatchFilter(filterActive);
     });
-
-    anchor.after(btn);
   }
 
   // Shows or hides event blocks on YEAR pages.
@@ -577,12 +614,17 @@
       .trim();
   }
 
-  async function processYearEvents(events) {
+  async function processYearEvents(events, onProgress) {
     const BATCH_SIZE = 3;
+    let started = 0;
     for (let i = 0; i < events.length; i += BATCH_SIZE) {
       const batch = events.slice(i, i + BATCH_SIZE);
       log(`Batch ${Math.floor(i / BATCH_SIZE) + 1}: events ${i + 1}–${Math.min(i + BATCH_SIZE, events.length)} of ${events.length}`);
-      await Promise.allSettled(batch.map(processOneYearEvent));
+      await Promise.allSettled(batch.map(ev => {
+        const idx = ++started;
+        if (onProgress) onProgress(idx, ev.yearName, events.length);
+        return processOneYearEvent(ev);
+      }));
       if (i + BATCH_SIZE < events.length) await delay(500);
     }
   }
@@ -1531,11 +1573,13 @@
         font-family: sans-serif;
         vertical-align: middle;
       }
-      .bb-toggle-btn:hover { background: #357abd; }
-      #bb-global-toggle { margin: 6px 6px 2px 0; }
-      .bb-section-toggle { margin-left: 0; }
-      #bb-fetch-all-btn { margin: 6px 6px 2px 0; }
+      .bb-toggle-btn:hover    { background: #357abd; }
       .bb-toggle-btn:disabled { opacity: 0.5; cursor: default; }
+      #bb-btn-container  { display: flex; gap: 6px; align-items: center; margin: 6px 0 2px; }
+      #bb-global-toggle  { margin: 0; }
+      .bb-section-toggle { margin-left: 0; }
+      #bb-fetch-all-btn  { margin: 6px 6px 2px 0; }
+      #bb-year-progress  { color: #666; font-style: italic; margin: 2px 0; font-size: 0.9em; }
 
       /* Home page: year section headers and fetch progress */
       .bb-year-header {

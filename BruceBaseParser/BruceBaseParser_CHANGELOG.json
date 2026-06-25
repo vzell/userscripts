@@ -1,5 +1,19 @@
 [
     {
+        "version": "1.29",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR pages: group the global toggle and mismatch filter buttons into a shared #bb-btn-container div. Both buttons are rendered immediately when the script starts but remain disabled (greyed out) until all events finish processing.",
+                    "YEAR pages: add a live processing indicator below the button container showing 'Processing event \"N - <title>\" / <total> … <elapsed>' with a running timer. After processing the message switches to 'Done — N events processed in m:ss'.",
+                    "YEAR pages: hide the wikidot-injected 'Jump to most recent show/event' list-pages-box at the top of the page — it is not useful when the script renders its own UI."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.28",
         "date": "2026-06-25",
         "sections": [
