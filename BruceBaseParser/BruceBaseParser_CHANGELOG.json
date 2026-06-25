@@ -1,5 +1,23 @@
 [
     {
+        "version": "1.34",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Extend show-variant soft-mismatch (⚠️ instead of ❌) to cover '(Afternoon)' and '(Evening)' suffixes in addition to '(Early)' and '(Late)'. Tooltip result row updated to generic 'Show variant ⚠️'."
+                ]
+            },
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "DETAIL pages: runDetailPage() was returning early when no setlist was found, preventing the event-type tag and name-comparison glyph from being added to #page-title. Now always runs the name check; skips only the setlist-diff step when the detail page has no setlist."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.33",
         "date": "2026-06-25",
         "sections": [

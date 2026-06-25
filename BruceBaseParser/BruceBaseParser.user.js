@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.33
+// @version      1.34
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -689,13 +689,11 @@
       const normalizedDetailName = normalizeDetailName(rawDetailName);
       const yearNameUpper        = yearName.trim().toUpperCase();
       const nameMatch            = yearNameUpper === normalizedDetailName.trim();
-      // Names that differ only by an (Early)/(Late) suffix on the detail page
+      // Names that differ only by a show-variant suffix on the detail page
       // are expected for split shows — flag with ⚠️ rather than ❌.
       const normTrimmed = normalizedDetailName.trim();
-      const isEarlyLate = !nameMatch && (
-        normTrimmed === yearNameUpper + ' (EARLY)' ||
-        normTrimmed === yearNameUpper + ' (LATE)'
-      );
+      const isEarlyLate = !nameMatch && [' (EARLY)', ' (LATE)', ' (AFTERNOON)', ' (EVENING)']
+        .some(sfx => normTrimmed === yearNameUpper + sfx);
 
       log(`  YEAR   : "${yearNameUpper}"`);
       log(`  DETAIL : "${normalizedDetailName}"`);
@@ -833,10 +831,8 @@
 
   async function runDetailPage() {
     const detailSections = parseDetailSetlist(document);
-    if (detailSections.length === 0) {
-      log('No setlist found on detail page');
-      return;
-    }
+    const hasSetlist = detailSections.length > 0;
+    if (!hasSetlist) log('No setlist found on detail page — will still annotate title');
 
     // Extract event type and raw detail name before any DOM modifications
     // so that extractDetailEventName reads a clean #page-title.
@@ -881,10 +877,8 @@
     const yearNameUpper = eventLink.textContent.trim().toUpperCase();
     const nameMatch     = yearNameUpper === normalizedDetailName.trim();
     const normTrimmed   = normalizedDetailName.trim();
-    const isEarlyLate   = !nameMatch && (
-      normTrimmed === yearNameUpper + ' (EARLY)' ||
-      normTrimmed === yearNameUpper + ' (LATE)'
-    );
+    const isEarlyLate   = !nameMatch && [' (EARLY)', ' (LATE)', ' (AFTERNOON)', ' (EVENING)']
+      .some(sfx => normTrimmed === yearNameUpper + sfx);
     log(`  YEAR   : "${yearNameUpper}"`);
     log(`  DETAIL : "${normalizedDetailName}"`);
     log(`  Result : ${nameMatch ? 'MATCH ✅' : isEarlyLate ? 'EARLY/LATE ⚠️' : 'MISMATCH ❌'}`);
@@ -893,6 +887,9 @@
     const nextAnchor = [...yearContent.querySelectorAll('a[name]')]
       .find(a => eventLink.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
     log(`  Next anchor: ${nextAnchor ? `name="${nextAnchor.getAttribute('name')}"` : 'none (end of page)'}`);
+
+    // Setlist comparison — only when the detail page actually has a setlist.
+    if (!hasSetlist) return;
 
     const setlistEls = collectSetlistElements(eventLink, nextAnchor, yearContent);
     log(`  Collected ${setlistEls.length} setlist element(s) from YEAR page`);
@@ -1518,7 +1515,7 @@
     const resultHtml = match
       ? '<span class="bb-ok">Match ✅</span>'
       : isEarlyLate
-        ? '<span class="bb-warn">Early/Late variant ⚠️</span>'
+        ? '<span class="bb-warn">Show variant ⚠️</span>'
         : '<span class="bb-fail">Mismatch ❌</span>';
     tip.innerHTML = `
       <table class="bb-tip-table">
