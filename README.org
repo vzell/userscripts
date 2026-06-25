@@ -358,6 +358,85 @@ there is a "retail" link which gets interpreted as a SONG from a setlist
 
 Don't ever include such items for setlist comparisons 
 
+** add the latest findings to the CLAUDE.md since the last edit of that file
+
+add the latest findings to the CLAUDE.md since the last edit of that file
+
+** walking the dog
+
+YEAR entry page http://brucebase.wikidot.com/1974#180374b says "WALKING THE DOG" only on YEAR page.
+The DETAIL page at http://brucebase.wikidot.com/gig:1974-03-18-gertie-s-dallas-tx-late shows the following console log
+
+#+begin_example
+[BruceBase] Script starting on http://brucebase.wikidot.com/gig:1974-03-18-gertie-s-dallas-tx-late
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:32 [BruceBase] Detected DETAIL page
+userscript.html?name=VZ%253A-BruceBase-Parser.user.js&id=8b3860c1-c20a-4dc7-9dcf-f4e74aa35b3d:32
+#+end_example
+
+although "WALKING THE DOG" is present and matches. 
+
+** ok
+
+1.)
+
+Now the console says: "[BruceBase]   Diff: match(WALKING THE DOG)" but the song ist still not rendered in "green" on the DETAIL page.
+
+2.)
+
+Flag these kind of songs which have an unusual structure with a yellow  warning symbol, on both the YEAR and the DETAIL pages
+
+
+** new button
+
+On each YEAR page include another toggle button after
+
+#+begin_example
+<div id="page-title">
+#+end_example
+
+which when pressed shows only events with event names which do not match with their DETAIL page or events which have
+mismatches in "setlist/recording session" or events where the ⚠️ warning symbol is displayed, all other events should be
+temporarily hidden and onyl show up again when pressing the button a second time, and so on
+
+** bug
+
+The button appears but does NOT have any effect when pressing
+
+** show the two buttons side by side
+
+render the two buttons side by side
+
+** looks good so far
+
+looks good so far, except one glitch: why is the YEAR entry http://brucebase.wikidot.com/2026#190326 listed in the
+"Mismatches Only" view although there do not seem to be any mismatches at all
+
+#+begin_example
+<div class="bb-section-processed" style="">
+<p><a name="190326"></a><br>
+<strong><a href="/rehearsal:2026-03-19-youth-temple-ocean-grove-nj">2026-03-19 - OCEAN GROVE YOUTH TEMPLE, OCEAN GROVE, NJ</a><span class="bb-glyph"> ✅</span></strong></p>
+<p><span class="bb-song-match">WAR</span><span class="bb-sep"> / </span><span class="bb-song-char-diff" data-year-song="BORN IN THE U.S.A." data-detail-song="BORN IN THE USA"><span class="bb-char-match">B</span><span class="bb-char-match">O</span><span class="bb-char-match">R</span><span class="bb-char-match">N</span><span class="bb-char-match"> </span><span class="bb-char-match">I</span><span class="bb-char-match">N</span><span class="bb-char-match"> </span><span class="bb-char-match">T</span><span class="bb-char-match">H</span><span class="bb-char-match">E</span><span class="bb-char-match"> </span><span class="bb-char-match">U</span><span class="bb-char-diff">.</span><span class="bb-char-match">S</span><span class="bb-char-diff">.</span><span class="bb-char-match">A</span><span class="bb-char-diff">.</span></span><span class="bb-sep"> / </span><span class="bb-song-match">DEATH TO MY HOMETOWN</span><span class="bb-sep"> / </span><span class="bb-song-match">NO SURRENDER</span><span class="bb-sep"> / </span><span class="bb-song-match">DARKNESS ON THE EDGE OF TOWN</span><span class="bb-sep"> / </span><span class="bb-song-match">STREETS OF MINNEAPOLIS</span><span class="bb-sep"> / </span><span class="bb-song-match">THE PROMISED LAND</span><span class="bb-sep"> / </span><span class="bb-song-match">YOUNGSTOWN</span><span class="bb-sep"> / </span><span class="bb-song-match">MURDER INCORPORATED</span><span class="bb-sep"> / </span><span class="bb-song-match">AMERICAN SKIN (41 SHOTS)</span><span class="bb-sep"> / </span><span class="bb-song-match">LAND OF HOPE AND DREAMS</span><span class="bb-sep"> / </span><span class="bb-song-match">LONG WALK HOME</span><span class="bb-sep"> / </span><span class="bb-song-match">ACROSS THE BORDER</span><br><sup><em>Set details may be inaccurate.</em></sup></p>
+<div class="list-pages-box">    <div class="list-pages-item">
+
+
+<p>Private rehearsals for the 2026 tour begin, with photographers Pamela Springsteen and Rob DeMartin present. "<a href="/song:streets-of-minneapolis">Streets Of Minneapolis</a>" is a full-band arrangement, and is rehearsed multiple times.</p>
+</div>
+    
+    
+    
+    </div><a href="/Info%20Request"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Help-32.png" title="Help Us" height="15" width="15" alt="00Help-32.png" class="image"></a> <sup><em>If you have any information (eg. setlist, memories, ticket stub or other images, as applicable) regarding this date please <a target="_blank" href="mailto:brucebase.wiki@gmail.com">get in touch</a>.</em></sup><br>
+</div>
+#+end_example
+
+** revert
+
+revert as it was an oversight by myself, I didn't see the differences right away.
+
+** support http://brucebase.wikidot.com/1949-64
+
+also support YEAR pages for the URL http://brucebase.wikidot.com/1949-64
+it's the only exception from the 4-digit year rule otherwise
+
 * question
 ** initial
 
