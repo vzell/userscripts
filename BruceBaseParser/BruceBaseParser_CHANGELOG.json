@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.26",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Support the consolidated 1949-64 YEAR page (brucebase.wikidot.com/1949-64). Extended @include regex to match it, added it to the isYearPage check, and added yearPageSlug() so DETAIL pages for events in 1949–1964 correctly fetch 1949-64 instead of a non-existent per-year page."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.25",
         "date": "2026-06-25",
         "sections": [

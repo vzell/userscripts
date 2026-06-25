@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.25
+// @version      1.26
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -9,7 +9,7 @@
 // @supportURL   https://github.com/vzell/userscripts/issues
 // @downloadURL  https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser.user.js
 // @updateURL    https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser.user.js
-// @include      /^https?:\/\/brucebase\.wikidot\.com\/\d{4}(-list)?$/
+// @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64)$/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
@@ -38,7 +38,7 @@
 
   const path        = location.pathname.replace(/^\//, '');
   const isListPage   = /^\d{4}-list$/.test(path);
-  const isYearPage   = /^\d{4}$/.test(path);
+  const isYearPage   = /^\d{4}$/.test(path) || path === '1949-64';
   const isDetailPage = DETAIL_TYPE_RE.test(path);
 
   if (isListPage) {
@@ -560,7 +560,7 @@
       return;
     }
 
-    const yearPageUrl = `${location.protocol}//${location.host}/${info.year}`;
+    const yearPageUrl = `${location.protocol}//${location.host}/${yearPageSlug(info.year)}`;
     log(`Fetching YEAR page for setlist comparison: ${yearPageUrl}`);
 
     let yearDoc;
@@ -623,6 +623,14 @@
     const m = p.match(/:(\d{4})-\d{2}-\d{2}/);
     if (!m) return null;
     return { year: m[1] };
+  }
+
+  // Maps a 4-digit year string to the brucebase page slug that covers it.
+  // 1949–1964 are consolidated onto a single "1949-64" page; all other years
+  // have their own /YYYY page.
+  function yearPageSlug(year) {
+    const y = parseInt(year, 10);
+    return (y >= 1949 && y <= 1964) ? '1949-64' : year;
   }
 
   // Returns the setlist container element for a (fetched or live) document.
