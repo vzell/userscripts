@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.45
+// @version      1.46
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -534,9 +534,7 @@
       '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-section-label-warn'
     );
     if (!nameMatch || hasSetlistMismatch) {
-      const warn = document.createElement('span');
-      warn.textContent = ' ⚠️';
-      em.after(warn);
+      em.append(' ⚠️');
     } else {
       // Inline style overrides wikidot's tab CSS specificity.
       em.style.color      = '#2a2';

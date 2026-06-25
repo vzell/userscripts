@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.46",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "annotateSetlistTab: ⚠️ was inserted as a separate <span> after the <em>, causing a line-break between 'Setlist' and the symbol. Now appended directly inside the <em> as a text node, producing <em>Setlist ⚠️</em>."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.45",
         "date": "2026-06-25",
         "sections": [
