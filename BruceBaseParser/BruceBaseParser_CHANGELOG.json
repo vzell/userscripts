@@ -1,5 +1,23 @@
 [
     {
+        "version": "1.37",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "normalizeDetailName now collapses runs of multiple spaces to a single space before comparison. Detail page titles with accidental double spaces (e.g. 'University Of Maryland,  College Park') no longer produce false-positive mismatches against the single-spaced YEAR page entry."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Mismatched characters in char-diff song names now get a light red background (#ffe0e0) in addition to bold red text, making single-character differences like '.' easy to spot."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.36",
         "date": "2026-06-25",
         "sections": [
