@@ -52,8 +52,9 @@ location.pathname
      `<p>` and `<blockquote>` elements between the two anchors
 4. **`processYearEvents(events)`** — batches 3 events at a time with 500 ms
    between batches; each calls `processOneYearEvent(event)`.
-5. After all events: **`insertGlobalToggle`** and **`insertSectionToggle`** for
-   each wrapped section.
+5. After all events: **`insertGlobalToggle`**, **`insertMismatchFilterToggle`**,
+   and **`insertSectionToggle`** for each wrapped section (all inserted in that
+   order; global toggle and mismatch filter render side by side after `#page-title`).
 
 ### `collectSetlistElements` filter rules
 
@@ -102,14 +103,22 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
     before cleaning, used to re-append qualifiers like `(parts)` or
     `(with Willie Nile)` as plain (non-green) text in the rendered output
   - `<sup><em>` footnote text excluded via `textWithoutSup()` before splitting
-- `parseDetailSetlist(doc)` → reads `getSetlistContainer(doc)` children
-  (falls back from `#wiki-tab-0-1 td` to `#wiki-tab-0-1` for tableless pages):
-  - `<p><strong>Soundcheck</strong></p>` etc. set the current section label
-  - `<ol>`/`<ul>` produce a section; song names from `<a href="/song:…">` text,
-    medleys joined with ` - `; plain-text fallback for songs with no `/song:` link
+- `parseDetailSetlist(doc)` → reads `getSetlistContainer(doc)` children.
+  Handles three layouts:
+  - **(a) Standard**: `<p><strong>Label</strong></p>` sets section label;
+    `<ol>`/`<ul>` produce a section with song names from `<a href="/song:…">` text
+    (medleys joined with ` - `; plain-text fallback for songs with no link).
+  - **(b) Paragraph-based** (old pages, e.g. 1974): songs in bare
+    `<p><a href="/song:…">NAME</a></p>` elements are accumulated via
+    `flushPending()` and emitted as a section with `paragraphBased: true`.
+  - **(c) Nested fallback**: if no songs found from direct children, widens
+    to `td.querySelectorAll('ol, ul')` to find lists nested inside `<div>`.
+  Sections from layout (b) carry `paragraphBased: true`.
 - `yearFlat` / `yearRawFlat` — flattened cleaned / raw song arrays from
-  `yearSections`; each `diffItem` is annotated with `rawYearSong` (the raw text
-  at its flat index) before rendering
+  `yearSections`; `detailParaFlat` — flat bool array (one entry per detail song)
+  indicating whether that song came from a paragraph-based section.
+  Each `diffItem` is annotated with `rawYearSong` (year-side raw text) and
+  `paragraphBased` (whether the detail-side song was in `<p>` format).
 - `lcsDiff(yearFlat, detailFlat)` + `mergeCharDiffs()` → `diffItems[]`
 - `renderYearSetlist(yearSections, diffItems)` assigns diff items back to their
   source `<p>`/`<blockquote>` elements, then calls
@@ -120,6 +129,9 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
     any raw qualifier suffix (e.g. ` (parts)`, ` (with Willie Nile)`) is
     appended outside the span as plain text
   - re-appends footnote HTML after `<br>` so "Setlist incomplete." notes remain
+  - for items with `paragraphBased: true`, appends a
+    `<span class="bb-para-warn">⚠️</span>` with hover tooltip after the song span;
+    listeners registered in a second `querySelectorAll('.bb-para-warn')` pass
 
 ### Setlist colour coding (YEAR page)
 
@@ -131,17 +143,33 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
 | `.bb-song-char-diff`   | similar but slightly different | char-level red/green |
 | `.bb-char-match`       | matching char within diff   | green           |
 | `.bb-char-diff`        | differing char              | red bold        |
+| `.bb-para-warn`        | song in `<p>` format (old page) | ⚠️ cursor:help |
 
 Hover over any non-match span shows `showSongTooltip()` with year/detail names
-and a word-level diff.
+and a word-level diff. Hover over `.bb-para-warn` shows `showErrorTooltip()`.
 
 ### Toggle controls (YEAR page only)
 
-**Global toggle** (button after `#page-title`):
+The three buttons are inserted in order after `#page-title` and render side by side:
+
+**Global toggle** (`#bb-global-toggle`, first button):
 - `insertGlobalToggle(content, originalHtml)` creates `<div id="bb-page-original">`
   with the pre-processing HTML, inserted as a sibling of `#page-content`.
 - Toggle alternates `display: block / none` on the two divs.
 - `#page-content` is never replaced, so all event listeners survive.
+
+**Mismatch filter** (`#bb-mismatch-toggle`, second button):
+- `insertMismatchFilterToggle()` inserts after `#bb-global-toggle`.
+- On click calls `applyMismatchFilter(active)`.
+- Each `.bb-section-processed` div wraps exactly one event (one `<hr>` per
+  event on YEAR pages; `<a name>` anchors are inside `<p>` children, not direct
+  children of the section div).
+- A block is a **mismatch** when it contains a `.bb-glyph` with ❌/⚠️/❓,
+  or a `.bb-song-year-only`, `.bb-song-detail-only`, `.bb-song-char-diff`,
+  or `.bb-para-warn` element.
+- When filtering, hides the `processedDiv` and walks backward to also hide the
+  preceding `.bb-section-toggle` button and `<hr>` (skipping `.bb-section-original`
+  which has its own independent display state).
 
 **Per-section toggle** (button after each `<hr>`):
 - `insertSectionToggle(hr, processedDiv, sectionOriginalHtml)` creates
@@ -188,15 +216,18 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 7. Runs `lcsDiff` + `mergeCharDiffs`; annotates each `diffItem` with
    `rawYearSong`.
 8. `renderDetailSetlist(diffItems)` via `styleDetailLi`:
+   - Detects `isParagraphBased` by checking whether the container has any `<li>`.
+     If not, collects `<p>` elements with `/song:` links as the song element list.
    - `match` → adds `.bb-song-match` to each `a[href^="/song:"]` inside the
-     `<li>` (so only the link text turns green, not descriptive `<span>` nodes
-     like `(parts)`); falls back to adding the class to the `<li>` itself for
-     plain-text entries with no song link (e.g. REFRIGERATOR BLUES)
-   - `detail-only` → adds `.bb-song-detail-only` (light-blue bg)
+     element (so only the link text turns green); falls back to adding the class
+     to the element itself for plain-text entries with no song link.
+   - `detail-only` → adds `.bb-song-detail-only` (light-blue bg).
    - `char-diff` → adds `.bb-song-char-diff`, replaces `<a>` innerHTML with
-     character-level coloured spans
-   - `year-only` → inserts a new `<li class="bb-song-year-only">` before the
-     current list position (yellow bg, clean song name from year page)
+     character-level coloured spans.
+   - `year-only` → inserts a new `<li>` (or `<p>` on paragraph-based pages)
+     with `.bb-song-year-only` before the current position.
+   - After each element on paragraph-based pages, `addParaStructureWarning(el)`
+     appends a ⚠️ span with tooltip.
 9. `insertDetailToggle(originalTdHtml)` wraps the setlist tab content in
    processed/original show-hide divs and inserts a toggle button after
    `#page-title`.
@@ -212,7 +243,8 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 | `normalizeDetailName(name)` | `(The)`/`(Le)` rewrite + `YYYY-MM-DD - VENUE` uppercase |
 | `cleanSongName(text)` | Strips any parenthetical containing a lowercase letter: `(with …)`, `(x3)`, `(parts)`, `(acoustic)` etc.; preserves all-caps qualifiers like `(41 SHOTS)` |
 | `textWithoutSup(el)` | Clones el, removes all `<sup>` children, returns `.textContent`; used to exclude footnote text from prose filtering and song-name parsing |
-| `getSetlistContainer(doc)` | Returns `#wiki-tab-0-1 td` if present, else `#wiki-tab-0-1` itself (for older pages with no `<table>` layout) |
+| `getSetlistContainer(doc)` | Returns `#wiki-tab-0-1 td` → `#wiki-tab-0-1` → `#page-content` (three-level fallback for pages without a tab widget) |
+| `addParaStructureWarning(el)` | Appends a `<span class="bb-para-warn">⚠️</span>` with tooltip to a `<p>`-based song element on DETAIL pages |
 | `buildDiffHtml(a, b)` | Token-level diff on whitespace/comma splits (for name tooltips) |
 | `buildCharDiffHtml(a, b)` | Char-level LCS diff; shows year song chars with red/green spans |
 | `lcsDiff(yearSongs, detailSongs)` | Standard LCS producing `match`/`year-only`/`detail-only` items |
