@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.39",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR-page tokens like 'DON'T BACK DOWN, DON'T BACK DOWN ON OUR LOVE, and/or BLACK MOUNTAIN BALLAD' were incorrectly excluded from setlist comparison (filtered as prose due to lowercase 'and/or') or rendered as mismatches. A new songCompareKey() function detects ', and/or' / ', and' / ', or' connectives and normalises the token to 'SONG A - SONG B - SONG C' for comparison against DETAIL pages (which join multi-link <li> entries with ' - '). On a successful match the connective text is kept verbatim and the individual song names are rendered in match-green while the separators stay in the original page colour."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.38",
         "date": "2026-06-25",
         "sections": [

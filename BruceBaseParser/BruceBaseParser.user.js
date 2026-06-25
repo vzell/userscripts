@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.38
+// @version      1.39
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -633,10 +633,10 @@
       const rawAndClean = text.split(' / ')
         .map(s => s.trim())
         .filter(s => s.length > 0)
-        .map(raw => ({ raw, clean: cleanSongName(raw) }))
-        .filter(p => p.clean.length > 0)
-        .filter(p => !/[a-z]/.test(p.clean)); // prose tokens still containing lowercase are not song names
-      const songs    = rawAndClean.map(p => p.clean);
+        .map(raw => ({ raw, compareKey: songCompareKey(raw) }))
+        .filter(p => p.compareKey.length > 0)
+        .filter(p => !/[a-z]/.test(p.compareKey)); // prose tokens still containing lowercase are not song names
+      const songs    = rawAndClean.map(p => p.compareKey);
       const rawSongs = rawAndClean.map(p => p.raw);
 
       if (songs.length > 0) sections.push({ label, songs, rawSongs, sourceEl: el });
@@ -658,6 +658,21 @@
     return text
       .replace(/\s*\([^)]*[a-z][^)]*\)/g, '')
       .trim();
+  }
+
+  // Returns the comparison key for a raw YEAR-page song token.
+  // When the token lists alternatives with ", and/or", ", and", or ", or"
+  // (e.g. "SONG A, SONG B, and/or SONG C"), normalises to "SONG A - SONG B - SONG C"
+  // to match the " - " separator that parseDetailSetlist produces for multi-link <li> entries.
+  // Falls back to cleanSongName for all other tokens.
+  function songCompareKey(raw) {
+    const clean = cleanSongName(raw);
+    if (/[a-z]/.test(clean) && /,\s+(?:and\/or|and|or)\s+/i.test(raw)) {
+      return cleanSongName(
+        raw.replace(/,\s+(?:and\/or|and|or)\s+/gi, ', ').replace(/,\s*/g, ' - ')
+      );
+    }
+    return clean;
   }
 
   async function processYearEvents(events, onProgress) {
@@ -760,6 +775,17 @@
 
   // detailLabel: the corresponding detail section label (original case), or null if
   // the detail page has no section at this index, or undefined if not applicable.
+  // Renders a raw YEAR-page token that contains a list connective (", and/or", etc.).
+  // Each song part gets .bb-song-match colouring; the separators stay plain (original colour).
+  function renderMatchWithConnectives(raw) {
+    const parts = raw.split(/(,\s+(?:(?:and\/or|and|or)\s+)?)/gi);
+    return parts.map((part, i) =>
+      i % 2 === 0
+        ? `<span class="bb-song-match">${esc(part.trim())}</span>`
+        : esc(part)
+    ).join('');
+  }
+
   function renderSetlistElement(el, label, items, detailLabel) {
     let html    = '';
     let isFirst = true;
@@ -799,10 +825,16 @@
         ? ` <span class="bb-para-warn" data-msg="Detail page lists this song as a paragraph (&lt;p&gt;) instead of a list item (&lt;ol&gt;/&lt;li&gt;). Setlist may be incomplete.">⚠️</span>`
         : '';
       if (item.type === 'match') {
-        const rawSuffix = item.rawYearSong ? esc(item.rawYearSong.slice(item.yearSong.length)) : '';
-        html += `<span class="bb-song-match">${esc(item.yearSong)}</span>${rawSuffix}${paraWarn}`;
+        const raw = item.rawYearSong || item.yearSong;
+        if (/,\s+(?:and\/or|and|or)\s+/i.test(raw)) {
+          html += renderMatchWithConnectives(raw) + paraWarn;
+        } else {
+          const rawSuffix = item.rawYearSong ? esc(item.rawYearSong.slice(item.yearSong.length)) : '';
+          html += `<span class="bb-song-match">${esc(item.yearSong)}</span>${rawSuffix}${paraWarn}`;
+        }
       } else if (item.type === 'year-only') {
-        html += `<span class="bb-song-year-only" data-year-song="${esc(item.yearSong)}">${esc(item.yearSong)}</span>`;
+        const display = item.rawYearSong || item.yearSong;
+        html += `<span class="bb-song-year-only" data-year-song="${esc(item.yearSong)}">${esc(display)}</span>`;
       } else if (item.type === 'detail-only') {
         html += `<span class="bb-song-detail-only" data-detail-song="${esc(item.detailSong)}">${esc(item.detailSong)}</span>${paraWarn}`;
       } else if (item.type === 'char-diff') {
