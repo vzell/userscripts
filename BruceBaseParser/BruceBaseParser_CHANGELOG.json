@@ -1,5 +1,19 @@
 [
     {
+        "version": "1.30",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR pages: progress timer moved to front of indicator string in fixed-width MM:SS format (e.g. '00:01 ... Processing event \"001 / 47: …\"'); event counter zero-padded to 3 digits.",
+                    "YEAR pages: sticky header band (#bb-sticky-bar) groups page title, button container, progress indicator, and pre-event content (icon legend, year heading) in a band pinned below #header while scrolling through events.",
+                    "All pages: #header is now sticky (top:0) so site navigation stays visible on scroll. #side-bar is sticky below the header with overflow scroll for tall sidebars."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.29",
         "date": "2026-06-25",
         "sections": [

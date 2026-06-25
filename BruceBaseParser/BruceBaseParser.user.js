@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.29
+// @version      1.30
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -256,16 +256,18 @@
     mismatchBtn.disabled = true;
 
     btnContainer.append(globalBtn, mismatchBtn);
-    if (pageTitle) pageTitle.after(btnContainer);
 
     // ── Processing indicator ─────────────────────────────────────────────────
     const progressEl = document.createElement('p');
     progressEl.id = 'bb-year-progress';
     const timerSpan = document.createElement('span');
     timerSpan.id = 'bb-year-timer';
-    timerSpan.textContent = '0:00';
-    progressEl.append('Starting… ', timerSpan);
-    if (pageTitle) btnContainer.after(progressEl);
+    timerSpan.textContent = '00:00';
+    progressEl.append(timerSpan, ' ... Starting…');
+
+    // Build sticky bar: moves #page-title, buttons, progress, and pre-<hr>
+    // content from #page-content into a pinned band below #header.
+    setupStickyBar(content, pageTitle, btnContainer, progressEl);
 
     const startTime = Date.now();
     const timerId = setInterval(() => {
@@ -274,15 +276,16 @@
 
     // ── Process events ───────────────────────────────────────────────────────
     await processYearEvents(events, (idx, name, total) => {
-      while (progressEl.firstChild) progressEl.removeChild(progressEl.firstChild);
-      progressEl.append(`Processing event "${idx} - ${name}" / ${total} … `, timerSpan);
+      progressEl.replaceChildren(
+        timerSpan,
+        ` ... Processing event "${String(idx).padStart(3, '0')} / ${total}: ${name}"`
+      );
     });
 
     // ── Finalise ─────────────────────────────────────────────────────────────
     clearInterval(timerId);
-    while (progressEl.firstChild) progressEl.removeChild(progressEl.firstChild);
-    progressEl.append(`Done — ${events.length} events processed in `, timerSpan);
     timerSpan.textContent = fmtElapsed(Date.now() - startTime);
+    progressEl.replaceChildren(timerSpan, ` ... Done — ${events.length} events processed`);
 
     setupGlobalToggle(globalBtn, content, originalHtml);
     setupMismatchFilter(mismatchBtn);
@@ -304,6 +307,45 @@
         box.style.display = 'none';
         break;
       }
+    }
+  }
+
+  // Builds the sticky header band for YEAR pages.
+  // Moves #page-title, btnContainer, progressEl, and all #page-content nodes
+  // before the first <hr> into #bb-sticky-bar, which is inserted where
+  // #page-title used to live (sibling of #page-content inside #main-content).
+  // Also measures #header height and stores it as --bb-header-h for CSS.
+  function setupStickyBar(content, pageTitle, btnContainer, progressEl) {
+    const stickyBar = document.createElement('div');
+    stickyBar.id = 'bb-sticky-bar';
+
+    if (pageTitle && pageTitle.parentNode) {
+      pageTitle.parentNode.insertBefore(stickyBar, pageTitle);
+      stickyBar.appendChild(pageTitle);
+    }
+    stickyBar.append(btnContainer, progressEl);
+
+    // Collect all direct children of #page-content before the first <hr>
+    // (icon legend table, year heading, jump-to-recent box, etc.) and move
+    // them into the sticky bar so they scroll with the pinned header band.
+    const firstHr = content.querySelector(':scope > hr');
+    if (firstHr) {
+      const preHrNodes = [];
+      for (let n = content.firstChild; n && n !== firstHr; n = n.nextSibling) {
+        preHrNodes.push(n);
+      }
+      if (preHrNodes.length) {
+        const preEventsDiv = document.createElement('div');
+        preEventsDiv.id = 'bb-pre-events';
+        preHrNodes.forEach(n => preEventsDiv.appendChild(n));
+        stickyBar.appendChild(preEventsDiv);
+      }
+    }
+
+    const headerEl = document.getElementById('header');
+    if (headerEl) {
+      const h = Math.round(headerEl.getBoundingClientRect().height);
+      document.documentElement.style.setProperty('--bb-header-h', `${h}px`);
     }
   }
 
@@ -1579,7 +1621,32 @@
       #bb-global-toggle  { margin: 0; }
       .bb-section-toggle { margin-left: 0; }
       #bb-fetch-all-btn  { margin: 6px 6px 2px 0; }
-      #bb-year-progress  { color: #666; font-style: italic; margin: 2px 0; font-size: 0.9em; }
+      #bb-year-progress  { color: #666; font-style: italic; margin: 2px 0; font-size: 0.9em; font-family: monospace; }
+
+      /* ── Sticky layout ───────────────────────────────────── */
+      :root { --bb-header-h: 0px; }
+      #header {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: #fff;
+      }
+      #side-bar {
+        position: sticky;
+        top: var(--bb-header-h);
+        align-self: flex-start;
+        max-height: calc(100vh - var(--bb-header-h));
+        overflow-y: auto;
+      }
+      #bb-sticky-bar {
+        position: sticky;
+        top: var(--bb-header-h);
+        z-index: 90;
+        background: #fff;
+        padding-bottom: 6px;
+        border-bottom: 2px solid #d0d0d0;
+        margin-bottom: 6px;
+      }
 
       /* Home page: year section headers and fetch progress */
       .bb-year-header {
@@ -1624,7 +1691,7 @@
 
   function fmtElapsed(ms) {
     const s = Math.floor(ms / 1000);
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   }
 
   function esc(str) {
