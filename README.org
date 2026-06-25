@@ -437,6 +437,51 @@ revert as it was an oversight by myself, I didn't see the differences right away
 also support YEAR pages for the URL http://brucebase.wikidot.com/1949-64
 it's the only exception from the 4-digit year rule otherwise
 
+** home
+
+On the URL http://brucebase.wikidot.com render a button right to
+
+#+begin_example
+<div id="page-title">Home</div>
+#+end_example
+
+with the title "Fetch All Gig Pages". When pressed iterate over all gig pages
+
+#+begin_example
+<p><strong>Gig Pages</strong><br>
+<a href="/1949-64">1949-64</a><br>
+<a href="/1965">1965</a> | <a href="/1966">1966</a> | <a href="/1967">1967</a> | <a href="/1968">1968</a><br>
+<a href="/1969">1969</a> | <a href="/1970">1970</a> | <a href="/1971">1971</a> | <a href="/1972">1972</a><br>
+<a href="/1973">1973</a> | <a href="/1974">1974</a> | <a href="/1975">1975</a> | <a href="/1976">1976</a><br>
+<a href="/1977">1977</a> | <a href="/1978">1978</a> | <a href="/1979">1979</a> | <a href="/1980">1980</a><br>
+<a href="/1981">1981</a> | <a href="/1982">1982</a> | <a href="/1983">1983</a> | <a href="/1984">1984</a><br>
+<a href="/1985">1985</a> | <a href="/1986">1986</a> | <a href="/1987">1987</a> | <a href="/1988">1988</a><br>
+<a href="/1989">1989</a> | <a href="/1990">1990</a> | <a href="/1991">1991</a> | <a href="/1992">1992</a><br>
+<a href="/1993">1993</a> | <a href="/1994">1994</a> | <a href="/1995">1995</a> | <a href="/1996">1996</a><br>
+<a href="/1997">1997</a> | <a href="/1998">1998</a> | <a href="/1999">1999</a> | <a href="/2000">2000</a><br>
+<a href="/2001">2001</a> | <a href="/2002">2002</a> | <a href="/2003">2003</a> | <a href="/2004">2004</a><br>
+<a href="/2005">2005</a> | <a href="/2006">2006</a> | <a href="/2007">2007</a> | <a href="/2008">2008</a><br>
+<a href="/2009">2009</a> | <a href="/2010">2010</a> | <a href="/2011">2011</a> | <a href="/2012">2012</a><br>
+<a href="/2013">2013</a> | <a href="/2014">2014</a> | <a href="/2015">2015</a> | <a href="/2016">2016</a><br>
+<a href="/2017">2017</a> | <a href="/2018">2018</a> | <a href="/2019">2019</a> | <a href="/2020">2020</a><br>
+<a href="/2021">2021</a> | <a href="/2022">2022</a> | <a href="/2023">2023</a> | <a href="/2024">2024</a><br>
+<a href="/2025">2025</a> | <a href="/2026">2026</a></p>
+#+end_example
+
+fetching them individually, let our userscript make the consistency checks per year page and accumulate all the
+processed pages for display on the initial page below the new fetch button. Render another '⚡ Mismatches Only' button right to the 
+"Fetch All Gig Pages" button which when pressed, shows only the problem events for all the year pages at the same time
+
+** no git
+
+console log:
+
+#+begin_example
+[BruceBase] Script starting on http://brucebase.wikidot.com/
+[BruceBase] Detected HOME page
+[BruceBase] HOME: no gig-page links found
+#+end_example
+
 * question
 ** initial
 
