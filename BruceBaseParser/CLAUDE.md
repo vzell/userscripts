@@ -11,6 +11,7 @@ page types and surfacing discrepancies with inline glyphs and hover tooltips.
 
 | Page type        | URL pattern                          | `@include` regex |
 |------------------|--------------------------------------|------------------|
+| HOME page        | `/` or `/start`                      | `(start)?$` (group optional) |
 | YEAR page        | `/YYYY`                              | `\d{4}$` |
 | YEAR LIST page   | `/YYYY-list`                         | `\d{4}-list$` |
 | DETAIL page      | `/type:YYYY-MM-DD-slug`              | `(gig\|nogig\|recording\|…):` |
@@ -24,9 +25,10 @@ Known event types (anything else gets a ❓ glyph):
 
 ```
 location.pathname
-  → /YYYY        → runYearPage()
-  → /YYYY-list   → runListPage(year)
-  → /type:…      → runDetailPage()
+  → ''  / 'start' → runHomePage()
+  → /YYYY          → runYearPage()
+  → /YYYY-list     → runListPage(year)
+  → /type:…        → runDetailPage()
 ```
 
 `addStyles()` and `createTooltipElement()` always run first.
@@ -35,26 +37,60 @@ location.pathname
 
 ## YEAR page mode (`runYearPage`)
 
+### Confirmed DOM structure (brucebase wikidot)
+
+```
+body#html-body > div#skrollr-body > div#container-wrap-wrap
+  > div#container-wrap > div#container
+    div#header                     ← sticky top:0 z:100
+    div#content-wrap
+      div#side-bar                 ← sticky top:--bb-header-h (float:left in wikidot CSS)
+      div#main-content
+        div#action-area-top
+        div#bb-sticky-bar          ← inserted by setupStickyBar(); sticky top:--bb-header-h z:90
+          div#page-title
+          div#bb-btn-container
+          p#bb-year-progress
+          div#bb-pre-events        ← icon legend, year heading, hidden jump-to-recent box
+        div#page-content
+          hr  ← first event separator (pre-HR nodes moved to sticky bar)
+          div.bb-section-processed × N
+```
+
+`#page-title` and `#page-content` are siblings inside `#main-content`.
+`#side-bar` and `#main-content` are siblings inside `#content-wrap`.
+
 ### Processing pipeline
 
-1. **Snapshot** `#page-content.innerHTML` (pre-processing, for global toggle).
-2. **`wrapYearSections(content)`** — wraps content between each consecutive pair
+1. **`hideJumpToRecentBox(content)`** — hides the wikidot-injected "Jump to most
+   recent show/event" `.list-pages-box` at top of `#page-content`.
+2. **Snapshot** `#page-content.innerHTML` (pre-processing, for global toggle).
+3. **`wrapYearSections(content)`** — wraps content between each consecutive pair
    of `<hr>` direct children into a `<div class="bb-section-processed">`.
    Serialises the original HTML as a plain string *before* moving nodes (not as
    a DOM clone) so that the snapshot cannot be found by `querySelectorAll` and
    accidentally re-processed.
-3. **`extractYearPageEvents()`** — scans all `<a href>` in `#page-content`,
+4. **`extractYearPageEvents(content)`** — scans all `<a href>` in `content`,
    matches `EVENT_URL_RE = /\/([a-z]+):\d{4}-\d{2}-\d{2}/`, and for each hit:
    - finds the last preceding `<a name="…">` anchor (DDMMYY format, may carry a
      letter suffix e.g. `150571a` for the first of two events on the same day)
    - finds the next following anchor (end boundary)
    - calls `collectSetlistElements(eventLink, nextAnchor, content)` to collect
      `<p>` and `<blockquote>` elements between the two anchors
-4. **`processYearEvents(events)`** — batches 3 events at a time with 500 ms
-   between batches; each calls `processOneYearEvent(event)`.
-5. After all events: **`insertGlobalToggle`**, **`insertMismatchFilterToggle`**,
-   and **`insertSectionToggle`** for each wrapped section (all inserted in that
-   order; global toggle and mismatch filter render side by side after `#page-title`).
+5. **Create buttons + progress element** — `#bb-btn-container` with
+   `#bb-global-toggle` and `#bb-mismatch-toggle` (both `disabled`);
+   `#bb-year-progress` with `#bb-year-timer` span.
+6. **`setupStickyBar(content, pageTitle, btnContainer, progressEl)`** — inserts
+   `#bb-sticky-bar` where `#page-title` was, moves `#page-title`, buttons,
+   progress, and all `#page-content` children before the first `<hr>` (icon
+   legend, year heading, hidden jump-to-recent box) into it; strips `<br>`
+   from the pre-HR area; measures `#header` height and sets `--bb-header-h`.
+7. **`processYearEvents(events, onProgress)`** — batches 3 events at a time with
+   500 ms between batches; `onProgress(idx, name, total)` updates progress text
+   to `MM:SS ... Processing event "NNN / TT: title"`.
+8. After all events: **`setupGlobalToggle(btn, content, originalHtml)`** and
+   **`setupMismatchFilter(btn)`** wire up click handlers and enable the buttons;
+   **`insertSectionToggle`** for each wrapped section.
 
 ### `collectSetlistElements` filter rules
 
@@ -150,16 +186,21 @@ and a word-level diff. Hover over `.bb-para-warn` shows `showErrorTooltip()`.
 
 ### Toggle controls (YEAR page only)
 
-The three buttons are inserted in order after `#page-title` and render side by side:
+Buttons live inside `#bb-sticky-bar` (pinned below `#header` while scrolling).
+Both global buttons start `disabled` and are enabled after `processYearEvents` completes.
 
-**Global toggle** (`#bb-global-toggle`, first button):
-- `insertGlobalToggle(content, originalHtml)` creates `<div id="bb-page-original">`
-  with the pre-processing HTML, inserted as a sibling of `#page-content`.
+**Button container** (`#bb-btn-container`):
+- Flex div inside `#bb-sticky-bar`, holds both global buttons side by side.
+
+**Global toggle** (`#bb-global-toggle`):
+- `setupGlobalToggle(btn, content, originalHtml)` — button already exists in the
+  container; this function creates `<div id="bb-page-original">` with the
+  pre-processing HTML as a sibling of `#page-content`, then wires the click handler.
 - Toggle alternates `display: block / none` on the two divs.
 - `#page-content` is never replaced, so all event listeners survive.
 
-**Mismatch filter** (`#bb-mismatch-toggle`, second button):
-- `insertMismatchFilterToggle()` inserts after `#bb-global-toggle`.
+**Mismatch filter** (`#bb-mismatch-toggle`):
+- `setupMismatchFilter(btn)` — wires the click handler onto the pre-existing button.
 - On click calls `applyMismatchFilter(active)`.
 - Each `.bb-section-processed` div wraps exactly one event (one `<hr>` per
   event on YEAR pages; `<a name>` anchors are inside `<p>` children, not direct
@@ -179,6 +220,28 @@ The three buttons are inserted in order after `#page-title` and render side by s
   `querySelectorAll` during event extraction never finds the cloned `<a>` links
   inside it (which would cause duplicate processing and destroy the diff).
 - Toggle alternates `display: block / none` between the two sibling divs.
+
+---
+
+## HOME page mode (`runHomePage`)
+
+Runs on `http://brucebase.wikidot.com/` and `/start`.
+
+1. **`extractGigPageSlugs()`** — scans all `a[href]` in `#page-content` for the
+   pattern `/YYYY-list` (or `/YYYY-MM-list`), strips the `-list` suffix, deduplicates,
+   and returns the ordered slug list (e.g. `['1949-64', '1965', …, '2026']`).
+2. Inserts "Fetch All Gig Pages" button and disabled "⚡ Mismatches Only" filter
+   button after `#page-title`, plus a progress line and timer element below.
+3. On button click: iterates slugs in order, calls **`fetchAndProcessYear(slug, resultsEl, onProgress)`**
+   for each — fetches the YEAR page, injects content into a `div.bb-year-wrapper`
+   appended to `#bb-home-results`, runs `wrapYearSections` + `extractYearPageEvents`
+   + `processYearEvents` on the injected wrapper, inserts per-section toggles.
+4. On completion: enables the filter button; `applyMismatchFilter` works across all
+   injected `.bb-section-processed` divs in the document.
+
+Note: injecting into the live DOM before calling the processing pipeline is required
+because `document.createElement`, `element.after()`, etc. need the target nodes to be
+in the current document.
 
 ---
 
@@ -239,11 +302,16 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 | Function | Purpose |
 |---|---|
 | `fetchPage(url)` | `GM_xmlhttpRequest` wrapper; returns a `DOMParser` document |
+| `fmtElapsed(ms)` | Returns fixed-width `MM:SS` string (zero-padded minutes and seconds) |
 | `extractDetailEventName(doc, url)` | `#page-title` → `h1.page-title` → `h1` → `<title>` |
-| `normalizeDetailName(name)` | `(The)`/`(Le)` rewrite + `YYYY-MM-DD - VENUE` uppercase |
+| `normalizeDetailName(name)` | `(The)`/`(Le)`/`(De)` rewrite + `YYYY-MM-DD - VENUE` uppercase |
 | `cleanSongName(text)` | Strips any parenthetical containing a lowercase letter: `(with …)`, `(x3)`, `(parts)`, `(acoustic)` etc.; preserves all-caps qualifiers like `(41 SHOTS)` |
 | `textWithoutSup(el)` | Clones el, removes all `<sup>` children, returns `.textContent`; used to exclude footnote text from prose filtering and song-name parsing |
 | `getSetlistContainer(doc)` | Returns `#wiki-tab-0-1 td` → `#wiki-tab-0-1` → `#page-content` (three-level fallback for pages without a tab widget) |
+| `hideJumpToRecentBox(content)` | Hides the wikidot-injected `.list-pages-box` containing "most recent" text at top of YEAR pages |
+| `setupStickyBar(content, pageTitle, btnContainer, progressEl)` | Creates `#bb-sticky-bar`, moves `#page-title` + buttons + progress + pre-HR content into it, sets `--bb-header-h` CSS var |
+| `setupGlobalToggle(btn, content, originalHtml)` | Wires click handler on pre-existing `#bb-global-toggle`; creates hidden `#bb-page-original` div |
+| `setupMismatchFilter(btn)` | Wires click handler on pre-existing `#bb-mismatch-toggle` |
 | `addParaStructureWarning(el)` | Appends a `<span class="bb-para-warn">⚠️</span>` with tooltip to a `<p>`-based song element on DETAIL pages |
 | `buildDiffHtml(a, b)` | Token-level diff on whitespace/comma splits (for name tooltips) |
 | `buildCharDiffHtml(a, b)` | Char-level LCS diff; shows year song chars with red/green spans |
@@ -252,6 +320,16 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 | `editDistance(a, b)` | Standard O(mn) Levenshtein |
 | `esc(str)` | HTML-escapes `& < > "` |
 | `delay(ms)` | `Promise`-based sleep |
+
+### CSS layout notes
+
+- **Do not** add `overflow-y`/`max-height` to `#side-bar` — these shrink the sidebar
+  content area (the scrollbar takes ~17px), causing year-link lines to break.
+  `position: sticky` alone is sufficient for sidebar visibility.
+- `scrollbar-gutter: stable` makes content permanently narrower even with no scrollbar —
+  avoid it on the sidebar.
+- `--bb-header-h` CSS custom property is set by `setupStickyBar` on YEAR pages; defaults
+  to `0px` on other page types via `:root { --bb-header-h: 0px; }`.
 
 ---
 

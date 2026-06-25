@@ -53,7 +53,7 @@ At merge time (on `main`):
 
 ## Mandatory conventions — apply to every change
 
-- Bump `// @version` in the `==UserScript==` header. Format: `M.MM.NNN+YYYY-MM-DD`
+- Bump `// @version` in the `==UserScript==` header. Format: `M.NN` (e.g. `1.32`)
 - Add a changelog entry to `<project>_CHANGELOG.json` in the same session
 - 4-space indentation, no tabs, no trailing whitespace
 - All functions must have JSDoc `/** … */` blocks
