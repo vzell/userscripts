@@ -626,6 +626,11 @@
             if (item.type !== 'detail-only') item.rawYearSong = yearRawFlat[yp++];
             if (item.type !== 'year-only')   item.paragraphBased = detailParaFlat[dp++];
           }
+          // Annotate each year section with the corresponding detail section label
+          // (by position) so renderSetlistElement can flag label mismatches.
+          yearSections.forEach((sec, i) => {
+            sec.detailLabel = i < detailSections.length ? detailSections[i].label : null;
+          });
           renderYearSetlist(yearSections, diffItems);
         }
       }
@@ -657,10 +662,12 @@
       }
     }
 
-    yearSections.forEach((sec, sIdx) => renderSetlistElement(sec.sourceEl, sec.label, sectionItems[sIdx]));
+    yearSections.forEach((sec, sIdx) => renderSetlistElement(sec.sourceEl, sec.label, sectionItems[sIdx], sec.detailLabel));
   }
 
-  function renderSetlistElement(el, label, items) {
+  // detailLabel: the corresponding detail section label (original case), or null if
+  // the detail page has no section at this index, or undefined if not applicable.
+  function renderSetlistElement(el, label, items, detailLabel) {
     let html    = '';
     let isFirst = true;
 
@@ -669,6 +676,19 @@
       html += '<span class="bb-section-label">Soundcheck: </span>';
     } else if (labelLc !== 'show' && labelLc !== 'recording') {
       html += `<span class="bb-section-label">${esc(label)}: </span>`;
+    }
+
+    // Section-label mismatch warning (YEAR page mode only, when detailLabel is set)
+    if (detailLabel !== undefined) {
+      let labelWarnMsg = null;
+      if (detailLabel === null) {
+        labelWarnMsg = `Section "${label}" exists on YEAR page but DETAIL page has no corresponding section`;
+      } else if (labelLc !== detailLabel.toLowerCase()) {
+        labelWarnMsg = `Section label mismatch: YEAR page has "${label}", DETAIL page has "${detailLabel}"`;
+      }
+      if (labelWarnMsg) {
+        html += `<span class="bb-section-label-warn bb-para-warn" data-msg="${esc(labelWarnMsg)}">⚠️</span> `;
+      }
     }
 
     for (const item of items) {
@@ -778,7 +798,50 @@
     const originalTdHtml = td ? td.innerHTML : '';
 
     renderDetailSetlist(diffItems);
+    flagDetailSectionHeaders(yearSections, detailSections);
     insertDetailToggle(originalTdHtml);
+  }
+
+  // Appends a ⚠️ warning to <p><strong>…</strong></p> section-header elements
+  // on the DETAIL page when their label does not match the corresponding YEAR
+  // section label (matched by position).  Also flags any DETAIL headers that have
+  // no counterpart on the YEAR page at all (point 2: YEAR has only an implicit
+  // "show" section, so DETAIL headers are unexpected).
+  function flagDetailSectionHeaders(yearSections, detailSections) {
+    const td = getSetlistContainer(document);
+    if (!td) return;
+
+    // Collect all section-header <p> elements: those whose full text content
+    // equals the text of their sole <strong> child (i.e. a pure label line).
+    const headerEls = [...td.children].filter(el => {
+      if (el.tagName !== 'P') return false;
+      const strong = el.querySelector('strong');
+      return strong && el.textContent.trim() === strong.textContent.trim();
+    });
+    if (headerEls.length === 0) return;
+
+    headerEls.forEach((el, i) => {
+      const strong = el.querySelector('strong');
+      const detailLabel = strong.textContent.trim();
+      const yearSec = yearSections[i];
+
+      let msg = null;
+      if (!yearSec) {
+        msg = `DETAIL page has section "${detailLabel}" but YEAR page has no corresponding section`;
+      } else if (yearSec.label.toLowerCase() !== detailLabel.toLowerCase()) {
+        msg = `Section label mismatch: YEAR page has "${yearSec.label}", DETAIL page has "${detailLabel}"`;
+      }
+
+      if (msg) {
+        const warn = document.createElement('span');
+        warn.className = 'bb-para-warn';
+        warn.textContent = ' ⚠️';
+        warn.dataset.msg = msg;
+        warn.addEventListener('mouseenter', e => showErrorTooltip(e, warn.dataset.msg));
+        warn.addEventListener('mouseleave', hideTooltip);
+        el.appendChild(warn);
+      }
+    });
   }
 
   // "gig:2003-09-14-..." → { year: "2003" }  (anchor no longer needed)
@@ -934,7 +997,7 @@
         const strong = child.querySelector('strong');
         if (strong && child.textContent.trim() === strong.textContent.trim()) {
           flushPending();
-          currentLabel = strong.textContent.trim().toLowerCase();
+          currentLabel = strong.textContent.trim();  // original case preserved for mismatch messages
         } else {
           // Old-style setlist: song link in a bare <p>
           const links = [...child.querySelectorAll('a[href^="/song:"]')];
