@@ -128,18 +128,24 @@
     });
   }
 
-  // Parses the "Gig Pages" navigation block on the home page and returns an
-  // ordered list of year page slugs (e.g. ['1949-64', '1965', …, '2026']).
+  // Scans #page-content for links to YEAR-LIST pages (/YYYY-list, /1949-64-list)
+  // and returns the corresponding YEAR page slugs in document order.
   function extractGigPageSlugs() {
-    for (const p of document.querySelectorAll('#page-content p')) {
-      const strong = p.querySelector('strong');
-      if (strong && strong.textContent.trim() === 'Gig Pages') {
-        return [...p.querySelectorAll('a[href]')]
-          .map(a => a.getAttribute('href').replace(/^\//, ''))
-          .filter(s => /^\d{4}$/.test(s) || s === '1949-64');
+    const seen  = new Set();
+    const slugs = [];
+    for (const a of document.querySelectorAll('#page-content a[href]')) {
+      const href = a.getAttribute('href') || '';
+      // Match /YYYY-list or /1949-64-list; longer alternative first to avoid
+      // /1949-64-list matching only /1949 before the -64 part.
+      const m = href.match(/^\/((?:\d{4}-\d{2}|\d{4}))-list$/);
+      if (!m) continue;
+      const slug = m[1];
+      if (!seen.has(slug)) {
+        seen.add(slug);
+        slugs.push(slug);
       }
     }
-    return [];
+    return slugs;
   }
 
   // Fetches one year page, runs the full consistency-check pipeline on it, and
