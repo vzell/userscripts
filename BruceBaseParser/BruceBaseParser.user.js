@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.35
+// @version      1.36
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -600,8 +600,8 @@
         const slashIdx  = text.indexOf(' / ');
         const firstPart = slashIdx >= 0 ? text.slice(0, slashIdx) : text;
         const core      = firstPart
-          .replace(/^[^/:\n]+:\s*/, '')
-          .replace(/\s*\([^)]*[a-z][^)]*\)/g, '') // strip parentheticals with lowercase (with/xN/parts/…)
+          .replace(/^([^/:\n]+[^/:\n\d]):\s*/, '') // strip label prefix (e.g. "Encore:") but NOT time expressions like "3:07"
+          .replace(/\s*\([^)]*[a-z][^)]*\)/g, '')  // strip parentheticals with lowercase (with/xN/parts/…)
           .trim();
         if (!core || /[a-z]/.test(core)) continue;
       }
@@ -623,7 +623,7 @@
         text = inner ? textWithoutSup(inner) : textWithoutSup(el);
       } else {
         text = textWithoutSup(el);
-        const m = text.match(/^([^/:\n]+):\s*/);
+        const m = text.match(/^([^/:\n]+[^/:\n\d]):\s*/); // label must not end in digit ("Encore:" OK, "3:07" not)
         if (m) {
           label = m[1].trim();  // preserve original case ("With Garland Jeffreys")
           text  = text.slice(m[0].length);
@@ -634,7 +634,8 @@
         .map(s => s.trim())
         .filter(s => s.length > 0)
         .map(raw => ({ raw, clean: cleanSongName(raw) }))
-        .filter(p => p.clean.length > 0);
+        .filter(p => p.clean.length > 0)
+        .filter(p => !/[a-z]/.test(p.clean)); // prose tokens still containing lowercase are not song names
       const songs    = rawAndClean.map(p => p.clean);
       const rawSongs = rawAndClean.map(p => p.raw);
 

@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.36",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Prose notes containing a time value (e.g. 'Show length is 3:07.') were incorrectly parsed as setlist songs, causing the numeric part after the colon ('07') to be flagged as 'Only on YEAR page'. Fixed in three places: (1) the prose filter in collectSetlistElements no longer strips label prefixes whose text ends in a digit (so 'Show length is 3:07.' is no longer accidentally stripped to '07.' before the lowercase check); (2) parseYearSetlist's section-label regex now requires the character before the colon to not be a digit, preventing '3' from being treated as a section label; (3) song tokens that still contain lowercase letters after cleanSongName are discarded, since all real song names on brucebase are in ALL CAPS."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.35",
         "date": "2026-06-25",
         "sections": [
