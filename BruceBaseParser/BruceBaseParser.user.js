@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.26
+// @version      1.27
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -9,7 +9,7 @@
 // @supportURL   https://github.com/vzell/userscripts/issues
 // @downloadURL  https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser.user.js
 // @updateURL    https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser.user.js
-// @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64)$/
+// @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64|start)?$/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
@@ -37,11 +37,15 @@
   createTooltipElement();
 
   const path        = location.pathname.replace(/^\//, '');
+  const isHomePage   = path === '' || path === 'start';
   const isListPage   = /^\d{4}-list$/.test(path);
   const isYearPage   = /^\d{4}$/.test(path) || path === '1949-64';
   const isDetailPage = DETAIL_TYPE_RE.test(path);
 
-  if (isListPage) {
+  if (isHomePage) {
+    log('Detected HOME page');
+    await runHomePage();
+  } else if (isListPage) {
     log('Detected YEAR OVERVIEW (list) page');
     await runListPage(path.replace('-list', ''));
   } else if (isYearPage) {
@@ -52,6 +56,147 @@
     await runDetailPage();
   } else {
     logWarn('Unrecognized page type for path:', path);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // HOME PAGE MODE
+  // ════════════════════════════════════════════════════════════════════════════
+
+  async function runHomePage() {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+
+    const slugs = extractGigPageSlugs();
+    if (slugs.length === 0) { logWarn('HOME: no gig-page links found'); return; }
+    log(`HOME: found ${slugs.length} year page slug(s)`);
+
+    // ── Buttons ─────────────────────────────────────────────────────────────
+    const fetchBtn = document.createElement('button');
+    fetchBtn.id = 'bb-fetch-all-btn';
+    fetchBtn.className = 'bb-toggle-btn';
+    fetchBtn.textContent = 'Fetch All Gig Pages';
+
+    const filterBtn = document.createElement('button');
+    filterBtn.id = 'bb-home-mismatch-toggle';
+    filterBtn.className = 'bb-toggle-btn';
+    filterBtn.textContent = '⚡ Mismatches Only';
+    filterBtn.disabled = true;
+
+    // Inserting after pageTitle in reverse order places fetchBtn left, filterBtn right
+    pageTitle.after(filterBtn);
+    pageTitle.after(fetchBtn);
+
+    // ── Progress + results container ────────────────────────────────────────
+    const progressEl = document.createElement('p');
+    progressEl.id = 'bb-fetch-progress';
+
+    const resultsEl = document.createElement('div');
+    resultsEl.id = 'bb-home-results';
+
+    filterBtn.after(progressEl);
+    progressEl.after(resultsEl);
+
+    // ── Fetch handler ────────────────────────────────────────────────────────
+    let fetching = false;
+    fetchBtn.addEventListener('click', async () => {
+      if (fetching) return;
+      fetching = true;
+      fetchBtn.disabled = true;
+      fetchBtn.textContent = 'Fetching…';
+      filterBtn.disabled = true;
+      resultsEl.innerHTML = '';
+
+      for (let i = 0; i < slugs.length; i++) {
+        progressEl.textContent = `${slugs[i]}  (${i + 1} / ${slugs.length})`;
+        await fetchAndProcessYear(slugs[i], resultsEl,
+          msg => { progressEl.textContent = msg; });
+      }
+
+      progressEl.textContent = `Done — ${slugs.length} year pages processed.`;
+      fetchBtn.textContent = 'Fetch All Gig Pages';
+      fetchBtn.disabled = false;
+      filterBtn.disabled = false;
+      fetching = false;
+    });
+
+    // ── Cross-year mismatch filter ───────────────────────────────────────────
+    let filterActive = false;
+    filterBtn.addEventListener('click', () => {
+      filterActive = !filterActive;
+      filterBtn.textContent = filterActive ? '⚡ All Events' : '⚡ Mismatches Only';
+      applyMismatchFilter(filterActive);
+    });
+  }
+
+  // Parses the "Gig Pages" navigation block on the home page and returns an
+  // ordered list of year page slugs (e.g. ['1949-64', '1965', …, '2026']).
+  function extractGigPageSlugs() {
+    for (const p of document.querySelectorAll('#page-content p')) {
+      const strong = p.querySelector('strong');
+      if (strong && strong.textContent.trim() === 'Gig Pages') {
+        return [...p.querySelectorAll('a[href]')]
+          .map(a => a.getAttribute('href').replace(/^\//, ''))
+          .filter(s => /^\d{4}$/.test(s) || s === '1949-64');
+      }
+    }
+    return [];
+  }
+
+  // Fetches one year page, runs the full consistency-check pipeline on it, and
+  // appends a year header + processed content block to resultsEl.
+  // All existing helpers (wrapYearSections, extractYearPageEvents, processYearEvents,
+  // insertSectionToggle) work unchanged because the year content is injected into
+  // the live home-page DOM before any helper is called.
+  async function fetchAndProcessYear(slug, resultsEl, onProgress) {
+    const url = `${location.protocol}//${location.host}/${slug}`;
+    onProgress(`Fetching ${slug}…`);
+
+    let yearDoc;
+    try {
+      yearDoc = await fetchPage(url);
+    } catch (e) {
+      logErr(`Failed to fetch ${slug}:`, e.message);
+      const errEl = document.createElement('p');
+      errEl.style.color = '#c00';
+      errEl.textContent = `⚠️ ${slug}: ${e.message}`;
+      resultsEl.appendChild(errEl);
+      return;
+    }
+
+    const yearContent = yearDoc.querySelector('#page-content');
+    if (!yearContent) {
+      logWarn(`${slug}: no #page-content found in fetched document`);
+      return;
+    }
+
+    // Year header with link to the live year page
+    const header = document.createElement('h3');
+    header.className = 'bb-year-header';
+    header.innerHTML = `<a href="/${slug}" target="_blank">${esc(slug)}</a>`;
+    resultsEl.appendChild(header);
+
+    // Inject year-page markup into the live home-page DOM so that all
+    // DOM helpers (addYearGlyph, renderYearSetlist, makeGlyphSpan, …) operate
+    // on elements that belong to the current document.
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bb-year-wrapper';
+    wrapper.dataset.year = slug;
+    wrapper.innerHTML = yearContent.innerHTML;
+    resultsEl.appendChild(wrapper);
+
+    onProgress(`Processing ${slug}…`);
+
+    const sections = wrapYearSections(wrapper);
+    const events   = extractYearPageEvents(wrapper);
+    log(`  ${slug}: ${events.length} event(s)`);
+
+    if (events.length === 0) return;
+
+    await processYearEvents(events);
+
+    sections.forEach(({ hr, processedDiv, sectionOriginalHtml }) =>
+      insertSectionToggle(hr, processedDiv, sectionOriginalHtml)
+    );
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -68,7 +213,7 @@
     const sections = wrapYearSections(content);
     log(`Wrapped ${sections.length} year section(s) for toggling`);
 
-    const events = extractYearPageEvents();
+    const events = extractYearPageEvents(content);
     log(`Found ${events.length} event link(s)`);
     if (events.length === 0) {
       logWarn('No event links found — check selector / page structure');
@@ -270,8 +415,7 @@
     pageTitle.after(btn);
   }
 
-  function extractYearPageEvents() {
-    const content    = document.querySelector('#page-content') || document.body;
+  function extractYearPageEvents(content) {
     const allLinks   = [...content.querySelectorAll('a[href]')];
     const allAnchors = [...content.querySelectorAll('a[name]')];
     log(`Scanning content: ${allLinks.length} links, ${allAnchors.length} named anchors`);
@@ -1295,6 +1439,21 @@
       .bb-toggle-btn:hover { background: #357abd; }
       #bb-global-toggle { margin: 6px 6px 2px 0; }
       .bb-section-toggle { margin-left: 0; }
+      #bb-fetch-all-btn { margin: 6px 6px 2px 0; }
+      .bb-toggle-btn:disabled { opacity: 0.5; cursor: default; }
+
+      /* Home page: year section headers and fetch progress */
+      .bb-year-header {
+        font-size: 1.1em;
+        font-weight: bold;
+        margin: 1.4em 0 0.3em;
+        padding: 3px 8px;
+        background: #e8f0fb;
+        border-left: 4px solid #4a90d9;
+      }
+      .bb-year-header a { color: inherit; text-decoration: none; }
+      .bb-year-header a:hover { text-decoration: underline; }
+      #bb-fetch-progress { color: #666; font-style: italic; margin: 4px 0; }
 
       /* Setlist song states */
       .bb-song-match       { color: #2a2; }

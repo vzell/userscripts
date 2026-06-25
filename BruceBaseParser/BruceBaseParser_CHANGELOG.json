@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.27",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Add 'Fetch All Gig Pages' button on the brucebase home page (brucebase.wikidot.com/). When pressed, iterates over every year page listed in the 'Gig Pages' navigation block (1949-64, 1965–2026), fetches each one, runs the full consistency-check pipeline (event-name ✅/❌ glyphs and setlist colour-coding), and renders the accumulated results below the button. A companion '⚡ Mismatches Only' filter button hides clean events across all years simultaneously. Extended @include to match the home page URL (/start or empty path). Refactored extractYearPageEvents() to accept a content element parameter so the same function works on both the live YEAR page DOM and injected year content on the home page."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.26",
         "date": "2026-06-25",
         "sections": [
