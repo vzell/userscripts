@@ -303,7 +303,7 @@ should be ignored when parsing the setlist, but still renderd after script execu
 
 When comparing event names on the YEAR pages and the corresponding DETAIL pages, we currently have the rule:
 
-- the "(The)" in front of a "," on the DETAIL page should be treated as being right after the date (which additionally should get a " - " added)
+- the "(The)" and in front of a "," on the DETAIL page should be treated as being right after the date (which additionally should get a " - " added)
 
 Also treate the "(Le)" the same, so "1967-12-27 - LE TEENDEZVOUS, NEW SHREWSBURY, NJ" on a YEAR page should be treated equal to "1967-12-27 Teendezvous (Le), New Shrewsbury, NJ" on a DETAIL page
 
@@ -482,9 +482,335 @@ console log:
 [BruceBase] HOME: no gig-page links found
 #+end_example
 
-** time counter
+** DONE time counter
 
 Also display a timing counter and after fetching all pages the total amount of time it took for fetching and processing after the processing indicator
+
+** DONE mismatches
+
+1.)
+
+YEAR entry page http://brucebase.wikidot.com/1988#030588 has the following colon-suffixed string before setlist entries
+
+#+begin_example
+Soundcheck:
+Pre-show:
+#+end_example
+
+On the DETAIL page they are named:
+
+#+begin_example
+Soundcheck
+Pre-Set
+Show
+#+end_example
+
+in the following types of containers, e.g. just before the unorderd/ordered list entries of all the songs 
+
+#+begin_example
+<p><strong>Soundcheck</strong></p>
+#+end_example
+
+2.)
+
+If on a YEAR page an event entry has no colon-suffixed string before setlist entries, it's implicitly assumed to be
+either a "show/recording list", so the DETAIL page should never have a "<p><strong>" container before the list entries.
+
+3.)
+
+I want the "<p><strong>" container flagged with a ⚠️ warning symbol plus tooltip if there are mismatches like in the above example:
+
+"Pre-show:" on the YEAR page and "Pre-Set" on the DETAIL page should be flagged 
+
+** DONE bugs
+
+some bugs:
+
+1.)
+
+YEAR entry page http://brucebase.wikidot.com/2026#170126 has "with Willie Nile:", the "with" is lowercased, and the DETAIL page has "With Willie Nile:",
+these should both be flagged on YEAR and DEATIL page
+
+2.)
+
+Recording sessions on YEAR pages are always inside a "<blockquote>", e.g. on the initial http://brucebase.wikidot.com/2003#191103
+
+#+begin_example
+<blockquote>
+<p>CAN'T TEACH AN OLD DOG NEW TRICKS</p>
+</blockquote>
+#+end_example
+
+but it got flagged with
+
+#+begin_example
+<blockquote><span class="bb-section-label-warn bb-para-warn" data-msg="Section label mismatch: YEAR page has &quot;recording&quot;, DETAIL page has &quot;show&quot;">⚠️</span> <span class="bb-song-match">PINK CADILLAC</span></blockquote>
+#+end_example
+
+This is actually OK, and should NOT be flagged, as the recording session songs on the DETAIL page always look like a "show" 
+
+3.)
+
+When comparing event names on the YEAR pages and the corresponding DETAIL pages, we currently have the rule:
+
+- the "(The)" and "(Le)" in front of a "," on the DETAIL page should be treated as being right after the date (which additionally should get a " - " added)
+
+Also treate the "(De)" the same
+
+** DONE only on first entry
+
+#+begin_example
+<div class="list-pages-box">    <div class="list-pages-item">
+
+
+<table style="width:40%;margin-right:auto;margin-left:auto;vertical-align:top;">
+<tbody><tr>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Photo-32.png" title="Photos" alt="00Photo-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Ticket-32.png" title="Tickets" alt="00Ticket-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Setlist-32.png" title="Setlists" alt="00Setlist-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Story-32.png" title="Storyteller Transcripts" alt="00Story-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00News-32.png" title="News-articles" alt="00News-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Box-32.png" title="Memorabilia, Pass, Posters, etc." alt="00Box-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Eye-32.png" title="Eyewitness Reports" alt="00Eye-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Video-32.png" title="Video Footage" alt="00Video-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Audio-32.png" title="Audio Samples" alt="00Audio-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Bootleg-32.png" title="Audio / Video Bootleg" alt="00Bootleg-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Recording-32.png" title="Official Live Download" alt="00Recording-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Retail-32.png" title="Official Retail/Promo Release" alt="00Retail-32.png" class="image"></a></div>
+</td>
+<td>
+<div class="image-container aligncenter"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Star-32.png" title="Featured Pages" alt="00Star-32.png" class="image"></a></div>
+</td>
+</tr>
+<tr>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/gallery">Photos</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/stats:scans-ticket">Tickets</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/stats:scans-setlist">Setlists</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/storyteller">Storyteller Transcripts</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/stats:news-items">News-articles</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/gallery">Memorabilia</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/eyewitness-reports">Eyewitness Reports</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a target="_blank" href="https://www.youtube.com/brucebasewiki">Video Footage</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/stats:audio-samples">Audio Samples</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/stats:for-collectors">Bootleg Exists</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/stats:official-live-downloads">Official Live Downloads</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/stats:discography">Official Retail/Promo Release</a></span></td>
+<td style="text-align:center;vertical-align:top;"><span style="font-size:65%;"><a href="/featured-pages">Featured Pages</a></span></td>
+</tr>
+</tbody></table>
+</div>
+    
+    
+    
+    </div>
+#+end_example
+
+#+begin_example
+<div style="text-align: right;"><span style="font-size:80%;"><div class="list-pages-box">    <div class="list-pages-item">
+
+
+<p>Jump to the <a href="/2026#180626">most recent</a> show/event, or view the <a href="/stats:tour-statistics">tour statistics</a>.</p>
+</div>
+    
+    
+    
+    </div></span></div>
+#+end_example
+
+** DONE stickiness
+** don't flag inside of event notes
+
+http://brucebase.wikidot.com/1969#020469
+
+** DONE timing per YEAR page
+
+1.)
+
+Put the following two buttons in a special surrounding button container (there will eventually be more)
+
+#+begin_example
+<button id="bb-global-toggle" class="bb-toggle-btn">⇄ Show Original Page</button>
+<button id="bb-mismatch-toggle" class="bb-toggle-btn">⚡ Mismatches Only</button>
+#+end_example
+
+2.)
+
+The two buttons should always be displayed when userscript processing begins but greyed out as long as processing hasn't finshed yet
+
+3.)
+
+Add a processing indicator below our new button container with the following features:
+
+- Display: 'Processing event "<event number> - <event title> / <total number of events on YEAR page> ... <timing counter>'
+- the timing counter should display the total amount of time it took for processing when finished
+
+4.)
+
+don't display the following container at the top of the final rendered page 
+
+#+begin_example
+<div style="text-align: right;"><span style="font-size:80%;"><div class="list-pages-box">    <div class="list-pages-item">
+<p>Jump to the <a href="/2026#180626">most recent</a> show/event, or view the <a href="/stats:tour-statistics">tour statistics</a>.</p>
+</div>
+</div></span></div>
+#+end_example
+
+** DONE sticky
+
+1.)
+
+Change the processing event info to the following format:
+
+#+begin_example
+'<timing counter, in fixed width format> ... Processing event "<event number, 3 digits> / <total number of events on YEAR page>: <event title>'
+#+end_example
+
+2.)
+
+Read and parse the following http://brucebase.wikidot.com/2012 completely to get a complete picture what needs to be done
+
+Implement STICKYNESS inside the '<div id="main-content">'
+
+Make the '<div id="header">', the '<div id="page-title">', our button container '<div id="bb-btn-container">'
+and from there everything up to the first "<hr>" right before the first event on the YEAR page sticky.
+
+So when scrolling the event list, that part is always visible
+
+3.)
+
+The '<div id="side-bar">' should always be visible too
+
+** DONE bug
+
+Scrolling works OK. Still some bugs so:
+
+1.)
+
+- The side-bar now got a vertical scrollbar on the right, but that's OK.
+- The side bar is a little bit to narrow, before a line under the "<strong>Gig Pages</strong>" header looked like
+
+#+begin_example
+1965 | 1966 | 1967 | 1968
+#+end_example
+
+now it breaks
+
+#+begin_example
+1965 | 1966 | 1967 |
+1968
+#+end_example
+
+2.)
+
+The two "<br>" in
+
+#+begin_example
+<span style="font-size:200%;"><br>2012<br></span>
+#+end_example
+
+on the final rendered page should be removed to gain some real estate
+
+** DONE Early/Late should be warnings
+** DONE Show length is 3:01.
+
+On http://brucebase.wikidot.com/1985#230385
+the "07" in "3:07" in the event text
+
+#+begin_example
+Concert noted in Charles Cross's Backstreets - The Man And His Music as having "Darkness On The Edge Of Town" in the first set. "Johnny Bye-Bye" includes the "Mystery Train" outro. "Growin' Up" features the bear story. First show of 1985 to include "Rosalita (Come Out Tonight)". First ever performances in Australia of "Darkness On The Edge Of Town", "The River", "Growin' Up", "Rosalita (Come Out Tonight)", "Twist And Shout", and "Do You Love Me". Most sources agree on this setlist which is also confirmed by a fan present at all five shows. Show length is 3:07.
+#+end_example
+
+is marked with a tooltip "Only on YEAR page ..."
+
+This should never happen
+
+** and/or - http://brucebase.wikidot.com/1983#180183
+
+On e.g. http://brucebase.wikidot.com/1983#180183 and the DETAIL page the lowercase ", and/or" inside the
+
+#+begin_example
+DON'T BACK DOWN, DON'T BACK DOWN ON OUR LOVE, and/or BLACK MOUNTAIN BALLAD / SUGARLAND
+#+end_example
+
+should never be used in song title comparisons, but still be rendered in the original color  
+
+** DONE (de)
+
+When comparing event names on the YEAR pages and the corresponding DETAIL pages, we currently have the rule:
+
+- the "(The)" and "(Le)" in front of a "," on the DETAIL page should be treated as being right after the date (which additionally should get a " - " added)
+
+Also treate the "(De)" the same
+
+** DONE render event type in brackets after the event name
+
+1.)
+
+In both the YEAR and DETAILS pages render the event type e.g. "gig" or "interview" in brackets after the event
+name. Currently it's only available inside the tooltip when event names do not match.
+
+So for example on the YEAR page http://brucebase.wikidot.com/2012#121212
+
+it should look like
+
+#+begin_example
+2012-12-12 - MADISON SQUARE GARDEN, NEW YORK CITY, NY (gig)
+#+end_example
+
+"(gig)" should NOT be in bold
+
+and on the DETAIL page it should look like
+
+#+begin_example
+2012-12-12 Madison Square Garden, New York City, NY (gig)
+#+end_example
+
+"(gig)" should be in a smaller font than the event name
+
+2.)
+
+on a YEAR entry like http://brucebase.wikidot.com/1971#080171a flag the event name with a ⚠️ warning symbol instead of
+the '<span class="bb-glyph"> ❌</span>' if the event names differ only by "(Early)" or "(Late)" at the event name on the
+DETAIL page and adjust the coloring also in the tooltip
+
+3.)
+
+When event names differ, also add the corresponding ⚠️ warning symbol or ❌ glyph also on the DETAIL page
+
+** DONE Afternoon, Evening
+
+1.)
+
+The special handling for "(Early)" and "(Late)" should be extended to "Afternoon" and "Evening"
+
+2.)
+
+why does e.g the following DETAIL page http://brucebase.wikidot.com/gig:1971-01-08-upstage-asbury-park-nj-early not have the comparison glyph at the end of the event name
+
+
 
 * question
 ** initial
@@ -508,7 +834,6 @@ I have the following directory
 I started with a git repo in "BruceBaseParser", but decided to move the whole repo one level up to userscripts.
 I want to get rid of the .git folder in BruceBaseParser and instead have the whole git history under userscripts.
 Eventually there will be other Parsers later. Is this possible
-
 
 * Step-by-step
 ** Back up first (just in case)
