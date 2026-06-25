@@ -482,6 +482,10 @@ console log:
 [BruceBase] HOME: no gig-page links found
 #+end_example
 
+** time counter
+
+Also display a timing counter and after fetching all pages the total amount of time it took for fetching and processing after the processing indicator
+
 * question
 ** initial
 
