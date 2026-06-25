@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.43
+// @version      1.44
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -211,11 +211,7 @@
 
     if (events.length === 0) return;
 
-    await processYearEvents(events);
-
-    sections.forEach(({ hr, processedDiv, sectionOriginalHtml }) =>
-      insertSectionToggle(hr, processedDiv, sectionOriginalHtml)
-    );
+    await processYearEvents(events, sections);
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -275,7 +271,7 @@
     }, 1000);
 
     // ── Process events ───────────────────────────────────────────────────────
-    await processYearEvents(events, (idx, name, total) => {
+    await processYearEvents(events, sections, (idx, name, total) => {
       progressEl.replaceChildren(
         timerSpan,
         ` ... Processing event "${String(idx).padStart(3, '0')} / ${total}: ${name}"`
@@ -291,10 +287,6 @@
     setupMismatchFilter(mismatchBtn);
     globalBtn.disabled = false;
     mismatchBtn.disabled = false;
-
-    sections.forEach(({ hr, processedDiv, sectionOriginalHtml }) =>
-      insertSectionToggle(hr, processedDiv, sectionOriginalHtml)
-    );
 
     log('All events processed');
   }
@@ -516,6 +508,26 @@
     pageTitle.after(btn);
   }
 
+  // Colours the active "Setlist" tab green when everything matches, or appends ⚠️
+  // when there is any name mismatch or setlist discrepancy on the DETAIL page.
+  function annotateSetlistTab(nameMatch, hasSetlist) {
+    const li = [...document.querySelectorAll('li[title="active"]')]
+      .find(el => /setlist/i.test(el.textContent));
+    if (!li) return;
+    const em = li.querySelector('em');
+    if (!em) return;
+    const hasSetlistMismatch = hasSetlist && !!document.querySelector(
+      '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-section-label-warn'
+    );
+    if (!nameMatch || hasSetlistMismatch) {
+      const warn = document.createElement('span');
+      warn.textContent = ' ⚠️';
+      em.after(warn);
+    } else {
+      em.classList.add('bb-tab-ok');
+    }
+  }
+
   function extractYearPageEvents(content) {
     const allLinks   = [...content.querySelectorAll('a[href]')];
     const allAnchors = [...content.querySelectorAll('a[name]')];
@@ -683,16 +695,25 @@
     return clean;
   }
 
-  async function processYearEvents(events, onProgress) {
+  async function processYearEvents(events, sections, onProgress) {
     const BATCH_SIZE = 3;
     let started = 0;
     for (let i = 0; i < events.length; i += BATCH_SIZE) {
       const batch = events.slice(i, i + BATCH_SIZE);
       log(`Batch ${Math.floor(i / BATCH_SIZE) + 1}: events ${i + 1}–${Math.min(i + BATCH_SIZE, events.length)} of ${events.length}`);
-      await Promise.allSettled(batch.map(ev => {
+      await Promise.allSettled(batch.map(async ev => {
         const idx = ++started;
         if (onProgress) onProgress(idx, ev.yearName, events.length);
-        return processOneYearEvent(ev);
+        await processOneYearEvent(ev);
+        // Insert the ⇄ Original toggle for this section as soon as its event is done.
+        if (sections) {
+          const processedDiv = ev.element.closest('.bb-section-processed');
+          const sec = processedDiv && sections.find(s => s.processedDiv === processedDiv && !s.toggleInserted);
+          if (sec) {
+            sec.toggleInserted = true;
+            insertSectionToggle(sec.hr, sec.processedDiv, sec.sectionOriginalHtml);
+          }
+        }
       }));
       if (i + BATCH_SIZE < events.length) await delay(500);
     }
@@ -930,7 +951,10 @@
     log(`  Next anchor: ${nextAnchor ? `name="${nextAnchor.getAttribute('name')}"` : 'none (end of page)'}`);
 
     // Setlist comparison — only when the detail page actually has a setlist.
-    if (!hasSetlist) return;
+    if (!hasSetlist) {
+      annotateSetlistTab(nameMatch, false);
+      return;
+    }
 
     const setlistEls = collectSetlistElements(eventLink, nextAnchor, yearContent);
     log(`  Collected ${setlistEls.length} setlist element(s) from YEAR page`);
@@ -959,6 +983,7 @@
     renderDetailSetlist(diffItems);
     flagDetailSectionHeaders(yearSections, detailSections);
     insertDetailToggle(originalTdHtml);
+    annotateSetlistTab(nameMatch, true);
   }
 
   // Appends a ⚠️ warning to <p><strong>…</strong></p> section-header elements
@@ -1718,9 +1743,10 @@
         border-radius: 2px;
         padding: 0 2px;
       }
-      .bb-ok   { color: #6f6; }
-      .bb-warn { color: #c80; }
-      .bb-fail { color: #f66; }
+      .bb-ok     { color: #6f6; }
+      .bb-warn   { color: #c80; }
+      .bb-fail   { color: #f66; }
+      .bb-tab-ok { color: #2a2; font-weight: bold; }
       .bb-event-type        { color: #888; font-style: italic; font-weight: normal; }
       .bb-event-type-detail { font-size: 0.6em; font-weight: normal; color: #666; font-style: italic; vertical-align: middle; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }

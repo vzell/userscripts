@@ -1,5 +1,18 @@
 [
     {
+        "version": "1.44",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "DETAIL page: the active 'Setlist' tab (<li title=\"active\">) is now annotated after processing — bold green when the event name and full setlist match, or with a ⚠️ suffix when any name or setlist mismatch is detected.",
+                    "YEAR page: the ⇄ Original toggle button for each event section now appears immediately after that event finishes processing rather than waiting until all events are done. processYearEvents() accepts a sections array and calls insertSectionToggle() per event inside the async batch map."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.43",
         "date": "2026-06-25",
         "sections": [
