@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.63
+// @version      1.64
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -53,6 +53,20 @@
 
   /** Tab labels that carry no standalone content worth showing on the YEAR page. */
   const SKIP_TABS = new Set([]);
+
+  /** Maps each canonical icon type to the DETAIL page tab that holds its content. */
+  const CANONICAL_TAB_LABEL = {
+    Photo:        'Gallery',
+    Setlist:      'News/Memorabilia',
+    Ticket:       'News/Memorabilia',
+    News:         'News/Memorabilia',
+    Memorabilia:  'News/Memorabilia',
+    Video:        'Media',
+    Storyteller:  'Storyteller',
+    Eyewitness:   'Eyewitness',
+    Bootleg:      'Recording',
+    LiveDL:       'Recording',
+  };
 
   function log(...a)     { console.log  ('[BruceBase]', ...a); }
   function logWarn(...a) { console.warn ('[BruceBase]', ...a); }
@@ -2191,7 +2205,24 @@
       const canonical = ICON_TITLE_MAP[icon.title];
       if (!canonical) continue;
       const content = extractIconContent(doc, canonical, tabMap);
-      if (!content) continue;
+      if (!content) {
+        // Flag icons whose DETAIL tab explicitly says "Sorry, no X available"
+        const tabLabel = CANONICAL_TAB_LABEL[canonical];
+        if (tabLabel) {
+          const sorryTab = getTabEl(doc, tabMap, tabLabel);
+          if (sorryTab && /^Sorry, no /i.test(sorryTab.textContent.trim())) {
+            const warn = document.createElement('span');
+            warn.className = 'bb-glyph bb-icon-sorry';
+            warn.textContent = '⚠️';
+            warn.dataset.msg = `${canonical} icon on YEAR page but DETAIL page tab &#x201c;${tabLabel}&#x201d; reports no content available.`;
+            warn.addEventListener('mouseenter', e => showErrorTooltip(e, warn.dataset.msg));
+            warn.addEventListener('mouseleave', hideTooltip);
+            icon.after(warn);
+            icon.style.opacity = '0.45';
+          }
+        }
+        continue;
+      }
       const rawTitle = icon.title;
       icon.style.cursor = 'pointer';
       icon.title = `${rawTitle} — click to expand`;
@@ -2571,6 +2602,7 @@
 
       /* ── Clickable icons ─────────────────────────────────── */
       img.bb-icon-active { outline: 2px solid #4a90d9; border-radius: 2px; }
+      .bb-icon-sorry { cursor: help; font-size: 0.8em; vertical-align: super; margin-left: 1px; }
       .bb-extra-tab-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; }
       .bb-extra-tab-btn { background: #e8e8e8; border: 1px solid #bbb; border-radius: 3px; cursor: pointer; font-size: 0.8em; padding: 1px 7px; color: #333; font-family: sans-serif; }
       .bb-extra-tab-btn:hover { background: #d4d4d4; }

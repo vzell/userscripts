@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.64",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Icons whose DETAIL page tab explicitly says 'Sorry, no X available' are now flagged: a ⚠️ glyph is inserted next to the icon with a hover tooltip naming the canonical type and tab label, and the icon is dimmed (opacity 0.45). The glyph carries class bb-glyph so the Mismatches filter automatically surfaces these events. New constant CANONICAL_TAB_LABEL maps each canonical icon type to its corresponding DETAIL tab label."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.63",
         "date": "2026-06-26",
         "sections": [
