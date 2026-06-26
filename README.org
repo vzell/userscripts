@@ -872,7 +872,7 @@ we have a label "Pre-show (solo acoustic):" and on DETAIL
 
 They also should be considered the same, right now it's somehow associated with 'DETAIL page has "Show"' tooltip 
 
-** MRS. McGrath
+** DONE MRS. McGrath
 
 "MRS. McGRATH" is present in the YEAR page http://brucebase.wikidot.com/2006#190606 setlist
 
@@ -886,7 +886,7 @@ but flagged as being present only on the DETAIL page, which is wrong, as it's th
 <li><a href="/song:mrs-mcgrath">MRS. McGRATH</a></li>
 #+end_example
 
-** tab colorization
+** DONE tab colorization
 
 1.)
 
@@ -909,7 +909,7 @@ The button
 
 on YEAR pages should be rendered right away for a processed event, not at the end of processing all elvents as it is rigth now
 
-** bug
+** DONE bug
 
 1.)
 
@@ -935,7 +935,7 @@ and
 
 to "⚡ All Events (<total number of YEAR events>)
 
-** bug
+** DONE bug
 
 The "green" colorization now works, but there is a breaking bug for mismatches
 
@@ -946,6 +946,187 @@ The "green" colorization now works, but there is a breaking bug for mismatches
 the "⚠️" symbol breaks in a new line below the text "Setlist".
 
 I want it to be "<em>Setlist ⚠️</em>" without the new span
+
+** anchor
+
+Compare the anchor text for each event on a YEAR page http://brucebase.wikidot.com/2026#170126 e.g. "170126" for the following event
+
+#+begin_example
+<p><a name="170126"></a><br>
+<strong><a href="/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n">2026-01-17 - HACKENSACK MERIDIAN HEALTH THEATRE, RED BANK, NJ</a></strong></p>
+#+end_example
+
+with the anchor reference on the corresponding DETAIL page e.g.
+
+#+begin_example
+<a href="/2026#170126">Info &amp; Setlist</a>
+#+end_example
+
+If they do NOT match, render the anchor text with a warning symbol (plus tooltip) on the YEAR page right where it
+actually sits in the page and on the DETAIL page render the "Info & Setlist" hyper text with an additional warning symbol appended (plus tooltip)
+
+Download/parse the relevant example page if neccessary to find the full context
+
+** /plan - other userscript
+
+1.)
+
+can the following userscript @/home/vzell/git/springsteen-site-parser/userscripts/brucebase.dev.user.js which currently
+produces the "Show table"-button in the container e.g.
+
+#+begin_example
+<div id="page-title">1973<button type="button" class="st-btn-trigger">Show table</button></div>
+#+end_example
+
+on each YEAR page, be incorporated by our script ?
+
+2.)
+
+If yes, render the following containers from our userscript
+
+#+begin_example
+<div id="bb-btn-container"><button id="bb-global-toggle" class="bb-toggle-btn">⇄ Show Original Page</button><button id="bb-mismatch-toggle" class="bb-toggle-btn">⚡ All Events (279)</button></div>
+<p id="bb-year-progress"><span id="bb-year-timer">04:52</span> ... Done — 277 events processed</p>
+#+end_example
+
+in the same place where currently the button from the other userscript is located. Put both containers plus the new
+button for "Show table" appended to our buttons in a new parent container. Currently the YEAR number of the page is
+using such a huge font, so that both the button bar plus the progress container fits in one "row"
+
+** placement
+
+actually render the '<div id="bb-controls">' instead of the '<div id="page-title">1973</div> as e.g the year "1973" is already rendered in the '<div id="bb-pre-events">' section
+
+** table header sticky
+
+When the YEAR data is rendered as a table (by clicking the "Show table" button), not only the '<div id="bb-sticky-bar">' should be made sticky
+but also the following two containers '<div class="st-global-bar">' and '<thead class="st-thead" ... '
+So when scrolling, both the global bar and table header (plus column filter fields) are always visible
+
+** question
+
+would it be better to change @~/git/springsteen-site-parser first, to enable stickyness for the '<div
+class="st-global-bar">' too. Other userscripts in @~/git/springsteen-site-parser/userscripts would benefit too.
+
+You mentioned:
+
+- No existing API or option to set a sticky offset.
+
+How could this be implemented ? And could, what I initially asked for benefit from it ?
+
+If yes, make a plan for first changing "SmartTable" and then a plan for implementing what I asked for
+
+** mismatch
+
+on e.g. http://brucebase.wikidot.com/1973 there is a mismatch in event count between what's shown on the "All Events (279)" button
+and "Done — 277 events processed". Also when rendering the data as a table it show 277 rows.
+
+** button text
+
+change the button text:
+
+- remove "Show" from the first button
+  
+** scheduled
+
+On the DETAIL pages e.g. http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n there
+is a "Scheduled:" code block rendered before the "Info & Setlist" anchor
+
+#+begin_example
+<div class="code">
+<pre><code>Scheduled: 18:15 | Local Start Time 22:50 (with Willie Nile: 21:10) / End Time 00:26 (with Willie Nile: 21:19)</code></pre></div>
+<p><a href="/2026#170126">Info &amp; Setlist</a> | <a href="/venue:hackensack-meridian-health-theatre-red-bank-nj">Venue</a></p>
+#+end_example
+
+That same code block should be rendered with a smaller font right below each event title on the YEAR pages 
+
+** warning icon
+
+render a warning icon with tooltip on the YEAR pages where the DETAIL page does NOT have the "Scheduled" code block
+
+** render icon references
+
+each YEAR page has an icon meaning agenda at the top of the page in the following container
+
+#+begin_example
+<div class="list-pages-item">
+#+end_example
+
+each event entry on a YEAR page e.g. http://brucebase.wikidot.com/1973#280473b is enclosed by two "<hr>" e.g @debug/HTML.html
+
+Optionally each event can have a couple of icons e.g.
+
+#+begin_example
+  <img src="http://brucebase.wdfiles.com/local--files/content:files/00Photo-32.png" title="Photo" alt="00Photo-32.png" class="image">
+  <img src="http://brucebase.wdfiles.com/local--files/content:files/00Setlist-32.png" title="Setlist" alt="00Setlist-32.png" class="image">
+  <img src="http://brucebase.wdfiles.com/local--files/content:files/00News-32.png" title="News" alt="00News-32.png" class="image">
+  <img src="http://brucebase.wdfiles.com/local--files/content:files/00Box-32.png" title="Memorabilia" alt="00Box-32.png" class="image">
+  <img src="http://brucebase.wdfiles.com/local--files/content:files/00Video-32.png" title="Video" alt="00Video-32.png" class="image">
+</div>
+#+end_example
+
+The meaning of such an icon is (see also the agenda icons at the top of the page), that the event DETAIL page has
+additional information e.g. http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n
+under tabs like @debug/TABS.html
+
+Make this icons clickable.
+
+Make a couple suggestions how to extract this information from each DETAIL page to directly display it when clicking the
+corresponding icon on the YEAR page per event, e.g.
+
+- inline on the page
+- for images maybe as popup or also inline (if not too many)
+
+for the image icon with
+
+- 'title="Photo"', the photos will be shown under the "Gallery" tab
+- 'title="Setlist"', there will be setlist images under the "Setlist" tab
+- 'title="Ticket"', there will be ticket images under the "Setlist" tab
+- 'title="News", the news will be found under the "Links" section of the "News/Memorabilia" tab
+- 'title="Memorabilia", images will be found the "News/Memorabilia" tab
+- 'title="Video", inline videos will be found under the "Media" tab
+- 'title="Storyteller", stories will be found under the "Storyteller" tab
+- 'title="Eyewitness", stories will be found under the "Eyewitness" tab
+- 'title="Bootleg", bootleg informationwill be found under the "Recording" tab 
+- 'title="LiveDL", information about an Official concert recording available will be found under the "Recording" tab, together with an front cover image of the nugs.net release
+  
+Download and parse the above URLs for getting enough context
+
+** bugs
+
+- The news items are missing the sources, e.g. "(NYTimes)", they can be found in a "<sup><em>" container
+
+#+begin_example
+<li><a target="_blank" href="https://www.nytimes.com/2026/01/18/arts/music/springsteen-ice-minneapolis.html?unlocked_article_code=1.FlA.v51t.M-wK34VShGOH&amp;smid=nytcore-android-share">Springsteen Denounces ICE Deployments and Renee Good’s Killing</a> <sup><em>(NYTimes)</em></sup></li>
+#+end_example
+
+- 'title="Setlist"', there will be setlist images under the "News/Memorabilia" tab, the images have "Setlist" in it's filename, e.g.
+  <img src="http://brucebase.wdfiles.com/local--resized-images/files:setlist-2026/20260117_Setlist_02_Handwritten.jpg/thumbnail.jpg" alt="" class="gallery-image-size-thumbnail">
+
+- when hovering over an image in
+
+#+begin_example
+<div class="bb-icon-panel-body bb-icon-thumbnails"><a href="http://brucebase.wdfiles.com/local--resized-images/news:2026-01-17-hackensack-meridian-health-theatre-red-bank/20260117_Article_01.jpg/medium.jpg" target="_blank" rel="noopener"><img src="http://brucebase.wdfiles.com/local--resized-images/news:2026-01-17-hackensack-meridian-health-theatre-red-bank/20260117_Article_01.jpg/thumbnail.jpg" loading="lazy"></a><a href="http://brucebase.wdfiles.com/local--resized-images/news:2026-01-17-hackensack-meridian-health-theatre-red-bank/20260117_Banner_01.jpg/medium.jpg" target="_blank" rel="noopener"><img src="http://brucebase.wdfiles.com/local--resized-images/news:2026-01-17-hackensack-meridian-health-theatre-red-bank/20260117_Banner_01.jpg/thumbnail.jpg" loading="lazy"></a><a href="http://brucebase.wdfiles.com/local--resized-images/news:2026-01-17-hackensack-meridian-health-theatre-red-bank/20260117_Banner_02.jpg/medium.jpg" target="_blank" rel="noopener"><img src="http://brucebase.wdfiles.com/local--resized-images/news:2026-01-17-hackensack-meridian-health-theatre-red-bank/20260117_Banner_02.jpg/thumbnail.jpg" loading="lazy"></a></div>
+#+end_example
+
+the full-size image should be shown in a popup. Also under each image there should be a description consisting of the type of image like e.g "Article" or "Banner" parsed from the image filename
+
+** bugs
+
+1.) render the news sources italic
+2.) the setlist images should ONLY be grabbed from the "News/Memorabilia" tab
+3.) the full-size image does NOT show up in a popup when hovering over it
+
+** do not close the popup window when clicked on an iconin in event 1 and later another click is done on event 2  
+
+** additionally also parse the YEAR page http://brucebase.wikidot.com/2026 and e.g 
+
+** no "Scheduled"
+
+#+begin_example
+<div class="code">
+<pre><code>Local Start Time ??:?? / End Time ??:??</code></pre></div>
+#+end_example
 
 * question
 ** initial

@@ -1,5 +1,116 @@
 [
     {
+        "version": "1.54",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Full-size image viewer now correctly appears when clicking a thumbnail: _viewer is now a separate direct body child instead of a child of _lightbox, so display:none on the grid overlay no longer cascades and hides the viewer.",
+                    "Setlist images are now collected only from the News/Memorabilia tab (not the Setlist tab)."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "News link source labels (e.g. NYTimes) are now rendered in italic."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.53",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Setlist images: also collect images whose filename contains 'Setlist' from the News/Memorabilia tab (not only from the Setlist tab), deduplicating by URL.",
+                    "News links: append source label from trailing <sup><em>(Source)</em></sup> sibling after each news article link (e.g. 'NYTimes')."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Image thumbnails in inline panels now show a filename-derived caption below each thumbnail (e.g. 'Article 01', 'Banner 02'). Clicking a thumbnail opens the full-size image in the lightbox viewer instead of opening a new tab."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.52",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Clickable YEAR-page icons: Photo, Setlist, Ticket, News, Memorabilia, Video, Storyteller, Eyewitness, Bootleg, and LiveDL icons are now interactive. Content is extracted from the already-fetched detail page during processOneYearEvent. Photo (Gallery tab) opens a lightbox overlay with a thumbnail grid and click-to-enlarge viewer (ESC or backdrop click closes). All other icons show a collapsible inline panel below the event — one panel at a time (clicking a new icon closes any previously open panel). Title variants (e.g. 'Photos', 'Eye', 'Audio', 'Official Live Download') are normalised via ICON_TITLE_MAP. Icons with no extractable content are left non-interactive."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.51",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page: show the 'Scheduled:' timing block from each detail page below the event title. The block (a <div class=\"code\"><pre><code>Scheduled: …</code></pre></div> on the detail page) is extracted via extractScheduled() and rendered as a small monospace .bb-scheduled div inserted after the event title paragraph."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.50",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Event count mismatch: '⚡ All Events (N)' now uses events.length (actual processed events) instead of sections.length. The page's trailing navigation and footer sections are also wrapped as .bb-section-processed by wrapYearSections (they sit between <hr> tags) but are not events, causing sections.length to overcount by 2 on pages like /1973."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.49",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "SmartTable sticky stacking: passes stickyOffset: 'calc(var(--bb-header-h) + var(--bb-sticky-bar-h))' to SmartTable.render() so st-global-bar and st-thead pin below #bb-sticky-bar while scrolling through the rendered table. setupStickyBar() now measures and stores --bb-sticky-bar-h immediately after building the bar. Sticky offsets survive sort/filter rerenders via SmartTable's cached _theadStickyTop mechanism (added in smarttable v1.2.1)."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.48",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "SmartTable integration: adds an optional 'Show table' trigger button to the YEAR page button bar via @require of dist/smarttable.js and adapters/brucebase.js. BrucebaseAdapter.extract() is called before wrapYearSections() to avoid the DOM mutation that breaks _splitOnHr. The SmartTable host div (#bb-smarttable-host) is inserted before #page-content so the rendered table appears between the sticky bar and the event list. Degrades gracefully if the @require files are absent.",
+                    "Layout: #bb-btn-container and #bb-year-progress are now wrapped in #bb-controls (display:flex) so the button bar and progress timer appear on one horizontal row, reducing the sticky-bar height."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.47",
+        "date": "2026-06-25",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Anchor consistency check: on YEAR pages, after fetching each detail page, compares the <a name> anchor (e.g. '170126') with the fragment used in the detail page's 'Info & Setlist' back-link (e.g. /2026#170126). A ⚠️ span with hover tooltip is inserted right after the mismatched <a name> element. On DETAIL pages, the same check runs in reverse — the preceding YEAR page anchor is looked up and compared against the 'Info & Setlist' link fragment; a ⚠️ is appended after the link on mismatch. Anchor mismatches are also caught by the ⚡ Mismatches Only filter."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.46",
         "date": "2026-06-25",
         "sections": [

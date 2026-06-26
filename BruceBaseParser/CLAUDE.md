@@ -48,9 +48,9 @@ body#html-body > div#skrollr-body > div#container-wrap-wrap
       div#main-content
         div#action-area-top
         div#bb-sticky-bar          ← inserted by setupStickyBar(); sticky top:--bb-header-h z:90
-          div#page-title
-          div#bb-btn-container
-          p#bb-year-progress
+          div#bb-controls          ← flex row (display:flex); #page-title is hidden (year already in #bb-pre-events)
+            div#bb-btn-container   ← ⇄ / ⚡ / Show table buttons
+            p#bb-year-progress     ← timer + progress text
           div#bb-pre-events        ← icon legend, year heading, hidden jump-to-recent box
         div#page-content
           hr  ← first event separator (pre-HR nodes moved to sticky bar)
@@ -127,6 +127,12 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
 - Appends ✅ or ❌ glyph; hover shows a tooltip with both names and a
   token-level diff (`buildDiffHtml`)
 
+**Anchor consistency check** (always, when `anchorEl` and `anchorName` are set):
+- Calls `checkYearAnchorConsistency(detailDoc, anchorName, anchorEl)`
+- `findInfoSetlistLink(detailDoc)` locates the `<a href="/YEAR#ANCHOR">Info & Setlist</a>` back-link by matching `INFO_SETLIST_HREF_RE` (`/^\/[\d][\w-]*#([a-zA-Z0-9]+)$/`) and `/info/i` in the link text
+- Extracts the fragment from the href and compares with the YEAR page `anchorName`
+- On mismatch: `addAnchorWarnYear(anchorEl, …)` inserts a `<span class="bb-anchor-warn">⚠️</span>` immediately after the `<a name>` element, with a hover tooltip describing both values
+
 **Setlist check** (when setlist elements were found):
 - `parseYearSetlist(setlistEls)` → `Section[]` where
   `Section = { label: string, songs: string[], rawSongs: string[], sourceEl: Element }`
@@ -180,6 +186,7 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
 | `.bb-char-match`       | matching char within diff   | green           |
 | `.bb-char-diff`        | differing char              | red bold        |
 | `.bb-para-warn`        | song in `<p>` format (old page) | ⚠️ cursor:help |
+| `.bb-anchor-warn`      | year/detail anchor fragment mismatch | ⚠️ cursor:help |
 
 Hover over any non-match span shows `showSongTooltip()` with year/detail names
 and a word-level diff. Hover over `.bb-para-warn` shows `showErrorTooltip()`.
@@ -273,12 +280,18 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 3. Fetches the YEAR page.
 4. Finds the event link on the YEAR page whose `href === '/' + path` — direct
    match is robust against anchor suffix mismatches.
-5. Finds the next `<a name>` after that event link as the boundary.
-6. Collects and parses the year-side setlist with `collectSetlistElements` +
+5. Finds all `<a[name]>` anchors on the YEAR page in `allYearNamedAnchors`.
+6. The last one preceding the event link is `yearAnchorName` (the true YEAR page anchor).
+   The first one following the event link is `nextAnchor` (end boundary for setlist).
+7. **Anchor consistency check**: finds `<a href="/YEAR#FRAGMENT">Info & Setlist</a>` on
+   the current page via `findInfoSetlistLink(document)`. Compares `FRAGMENT` with
+   `yearAnchorName`. On mismatch: `addAnchorWarnDetail(infoLink, …)` appends a
+   `<span class="bb-anchor-warn">⚠️</span>` after the link, with a hover tooltip.
+8. Collects and parses the year-side setlist with `collectSetlistElements` +
    `parseYearSetlist`.
-7. Runs `lcsDiff` + `mergeCharDiffs`; annotates each `diffItem` with
+9. Runs `lcsDiff` + `mergeCharDiffs`; annotates each `diffItem` with
    `rawYearSong`.
-8. `renderDetailSetlist(diffItems)` via `styleDetailLi`:
+10. `renderDetailSetlist(diffItems)` via `styleDetailLi`:
    - Detects `isParagraphBased` by checking whether the container has any `<li>`.
      If not, collects `<p>` elements with `/song:` links as the song element list.
    - `match` → adds `.bb-song-match` to each `a[href^="/song:"]` inside the
@@ -291,7 +304,7 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
      with `.bb-song-year-only` before the current position.
    - After each element on paragraph-based pages, `addParaStructureWarning(el)`
      appends a ⚠️ span with tooltip.
-9. `insertDetailToggle(originalTdHtml)` wraps the setlist tab content in
+11. `insertDetailToggle(originalTdHtml)` wraps the setlist tab content in
    processed/original show-hide divs and inserts a toggle button after
    `#page-title`.
 
@@ -309,10 +322,14 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 | `textWithoutSup(el)` | Clones el, removes all `<sup>` children, returns `.textContent`; used to exclude footnote text from prose filtering and song-name parsing |
 | `getSetlistContainer(doc)` | Returns `#wiki-tab-0-1 td` → `#wiki-tab-0-1` → `#page-content` (three-level fallback for pages without a tab widget) |
 | `hideJumpToRecentBox(content)` | Hides the wikidot-injected `.list-pages-box` containing "most recent" text at top of YEAR pages |
-| `setupStickyBar(content, pageTitle, btnContainer, progressEl)` | Creates `#bb-sticky-bar`, moves `#page-title` + buttons + progress + pre-HR content into it, sets `--bb-header-h` CSS var |
+| `setupStickyBar(content, pageTitle, controlsEl)` | Creates `#bb-sticky-bar` in place of `#page-title` (hides it — year already in `#bb-pre-events`), appends `#bb-controls` + pre-HR content, sets `--bb-header-h` CSS var |
 | `setupGlobalToggle(btn, content, originalHtml)` | Wires click handler on pre-existing `#bb-global-toggle`; creates hidden `#bb-page-original` div |
 | `setupMismatchFilter(btn)` | Wires click handler on pre-existing `#bb-mismatch-toggle` |
 | `addParaStructureWarning(el)` | Appends a `<span class="bb-para-warn">⚠️</span>` with tooltip to a `<p>`-based song element on DETAIL pages |
+| `findInfoSetlistLink(doc)` | Returns the first `<a href>` whose href matches `INFO_SETLIST_HREF_RE` and text contains "info" — the "Info & Setlist" back-link on detail pages |
+| `checkYearAnchorConsistency(detailDoc, yearAnchorName, anchorEl)` | Extracts fragment from the "Info & Setlist" link on the detail page; calls `addAnchorWarnYear` on mismatch |
+| `addAnchorWarnYear(anchorEl, …)` | Inserts `<span class="bb-anchor-warn">⚠️</span>` after `<a name>` on YEAR page when anchor ≠ detail fragment |
+| `addAnchorWarnDetail(linkEl, …)` | Appends `<span class="bb-anchor-warn"> ⚠️</span>` after the "Info & Setlist" link on the DETAIL page when fragment ≠ year anchor |
 | `buildDiffHtml(a, b)` | Token-level diff on whitespace/comma splits (for name tooltips) |
 | `buildCharDiffHtml(a, b)` | Char-level LCS diff; shows year song chars with red/green spans |
 | `lcsDiff(yearSongs, detailSongs)` | Standard LCS producing `match`/`year-only`/`detail-only` items |

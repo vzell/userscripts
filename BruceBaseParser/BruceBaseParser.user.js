@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.46
+// @version      1.54
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -9,6 +9,8 @@
 // @supportURL   https://github.com/vzell/userscripts/issues
 // @downloadURL  https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser.user.js
 // @updateURL    https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser.user.js
+// @require      file:///V:/home/vzell/git/springsteen-site-parser/dist/smarttable.js
+// @require      file:///V:/home/vzell/git/springsteen-site-parser/adapters/brucebase.js
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64|start)?$/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/
 // @grant        GM_xmlhttpRequest
@@ -27,6 +29,22 @@
   const EVENT_URL_RE  = /\/([a-z]+):\d{4}-\d{2}-\d{2}/;
   const LIST_LINK_RE  = /\/(\d{4})#([a-zA-Z0-9]+)$/;
   const DETAIL_TYPE_RE = /^(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/;
+  // Matches "Info & Setlist" back-links on detail pages: /YEAR#ANCHOR or /1949-64#ANCHOR
+  const INFO_SETLIST_HREF_RE = /^\/[\d][\w-]*#([a-zA-Z0-9]+)$/;
+
+  /** Maps every icon title variant found on YEAR pages to a canonical type key. */
+  const ICON_TITLE_MAP = {
+    'Photo': 'Photo',       'Photos': 'Photo',
+    'Setlist': 'Setlist',   'Setlists': 'Setlist',
+    'Ticket': 'Ticket',     'Tickets': 'Ticket',
+    'News': 'News',         'News-articles': 'News',
+    'Memorabilia': 'Memorabilia', 'Memorabilia, Pass, Posters, etc.': 'Memorabilia',
+    'Video': 'Video',       'Video Footage': 'Video',
+    'Storyteller': 'Storyteller', 'Storyteller Transcripts': 'Storyteller',
+    'Eyewitness': 'Eyewitness', 'Eye': 'Eyewitness', 'Eyewitness Reports': 'Eyewitness',
+    'Bootleg': 'Bootleg',   'Audio': 'Bootleg', 'Audio / Video Bootleg': 'Bootleg',
+    'LiveDL': 'LiveDL',     'Official Live Download': 'LiveDL',
+  };
 
   function log(...a)     { console.log  ('[BruceBase]', ...a); }
   function logWarn(...a) { console.warn ('[BruceBase]', ...a); }
@@ -222,6 +240,12 @@
     const content = document.querySelector('#page-content') || document.body;
     const originalHtml = content.innerHTML;
 
+    // Must run before wrapYearSections() wraps direct children into
+    // .bb-section-processed divs — _splitOnHr() in the adapter iterates
+    // content.children looking for <HR> direct children.
+    const HAS_ST = typeof SmartTable !== 'undefined' && typeof BrucebaseAdapter !== 'undefined';
+    const stRows = HAS_ST ? BrucebaseAdapter.extract() : null;
+
     hideJumpToRecentBox(content);
 
     const sections = wrapYearSections(content);
@@ -242,7 +266,7 @@
     const globalBtn = document.createElement('button');
     globalBtn.id = 'bb-global-toggle';
     globalBtn.className = 'bb-toggle-btn';
-    globalBtn.textContent = '⇄ Show Original Page';
+    globalBtn.textContent = '⇄ Original Page';
     globalBtn.disabled = true;
 
     const mismatchBtn = document.createElement('button');
@@ -253,6 +277,27 @@
 
     btnContainer.append(globalBtn, mismatchBtn);
 
+    // ── SmartTable integration (optional) ────────────────────────────────────
+    if (stRows) {
+      const stHost = document.createElement('div');
+      stHost.id = 'bb-smarttable-host';
+      // Place before #page-content so the rendered table appears between the
+      // sticky bar and the event list when the trigger button is clicked.
+      content.parentNode.insertBefore(stHost, content);
+
+      SmartTable.render({
+        columns:   BrucebaseAdapter.columnDefs,
+        rows:      stRows,
+        container: stHost,
+        options:   { stickyOffset: 'calc(var(--bb-header-h) + var(--bb-sticky-bar-h))' },
+      });
+
+      // Move the trigger button into our button bar. The SmartTable click
+      // handler still targets stHost, so the table renders in the right place.
+      const stBtn = stHost.querySelector('.st-btn-trigger');
+      if (stBtn) btnContainer.appendChild(stBtn);
+    }
+
     // ── Processing indicator ─────────────────────────────────────────────────
     const progressEl = document.createElement('p');
     progressEl.id = 'bb-year-progress';
@@ -261,9 +306,12 @@
     timerSpan.textContent = '00:00';
     progressEl.append(timerSpan, ' ... Starting…');
 
-    // Build sticky bar: moves #page-title, buttons, progress, and pre-<hr>
-    // content from #page-content into a pinned band below #header.
-    setupStickyBar(content, pageTitle, btnContainer, progressEl);
+    // Wrap buttons and progress in a single flex row, then build sticky bar.
+    const controlsEl = document.createElement('div');
+    controlsEl.id = 'bb-controls';
+    controlsEl.append(btnContainer, progressEl);
+
+    setupStickyBar(content, pageTitle, controlsEl);
 
     const startTime = Date.now();
     const timerId = setInterval(() => {
@@ -284,7 +332,7 @@
     progressEl.replaceChildren(timerSpan, ` ... Done — ${events.length} events processed`);
 
     setupGlobalToggle(globalBtn, content, originalHtml);
-    setupMismatchFilter(mismatchBtn);
+    setupMismatchFilter(mismatchBtn, events.length);
     globalBtn.disabled = false;
     mismatchBtn.disabled = false;
 
@@ -303,19 +351,21 @@
   }
 
   // Builds the sticky header band for YEAR pages.
-  // Moves #page-title, btnContainer, progressEl, and all #page-content nodes
-  // before the first <hr> into #bb-sticky-bar, which is inserted where
-  // #page-title used to live (sibling of #page-content inside #main-content).
+  // Inserts #bb-sticky-bar where #page-title used to be, hides #page-title
+  // (the year number is already present in #bb-pre-events), and moves all
+  // #page-content nodes before the first <hr> into #bb-pre-events.
   // Also measures #header height and stores it as --bb-header-h for CSS.
-  function setupStickyBar(content, pageTitle, btnContainer, progressEl) {
+  function setupStickyBar(content, pageTitle, controlsEl) {
     const stickyBar = document.createElement('div');
     stickyBar.id = 'bb-sticky-bar';
 
     if (pageTitle && pageTitle.parentNode) {
       pageTitle.parentNode.insertBefore(stickyBar, pageTitle);
-      stickyBar.appendChild(pageTitle);
+      // The year number is already rendered in #bb-pre-events — hide the
+      // duplicate #page-title h1 so it doesn't take up space in the sticky bar.
+      pageTitle.style.display = 'none';
     }
-    stickyBar.append(btnContainer, progressEl);
+    stickyBar.append(controlsEl);
 
     // Collect all direct children of #page-content before the first <hr>
     // (icon legend table, year heading, jump-to-recent box, etc.) and move
@@ -342,6 +392,7 @@
       const h = Math.round(headerEl.getBoundingClientRect().height);
       document.documentElement.style.setProperty('--bb-header-h', `${h}px`);
     }
+    document.documentElement.style.setProperty('--bb-sticky-bar-h', `${stickyBar.offsetHeight}px`);
   }
 
   // Wraps the content that follows each <hr> (up to the next <hr>) inside a
@@ -399,7 +450,7 @@
       showingOriginal = !showingOriginal;
       content.style.display    = showingOriginal ? 'none'  : 'block';
       originalEl.style.display = showingOriginal ? 'block' : 'none';
-      btn.textContent = showingOriginal ? '⇄ Show Processed Page' : '⇄ Show Original Page';
+      btn.textContent = showingOriginal ? '⇄ Processed Page' : '⇄ Original Page';
     });
   }
 
@@ -433,12 +484,15 @@
   // discrepancy, and no ⚠️/❓ warning so only problem events remain visible.
   // Counts are computed once (all processing is done by the time this is called)
   // and embedded in the button label.
-  function setupMismatchFilter(btn) {
+  // eventCount must be passed as events.length — sections.length overcounts because
+  // trailing non-event sections (page navigation, footer) are also wrapped as
+  // .bb-section-processed by wrapYearSections.
+  function setupMismatchFilter(btn, eventCount) {
     const sections = [...document.querySelectorAll('.bb-section-processed')];
-    const totalEvents = sections.length;
+    const totalEvents = eventCount;
     const mismatchCount = sections.filter(div =>
       [...div.querySelectorAll('.bb-glyph')].some(g => ['❌', '⚠️', '❓'].some(ch => g.textContent.includes(ch))) ||
-      !!div.querySelector('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn')
+      !!div.querySelector('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn, .bb-anchor-warn')
     ).length;
 
     btn.textContent = `⚡ Mismatches Only (${mismatchCount})`;
@@ -466,7 +520,7 @@
         [...processedDiv.querySelectorAll('.bb-glyph')]
           .some(g => ['❌', '⚠️', '❓'].some(ch => g.textContent.includes(ch))) ||
         !!processedDiv.querySelector(
-          '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn'
+          '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn, .bb-anchor-warn'
         );
 
       const hide = active && !hasMismatch;
@@ -508,14 +562,14 @@
     const btn = document.createElement('button');
     btn.id = 'bb-global-toggle';
     btn.className = 'bb-toggle-btn';
-    btn.textContent = '⇄ Show Original Page';
+    btn.textContent = '⇄ Original Page';
 
     let showingOriginal = false;
     btn.addEventListener('click', () => {
       showingOriginal = !showingOriginal;
       processedDiv.style.display = showingOriginal ? 'none'  : 'block';
       originalDiv.style.display  = showingOriginal ? 'block' : 'none';
-      btn.textContent = showingOriginal ? '⇄ Show Processed Page' : '⇄ Show Original Page';
+      btn.textContent = showingOriginal ? '⇄ Processed Page' : '⇄ Original Page';
     });
 
     pageTitle.after(btn);
@@ -733,7 +787,7 @@
     }
   }
 
-  async function processOneYearEvent({ element, yearName, url, eventType, isKnown, setlistEls }) {
+  async function processOneYearEvent({ element, yearName, url, eventType, isKnown, setlistEls, anchorEl, anchorName }) {
     log(`Processing [${eventType}] "${yearName}"`);
     if (!isKnown) {
       logWarn(`  Skipping comparison for unknown event type "${eventType}"`);
@@ -760,6 +814,13 @@
 
       addYearGlyph(element, nameMatch, isEarlyLate, yearNameUpper, normalizedDetailName, rawDetailName, eventType);
 
+      // ── Scheduled block ──────────────────────────────────────────────────
+      const scheduledText = extractScheduled(doc);
+      if (scheduledText) addScheduledBlock(element, scheduledText);
+
+      // ── Clickable icons ──────────────────────────────────────────────────
+      wireIconHandlers(element, doc);
+
       // ── Setlist check ────────────────────────────────────────────────────
       if (setlistEls.length > 0) {
         const yearSections   = parseYearSetlist(setlistEls);
@@ -784,6 +845,11 @@
           });
           renderYearSetlist(yearSections, diffItems);
         }
+      }
+
+      // ── Anchor consistency check ─────────────────────────────────────────
+      if (anchorEl && anchorName) {
+        checkYearAnchorConsistency(doc, anchorName, anchorEl);
       }
     } catch (e) {
       logErr(`  Failed to process "${yearName}":`, e.message);
@@ -960,9 +1026,39 @@
     log(`  Result : ${nameMatch ? 'MATCH ✅' : isEarlyLate ? 'EARLY/LATE ⚠️' : 'MISMATCH ❌'}`);
     addDetailTitleAnnotation(detailEventType, yearNameUpper, normalizedDetailName, rawDetailName, nameMatch, isEarlyLate);
 
-    const nextAnchor = [...yearContent.querySelectorAll('a[name]')]
+    const allYearNamedAnchors = [...yearContent.querySelectorAll('a[name]')];
+    const nextAnchor = allYearNamedAnchors
       .find(a => eventLink.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
     log(`  Next anchor: ${nextAnchor ? `name="${nextAnchor.getAttribute('name')}"` : 'none (end of page)'}`);
+
+    // ── Anchor consistency check on DETAIL page ───────────────────────────
+    // Find the named anchor on the YEAR page that precedes this event link.
+    let yearAnchorEl = null;
+    for (const a of allYearNamedAnchors) {
+      if (a.compareDocumentPosition(eventLink) & Node.DOCUMENT_POSITION_FOLLOWING) {
+        yearAnchorEl = a;
+      }
+    }
+    const yearAnchorName = yearAnchorEl ? yearAnchorEl.getAttribute('name') : null;
+    log(`  YEAR page anchor for this event: ${yearAnchorName ? `"${yearAnchorName}"` : 'none found'}`);
+
+    if (yearAnchorName) {
+      const infoLink = findInfoSetlistLink(document);
+      if (infoLink) {
+        const href = infoLink.getAttribute('href') || '';
+        const m = href.match(INFO_SETLIST_HREF_RE);
+        const detailAnchorRef = m ? m[1] : null;
+        log(`  DETAIL "Info & Setlist" refs: ${detailAnchorRef ? `"#${detailAnchorRef}"` : 'no fragment'}`);
+        if (detailAnchorRef && detailAnchorRef !== yearAnchorName) {
+          logWarn(`  Anchor MISMATCH: YEAR="#${yearAnchorName}", DETAIL links "#${detailAnchorRef}"`);
+          addAnchorWarnDetail(infoLink, yearAnchorName, detailAnchorRef);
+        } else if (detailAnchorRef) {
+          log(`  Anchor MATCH ✅`);
+        }
+      } else {
+        log(`  Anchor check: no "Info & Setlist" link found on this detail page`);
+      }
+    }
 
     // Setlist comparison — only when the detail page actually has a setlist.
     if (!hasSetlist) {
@@ -1561,6 +1657,450 @@
     });
   }
 
+  // Returns the text of the "Scheduled:" code block from a detail page, or null.
+  // The block is a <div class="code"><pre><code>Scheduled: …</code></pre></div>.
+  function extractScheduled(doc) {
+    for (const code of doc.querySelectorAll('div.code pre code')) {
+      const text = code.textContent.trim();
+      if (text.startsWith('Scheduled:')) return text;
+    }
+    return null;
+  }
+
+  // Inserts a small styled block containing the scheduled text below the event
+  // title paragraph on the YEAR page.
+  function addScheduledBlock(element, text) {
+    const div = document.createElement('div');
+    div.className = 'bb-scheduled';
+    div.textContent = text;
+    const para = element.closest('p') || element.parentNode;
+    para.after(div);
+  }
+
+  // ── Icon click feature ────────────────────────────────────────────────────
+
+  /**
+   * Builds a Map of YUI tab label → wiki-tab-0-N index from a detail page doc.
+   * @param {Document} doc
+   * @returns {Map<string, number>}
+   */
+  function buildTabMap(doc) {
+    const map = new Map();
+    doc.querySelectorAll('.yui-nav em').forEach((em, i) =>
+      map.set(em.textContent.trim(), i)
+    );
+    return map;
+  }
+
+  /**
+   * Returns the wiki-tab-0-N div for the given label, or null if not found.
+   * @param {Document} doc
+   * @param {Map<string, number>} tabMap
+   * @param {string} label
+   * @returns {HTMLElement|null}
+   */
+  function getTabEl(doc, tabMap, label) {
+    const idx = tabMap.get(label);
+    return idx !== undefined ? doc.getElementById(`wiki-tab-0-${idx}`) : null;
+  }
+
+  /** @returns {{type:'gallery', items:{thumbUrl:string,mediumUrl:string}[]}|null} */
+  function extractGalleryContent(doc, tabMap) {
+    const tab = getTabEl(doc, tabMap, 'Gallery');
+    if (!tab) return null;
+    const items = [...tab.querySelectorAll('img')].map(img => {
+      const thumbUrl  = img.src;
+      const linkEl    = img.closest('a[href]');
+      const mediumUrl = linkEl ? linkEl.href : thumbUrl.replace('/thumbnail.jpg', '/medium.jpg');
+      return { thumbUrl, mediumUrl };
+    }).filter(i => i.thumbUrl);
+    return items.length ? { type: 'gallery', items } : null;
+  }
+
+  /** @returns {{type:'images', caption:string, items:{thumbUrl:string,fullUrl:string}[]}|null} */
+  function extractSetlistImages(doc, tabMap) {
+    const tab = getTabEl(doc, tabMap, 'News/Memorabilia');
+    if (!tab) return null;
+    const items = [...tab.querySelectorAll('img')].filter(img =>
+      /setlist/i.test(img.src) && !/ticket/i.test(img.src)
+    ).map(img => ({
+      thumbUrl: img.src,
+      fullUrl:  img.closest('a[href]')?.href || img.src.replace(/\/small\.jpg$|\/thumbnail\.jpg$/, ''),
+    }));
+    return items.length ? { type: 'images', caption: 'Setlist', items } : null;
+  }
+
+  /** @returns {{type:'images', caption:string, items:{thumbUrl:string,fullUrl:string}[]}|null} */
+  function extractTicketImages(doc, tabMap) {
+    const tab = getTabEl(doc, tabMap, 'Setlist');
+    if (!tab) return null;
+    const items = [...tab.querySelectorAll('img')].filter(img =>
+      /ticket/i.test(img.src)
+    ).map(img => ({
+      thumbUrl: img.src,
+      fullUrl:  img.closest('a[href]')?.href || img.src,
+    }));
+    return items.length ? { type: 'images', caption: 'Tickets', items } : null;
+  }
+
+  /** @returns {{type:'links', caption:string, items:{url:string,text:string,source:string}[]}|null} */
+  function extractNewsLinks(doc, tabMap) {
+    const tab = getTabEl(doc, tabMap, 'News/Memorabilia');
+    if (!tab) return null;
+    const items = [...tab.querySelectorAll('a[href]')].filter(a => {
+      const href = a.getAttribute('href') || '';
+      return href.startsWith('http') && !/\.(jpg|jpeg|png|gif)$/i.test(href);
+    }).map(a => {
+      let source = '';
+      let node = a.nextSibling;
+      while (node) {
+        if (node.nodeName === 'SUP') { source = node.textContent.trim().replace(/^\(|\)$/g, ''); break; }
+        node = node.nextSibling;
+      }
+      return { url: a.href, text: a.textContent.trim(), source };
+    }).filter(l => l.text);
+    return items.length ? { type: 'links', caption: 'News', items } : null;
+  }
+
+  /** @returns {{type:'images', caption:string, items:{thumbUrl:string,fullUrl:string}[]}|null} */
+  function extractMemorabilia(doc, tabMap) {
+    const tab = getTabEl(doc, tabMap, 'News/Memorabilia');
+    if (!tab) return null;
+    const items = [...tab.querySelectorAll('img')].filter(img =>
+      /\/news:/.test(img.src)
+    ).map(img => ({
+      thumbUrl: img.src,
+      fullUrl:  img.closest('a[href]')?.href || img.src,
+    }));
+    return items.length ? { type: 'images', caption: 'Memorabilia', items } : null;
+  }
+
+  /** @returns {{type:'html', caption:string, html:string}|null} */
+  function extractMediaContent(doc, tabMap) {
+    const tab = getTabEl(doc, tabMap, 'Media');
+    if (!tab) return null;
+    const hasMedia = tab.querySelector('iframe, object, embed, video');
+    return hasMedia ? { type: 'html', caption: 'Media', html: tab.innerHTML } : null;
+  }
+
+  /**
+   * Returns tab HTML if non-empty, null if the tab is absent or shows the
+   * "Sorry, no X available" placeholder.
+   * @returns {{type:'html', caption:string, html:string}|null}
+   */
+  function extractTabHtml(doc, tabMap, label, caption) {
+    const tab = getTabEl(doc, tabMap, label);
+    if (!tab) return null;
+    if (/^Sorry, no .+ available/.test(tab.textContent.trim())) return null;
+    return { type: 'html', caption, html: tab.innerHTML };
+  }
+
+  /**
+   * Dispatches to the per-type extractor for a canonical icon type.
+   * @param {Document} doc
+   * @param {string} canonical
+   * @param {Map<string,number>} tabMap
+   * @returns {object|null}
+   */
+  function extractIconContent(doc, canonical, tabMap) {
+    switch (canonical) {
+      case 'Photo':       return extractGalleryContent(doc, tabMap);
+      case 'Setlist':     return extractSetlistImages(doc, tabMap);
+      case 'Ticket':      return extractTicketImages(doc, tabMap);
+      case 'News':        return extractNewsLinks(doc, tabMap);
+      case 'Memorabilia': return extractMemorabilia(doc, tabMap);
+      case 'Video':       return extractMediaContent(doc, tabMap);
+      case 'Storyteller': return extractTabHtml(doc, tabMap, 'Storyteller', 'Storyteller');
+      case 'Eyewitness':  return extractTabHtml(doc, tabMap, 'Eyewitness', 'Eyewitness');
+      case 'Bootleg':     return extractTabHtml(doc, tabMap, 'Recording', 'Recording');
+      case 'LiveDL':      return extractTabHtml(doc, tabMap, 'Recording', 'Official Live Download');
+      default:            return null;
+    }
+  }
+
+  // ── Lightbox (Photo/Gallery) ───────────────────────────────────────────────
+
+  /** @type {HTMLElement|null} Singleton lightbox grid overlay. */
+  let _lightbox = null;
+  /** @type {HTMLElement|null} Singleton full-size image viewer (separate body child so display:none on _lightbox doesn't cascade). */
+  let _viewer = null;
+
+  /**
+   * Lazily creates both the thumbnail-grid lightbox and the full-size viewer,
+   * each as independent direct children of document.body.
+   */
+  function initLightbox() {
+    if (_lightbox) return;
+    _lightbox = document.createElement('div');
+    _lightbox.id = 'bb-lightbox';
+    _lightbox.innerHTML = `
+      <div id="bb-lightbox-inner">
+        <div id="bb-lightbox-header">
+          <span id="bb-lightbox-title"></span>
+          <button id="bb-lightbox-close">✕</button>
+        </div>
+        <div id="bb-lightbox-grid"></div>
+      </div>`;
+    document.body.appendChild(_lightbox);
+    _lightbox.addEventListener('click', e => { if (e.target === _lightbox) closeLightbox(); });
+    _lightbox.querySelector('#bb-lightbox-close').addEventListener('click', closeLightbox);
+
+    _viewer = document.createElement('div');
+    _viewer.id = 'bb-lightbox-viewer';
+    _viewer.style.display = 'none';
+    _viewer.innerHTML = `
+      <button id="bb-lightbox-viewer-close">✕</button>
+      <img id="bb-lightbox-viewer-img" alt="">`;
+    document.body.appendChild(_viewer);
+    _viewer.querySelector('#bb-lightbox-viewer-close').addEventListener('click', () => {
+      _viewer.style.display = 'none';
+    });
+    _viewer.addEventListener('click', e => { if (e.target === _viewer) _viewer.style.display = 'none'; });
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+  }
+
+  /**
+   * Populates and shows the lightbox for a gallery content object.
+   * @param {{type:'gallery', items:{thumbUrl:string,mediumUrl:string}[]}} content
+   * @param {string} label  Display label for the title bar.
+   */
+  function openLightbox(content, label) {
+    initLightbox();
+    const grid  = _lightbox.querySelector('#bb-lightbox-grid');
+    const title = _lightbox.querySelector('#bb-lightbox-title');
+    title.textContent = `📷 ${label} — ${content.items.length} photos`;
+    grid.innerHTML = '';
+    for (const { thumbUrl, mediumUrl } of content.items) {
+      const img = document.createElement('img');
+      img.src = thumbUrl;
+      img.loading = 'lazy';
+      img.addEventListener('click', () => {
+        _viewer.querySelector('#bb-lightbox-viewer-img').src = mediumUrl;
+        _viewer.style.display = 'flex';
+      });
+      grid.appendChild(img);
+    }
+    _lightbox.style.display = 'flex';
+  }
+
+  /** Closes the lightbox grid and the full-size viewer. */
+  function closeLightbox() {
+    if (_lightbox) _lightbox.style.display = 'none';
+    if (_viewer)   _viewer.style.display   = 'none';
+  }
+
+  /**
+   * Shows a single full-size image in the viewer overlay without opening the
+   * thumbnail grid lightbox.
+   * @param {string} src  Full-size image URL.
+   */
+  function showImageViewer(src) {
+    initLightbox();
+    _viewer.querySelector('#bb-lightbox-viewer-img').src = src;
+    _viewer.style.display = 'flex';
+  }
+
+  /**
+   * Derives a human-readable caption from an image URL's filename.
+   * e.g. ".../20260117_Article_01.jpg/thumbnail.jpg" → "Article 01"
+   * @param {string} url
+   * @returns {string}
+   */
+  function filenameCaption(url) {
+    const parts = url.split('/');
+    const base  = (parts.find(p => /\.(jpg|jpeg|png|gif|webp)$/i.test(p) && /^\d{8}_/.test(p)) || '')
+                    .replace(/\.[^.]+$/, '');
+    return base.replace(/^\d{8}_/, '').replace(/_/g, ' ');
+  }
+
+  // ── Inline panels (all non-photo icons) ───────────────────────────────────
+
+  /** Currently visible panel, or null. Only one is open at a time. */
+  let _currentPanel = null;
+
+  /**
+   * Toggles the inline panel for an icon. Closes any other open panel first.
+   * Lazily builds the panel on first click and appends it to section.
+   * @param {HTMLImageElement} icon
+   * @param {object} content
+   * @param {HTMLElement} section  The .bb-section-processed container.
+   */
+  function toggleIconPanel(icon, content, section) {
+    if (_currentPanel && _currentPanel !== icon._bbPanel) {
+      _currentPanel.style.display = 'none';
+      if (_currentPanel._bbIcon) _currentPanel._bbIcon.classList.remove('bb-icon-active');
+    }
+    if (!icon._bbPanel) {
+      icon._bbPanel = buildIconPanel(content);
+      icon._bbPanel._bbIcon = icon;
+      section.appendChild(icon._bbPanel);
+    }
+    const open = icon._bbPanel.style.display !== 'none';
+    icon._bbPanel.style.display = open ? 'none' : '';
+    icon.classList.toggle('bb-icon-active', !open);
+    _currentPanel = open ? null : icon._bbPanel;
+  }
+
+  /**
+   * Builds a detached inline panel div for the given content object.
+   * @param {object} content
+   * @returns {HTMLElement}
+   */
+  function buildIconPanel(content) {
+    const div = document.createElement('div');
+    div.className = 'bb-icon-panel';
+    div.style.display = 'none';
+
+    const header    = document.createElement('div');
+    header.className = 'bb-icon-panel-header';
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = content.caption;
+    const closeBtn  = document.createElement('button');
+    closeBtn.textContent = '✕';
+    closeBtn.className  = 'bb-icon-panel-close';
+    closeBtn.addEventListener('click', () => {
+      div.style.display = 'none';
+      if (div._bbIcon) div._bbIcon.classList.remove('bb-icon-active');
+      _currentPanel = null;
+    });
+    header.append(titleSpan, closeBtn);
+    div.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'bb-icon-panel-body';
+
+    if (content.type === 'images') {
+      body.className += ' bb-icon-thumbnails';
+      for (const { thumbUrl, fullUrl } of content.items) {
+        const fig     = document.createElement('figure');
+        fig.className = 'bb-thumb-item';
+        const img     = document.createElement('img');
+        img.src       = thumbUrl;
+        img.loading   = 'lazy';
+        img.addEventListener('click', () => showImageViewer(fullUrl));
+        fig.appendChild(img);
+        const cap     = filenameCaption(thumbUrl);
+        if (cap) {
+          const figcap = document.createElement('figcaption');
+          figcap.textContent = cap;
+          fig.appendChild(figcap);
+        }
+        body.appendChild(fig);
+      }
+    } else if (content.type === 'links') {
+      for (const { url, text, source } of content.items) {
+        const p  = document.createElement('p');
+        p.className = 'bb-news-item';
+        const a  = document.createElement('a');
+        a.href   = url;
+        a.target = '_blank';
+        a.rel    = 'noopener';
+        a.textContent = text;
+        p.appendChild(a);
+        if (source) {
+          const span = document.createElement('span');
+          span.className   = 'bb-link-source';
+          span.textContent = ` (${source})`;
+          p.appendChild(span);
+        }
+        body.appendChild(p);
+      }
+    } else if (content.type === 'html') {
+      body.innerHTML = content.html;
+      body.querySelectorAll('a[href^="/"]').forEach(a => {
+        a.href = 'http://brucebase.wikidot.com' + a.getAttribute('href');
+      });
+    }
+
+    div.appendChild(body);
+    return div;
+  }
+
+  /**
+   * Scans icon images in the event's section, attaches click handlers for
+   * actionable icons (as determined by ICON_TITLE_MAP) that have extractable
+   * content from doc.
+   * @param {HTMLElement} eventLink  The event <a> element on the YEAR page.
+   * @param {Document}    doc        Parsed detail page document.
+   */
+  function wireIconHandlers(eventLink, doc) {
+    const section = eventLink.closest('.bb-section-processed');
+    if (!section) return;
+    const tabMap = buildTabMap(doc);
+    for (const icon of section.querySelectorAll('img.image')) {
+      const canonical = ICON_TITLE_MAP[icon.title];
+      if (!canonical) continue;
+      const content = extractIconContent(doc, canonical, tabMap);
+      if (!content) continue;
+      const rawTitle = icon.title;
+      icon.style.cursor = 'pointer';
+      icon.title = `${rawTitle} — click to expand`;
+      if (canonical === 'Photo') {
+        icon.addEventListener('click', () => openLightbox(content, rawTitle));
+      } else {
+        icon.addEventListener('click', () => toggleIconPanel(icon, content, section));
+      }
+    }
+  }
+
+  // Returns the first <a href> on doc whose href matches INFO_SETLIST_HREF_RE
+  // and whose text content contains "info" (case-insensitive).
+  function findInfoSetlistLink(doc) {
+    return [...doc.querySelectorAll('a[href]')].find(a => {
+      const href = a.getAttribute('href') || '';
+      return INFO_SETLIST_HREF_RE.test(href) && /info/i.test(a.textContent);
+    }) || null;
+  }
+
+  // Compares the YEAR page anchor name with the fragment on the detail page's
+  // "Info & Setlist" back-link. Annotates anchorEl with a warning if they differ.
+  function checkYearAnchorConsistency(detailDoc, yearAnchorName, anchorEl) {
+    const infoLink = findInfoSetlistLink(detailDoc);
+    if (!infoLink) {
+      log(`  Anchor check: no "Info & Setlist" link found on detail page`);
+      return;
+    }
+    const href = infoLink.getAttribute('href') || '';
+    const m = href.match(INFO_SETLIST_HREF_RE);
+    const detailAnchorRef = m ? m[1] : null;
+    if (!detailAnchorRef) return;
+
+    log(`  Anchor check: YEAR="#${yearAnchorName}", DETAIL refs="#${detailAnchorRef}"`);
+    if (yearAnchorName !== detailAnchorRef) {
+      logWarn(`  Anchor MISMATCH: YEAR="#${yearAnchorName}", DETAIL links "#${detailAnchorRef}"`);
+      addAnchorWarnYear(anchorEl, yearAnchorName, detailAnchorRef, href);
+    } else {
+      log(`  Anchor MATCH ✅`);
+    }
+  }
+
+  // Inserts a warning span immediately after the <a name="..."> anchor element
+  // on the YEAR page when the detail page's "Info & Setlist" fragment differs.
+  function addAnchorWarnYear(anchorEl, yearAnchorName, detailAnchorRef, detailHref) {
+    const span = document.createElement('span');
+    span.className = 'bb-anchor-warn';
+    span.textContent = '⚠️';
+    const msg = `Anchor mismatch: YEAR page anchor is "#${yearAnchorName}" but DETAIL page "Info & Setlist" links to "#${detailAnchorRef}" (href="${detailHref}")`;
+    span.dataset.msg = msg;
+    span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    span.addEventListener('mouseleave', hideTooltip);
+    anchorEl.after(span);
+  }
+
+  // Appends a warning span immediately after the "Info & Setlist" link on the
+  // DETAIL page when its fragment does not match the actual YEAR page anchor.
+  function addAnchorWarnDetail(linkEl, yearAnchorName, detailAnchorRef) {
+    const span = document.createElement('span');
+    span.className = 'bb-anchor-warn';
+    span.textContent = ' ⚠️';
+    const msg = `Anchor mismatch: "Info & Setlist" links to "#${detailAnchorRef}" but actual YEAR page anchor for this event is "#${yearAnchorName}"`;
+    span.dataset.msg = msg;
+    span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    span.addEventListener('mouseleave', hideTooltip);
+    linkEl.after(span);
+  }
+
   function makeGlyphSpan(char) {
     const span = document.createElement('span');
     span.className = 'bb-glyph';
@@ -1763,6 +2303,7 @@
       .bb-event-type        { color: #888; font-style: italic; font-weight: normal; }
       .bb-event-type-detail { font-size: 0.6em; font-weight: normal; color: #666; font-style: italic; vertical-align: middle; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }
+      .bb-scheduled { font-size: 0.8em; font-family: monospace; color: #555; margin: 1px 0 3px; }
 
       /* Toggle buttons */
       .bb-toggle-btn {
@@ -1780,14 +2321,34 @@
       }
       .bb-toggle-btn:hover    { background: #357abd; }
       .bb-toggle-btn:disabled { opacity: 0.5; cursor: default; }
-      #bb-btn-container  { display: flex; gap: 6px; align-items: center; margin: 6px 0 2px; }
+      /* #bb-controls wraps #bb-btn-container + #bb-year-progress in one flex row */
+      #bb-controls       { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 6px 0 2px; }
+      #bb-btn-container  { display: flex; gap: 6px; align-items: center; margin: 0; }
       #bb-global-toggle  { margin: 0; }
       .bb-section-toggle { margin-left: 0; }
       #bb-fetch-all-btn  { margin: 6px 6px 2px 0; }
-      #bb-year-progress  { color: #666; font-style: italic; margin: 2px 0; font-size: 0.9em; font-family: monospace; }
+      #bb-year-progress  { color: #666; font-style: italic; margin: 0; font-size: 0.9em; font-family: monospace; }
+
+      /* SmartTable trigger button inside our bar — match .bb-toggle-btn appearance */
+      #bb-btn-container .st-btn-trigger {
+        display: inline-block;
+        padding: 2px 10px;
+        background: #4a90d9;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-family: sans-serif;
+        margin: 0;
+      }
+      #bb-btn-container .st-btn-trigger:hover { background: #357abd; }
+
+      /* SmartTable host div — sits between sticky bar and #page-content */
+      #bb-smarttable-host { margin: 8px 0; }
 
       /* ── Sticky layout ───────────────────────────────────── */
-      :root { --bb-header-h: 0px; }
+      :root { --bb-header-h: 0px; --bb-sticky-bar-h: 0px; }
       #header {
         position: sticky;
         top: 0;
@@ -1838,6 +2399,7 @@
       .bb-sep          { color: #999; }
       .bb-section-label { color: #888; font-style: italic; }
       .bb-para-warn    { cursor: help; }
+      .bb-anchor-warn  { cursor: help; }
 
       /* Year-only <li> rows inserted on detail pages */
       li.bb-song-year-only {
@@ -1846,6 +2408,37 @@
         cursor: default;
       }
       li.bb-song-detail-only { background: #add8e6; }
+
+      /* ── Clickable icons ─────────────────────────────────── */
+      img.bb-icon-active { outline: 2px solid #4a90d9; border-radius: 2px; }
+
+      /* Inline icon panels */
+      .bb-icon-panel { margin: 4px 0; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; font-size: 0.85em; }
+      .bb-icon-panel-header { display: flex; justify-content: space-between; align-items: center; padding: 3px 8px; background: #e8e8e8; border-radius: 4px 4px 0 0; font-weight: bold; }
+      .bb-icon-panel-close { background: none; border: none; cursor: pointer; font-size: 1em; color: #666; padding: 0 2px; }
+      .bb-icon-panel-body { padding: 6px 8px; }
+      .bb-icon-panel-body a { display: block; color: #06c; text-decoration: none; margin: 2px 0; }
+      .bb-icon-panel-body a:hover { text-decoration: underline; }
+      .bb-icon-thumbnails { display: flex; flex-wrap: wrap; gap: 6px; }
+      .bb-thumb-item { display: flex; flex-direction: column; align-items: center; cursor: pointer; margin: 0; padding: 0; }
+      .bb-thumb-item img { width: 80px; height: 60px; object-fit: cover; border-radius: 2px; }
+      .bb-thumb-item img:hover { opacity: 0.85; }
+      .bb-thumb-item figcaption { font-size: 0.72em; color: #555; text-align: center; margin-top: 2px; max-width: 80px; word-break: break-word; }
+      .bb-news-item { margin: 2px 0; }
+      .bb-news-item a { display: inline; }
+      .bb-link-source { color: #888; font-size: 0.9em; font-style: italic; }
+
+      /* Lightbox overlay */
+      #bb-lightbox { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      #bb-lightbox-inner { background: #111; border-radius: 8px; max-width: 92vw; max-height: 88vh; overflow-y: auto; padding: 12px; }
+      #bb-lightbox-header { display: flex; justify-content: space-between; align-items: center; color: #eee; margin-bottom: 8px; font-size: 0.9em; }
+      #bb-lightbox-close { background: none; border: none; color: #eee; font-size: 1.2em; cursor: pointer; }
+      #bb-lightbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 4px; }
+      #bb-lightbox-grid img { width: 100%; height: 72px; object-fit: cover; cursor: pointer; border-radius: 2px; }
+      #bb-lightbox-grid img:hover { opacity: 0.85; }
+      #bb-lightbox-viewer { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.96); display: flex; align-items: center; justify-content: center; }
+      #bb-lightbox-viewer img { max-width: 96vw; max-height: 96vh; object-fit: contain; }
+      #bb-lightbox-viewer-close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: #eee; font-size: 1.6em; cursor: pointer; z-index: 1; }
     `);
   }
 
