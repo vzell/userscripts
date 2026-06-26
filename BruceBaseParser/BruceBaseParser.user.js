@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.58
+// @version      1.59
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -2067,8 +2067,26 @@
         body.appendChild(p);
       }
     } else if (content.type === 'html') {
-      if (content.caption === 'Media') body.className += ' bb-icon-panel-body--media';
-      body.innerHTML = content.html;
+      if (content.caption === 'Media') {
+        // Extract each embed from its wikidot wrapper into a clean flex item so
+        // wikidot's own block/width:100% styles on the wrapper don't fight flex.
+        body.className += ' bb-icon-panel-body--media';
+        const tmp = document.createElement('div');
+        tmp.innerHTML = content.html;
+        const embeds = [...tmp.querySelectorAll('iframe, object, embed, video')];
+        if (embeds.length > 0) {
+          for (const embed of embeds) {
+            const item = document.createElement('div');
+            item.className = 'bb-media-item';
+            item.appendChild(embed);
+            body.appendChild(item);
+          }
+        } else {
+          body.innerHTML = content.html;
+        }
+      } else {
+        body.innerHTML = content.html;
+      }
       body.querySelectorAll('a[href^="/"]').forEach(a => {
         a.href = 'http://brucebase.wikidot.com' + a.getAttribute('href');
       });
@@ -2481,6 +2499,7 @@
       .bb-icon-panel-body a { color: #06c; text-decoration: none; }
       .bb-icon-panel-body a:hover { text-decoration: underline; }
       .bb-icon-panel-body--media { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+      .bb-media-item { flex: 0 0 auto; }
       .bb-icon-thumbnails { display: flex; flex-wrap: wrap; gap: 6px; }
       .bb-thumb-item { display: flex; flex-direction: column; align-items: center; cursor: pointer; margin: 0; padding: 0; }
       .bb-thumb-item img { width: 80px; height: 60px; object-fit: cover; border-radius: 2px; }

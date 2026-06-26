@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.59",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Video panel: extract each iframe/embed from its wikidot wrapper into a clean .bb-media-item flex child, bypassing wikidot's block/width:100% styles that were forcing embeds onto separate rows despite the flex container."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.58",
         "date": "2026-06-26",
         "sections": [
