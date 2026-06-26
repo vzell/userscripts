@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.56
+// @version      1.57
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1796,12 +1796,29 @@
   }
 
   /**
+   * Returns true when the Recording tab's <hr> separates a genuine LiveDL
+   * entry (before) from Bootleg content (after). Detected by the presence of
+   * a cover-image container, a nugs.net link, or "Official concert recording"
+   * text anywhere in the tab. When false the <hr> is structural (e.g. two
+   * unrelated blocks) and Bootleg should show the full tab.
+   * @param {HTMLElement} tab
+   * @returns {boolean}
+   */
+  function isLiveDLSplit(tab) {
+    return !!(
+      tab.querySelector('.image-container, a[href*="nugs.net"]') ||
+      /official\s+concert\s+recording/i.test(tab.textContent)
+    );
+  }
+
+  /**
    * Extracts content from the Recording tab for Bootleg or LiveDL icons.
    *
-   * When the tab contains an <hr>, it marks the boundary between the two
-   * sections: LiveDL content (official release + cover image) sits before it;
-   * Bootleg content (circulating recordings) sits after it. Each type receives
-   * only its own slice. When there is no <hr> both types receive the full tab.
+   * Splits at <hr> only when the content before it is a genuine LiveDL entry
+   * (cover image / nugs.net link / "Official concert recording" text). In that
+   * case LiveDL receives the slice before <hr> and Bootleg receives the slice
+   * after it. Otherwise (no <hr>, or <hr> is a structural separator with no
+   * LiveDL content before it) both types return the full tab.
    *
    * @param {Document} doc
    * @param {Map<string,number>} tabMap
@@ -1813,9 +1830,10 @@
     if (!tab) return null;
     if (/^Sorry, no .+ available/.test(tab.textContent.trim())) return null;
 
+    const caption = canonical === 'LiveDL' ? 'Official Live Download' : 'Recording';
     const hr = tab.querySelector('hr');
-    if (!hr) {
-      const caption = canonical === 'LiveDL' ? 'Official Live Download' : 'Recording';
+
+    if (!hr || !isLiveDLSplit(tab)) {
       return { type: 'html', caption, html: tab.innerHTML };
     }
 
@@ -1842,7 +1860,6 @@
       parent.removeChild(hrClone);
     }
 
-    const caption = canonical === 'LiveDL' ? 'Official Live Download' : 'Recording';
     return { type: 'html', caption, html: clone.innerHTML };
   }
 

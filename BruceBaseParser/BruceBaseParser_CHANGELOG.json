@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.57",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Bootleg icon now shows the full Recording tab when the <hr> does not separate a genuine LiveDL entry. A split is only performed when the tab contains a cover-image container, a nugs.net link, or 'Official concert recording' text — otherwise Bootleg renders all content regardless of <hr> separators."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.56",
         "date": "2026-06-26",
         "sections": [
