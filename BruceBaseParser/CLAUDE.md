@@ -127,6 +127,16 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
 - Appends ✅ or ❌ glyph; hover shows a tooltip with both names and a
   token-level diff (`buildDiffHtml`)
 
+**Scheduled block** (always):
+- `extractScheduled(doc)` scans `div.code pre code` elements for text starting
+  with `"Scheduled:"`.
+- If found, `addScheduledBlock(element, text)` inserts a `<div class="bb-scheduled">`
+  in monospace below the event-title `<p>` on the YEAR page.
+
+**Clickable icon handlers** (always):
+- `wireIconHandlers(eventLink, doc)` — see the "Clickable YEAR-page icons" section below.
+  Called after `addScheduledBlock`.
+
 **Anchor consistency check** (always, when `anchorEl` and `anchorName` are set):
 - Calls `checkYearAnchorConsistency(detailDoc, anchorName, anchorEl)`
 - `findInfoSetlistLink(detailDoc)` locates the `<a href="/YEAR#ANCHOR">Info & Setlist</a>` back-link by matching `INFO_SETLIST_HREF_RE` (`/^\/[\d][\w-]*#([a-zA-Z0-9]+)$/`) and `/info/i` in the link text
@@ -230,6 +240,119 @@ Both global buttons start `disabled` and are enabled after `processYearEvents` c
 
 ---
 
+## Clickable YEAR-page icons
+
+Each event section on a YEAR page may end with small `<img class="image" title="X">` icon
+images (and on some older pages they are wrapped in `<a href="javascript:;">`). After
+`processOneYearEvent` fetches the DETAIL page, `wireIconHandlers` makes them interactive.
+
+### Constants
+
+| Constant | Purpose |
+|---|---|
+| `ICON_TITLE_MAP` | Maps every title variant (`"Photos"`, `"Eye"`, `"Audio / Video Bootleg"`, …) to a canonical key (`"Photo"`, `"Eyewitness"`, `"Bootleg"`, …) |
+| `ICON_COVERED_TABS` | Set of YUI tab labels already handled by icon images; these labels are excluded from the extra-tab button row. Includes: `Gallery`, `Setlist`, `News/Memorabilia`, `Media`, `Storyteller`, `Eyewitness`, `Recording` |
+| `SKIP_TABS` | Set of tab labels to never show as buttons (currently empty; kept for future use) |
+
+### Tab lookup helpers
+
+`buildTabMap(doc)` iterates `doc.querySelectorAll('.yui-nav em')` in order and returns
+a `Map<label, index>`. `getTabEl(doc, tabMap, label)` returns
+`doc.getElementById('wiki-tab-0-N')` or `null`. The index is always looked up by label,
+never hardcoded, because tab positions vary across event types.
+
+### Content extractors
+
+| Canonical | Tab label | Content shape |
+|---|---|---|
+| `Photo` | Gallery | `{ type:'gallery', items:[{thumbUrl, mediumUrl}] }` |
+| `Setlist` | News/Memorabilia | `{ type:'images', caption:'Setlist', items }` — images with "setlist" in src, not "ticket" |
+| `Ticket` | News/Memorabilia | `{ type:'images', caption:'Tickets', items }` — images with "ticket" in src |
+| `News` | News/Memorabilia | `{ type:'links', caption:'News', items:[{url, text, source}] }` — external `http` links; source captured from trailing `<sup><em>` sibling |
+| `Memorabilia` | News/Memorabilia | `{ type:'images', caption:'Memorabilia', items }` — images with `/news:` in src |
+| `Video` | Media | `{ type:'html', caption:'Media', html }` — tab HTML if an `<iframe>`/`<object>`/`<embed>`/`<video>` is present |
+| `Storyteller` | Storyteller | `{ type:'html', caption:'Storyteller', html }` |
+| `Eyewitness` | Eyewitness | `{ type:'html', caption:'Eyewitness', html }` |
+| `Bootleg` | Recording | `{ type:'html', caption:'Recording', html }` — see split logic below |
+| `LiveDL` | Recording | `{ type:'html', caption:'Official Live Download', html }` — see split logic below |
+
+All `extractTabHtml` results return `null` when the tab is absent or its text starts with
+`"Sorry, no X available"`.
+
+### Recording tab split (`extractRecordingContent` / `isLiveDLSplit`)
+
+When the Recording tab contains an `<hr>`, the split is only applied if
+`isLiveDLSplit(tab)` returns true — i.e. the tab contains a `.image-container`,
+a `nugs.net` link, or text matching `/official\s+concert\s+recording/i`.
+
+- **LiveDL** → slice before `<hr>` (cover image + official release info).
+- **Bootleg** → slice after `<hr>` (circulating recordings).
+- When no `<hr>`, or `isLiveDLSplit` is false (structural `<hr>` with no LiveDL content
+  before it), both types return the full tab so no content is lost.
+
+### Lightbox (Photo / Gallery)
+
+Two singleton elements appended directly to `document.body` (as independent siblings,
+not nested, so `display:none` on one cannot cascade into the other):
+
+- **`_lightbox`** (`#bb-lightbox`) — dark full-screen overlay with a thumbnail grid
+  (`#bb-lightbox-grid`). `openLightbox(content, label)` populates it and sets
+  `display:flex`. Clicking the backdrop or ✕ calls `closeLightbox()`.
+- **`_viewer`** (`#bb-lightbox-viewer`) — separate fixed overlay for the full-size
+  image. `showImageViewer(src)` shows it directly without opening the grid lightbox.
+  Clicking a thumbnail in the grid also opens `_viewer`. ESC closes both via a shared
+  `keydown` listener that calls `closeLightbox()`.
+
+Both are created lazily inside `initLightbox()`.
+
+### Inline panels (all non-photo icons)
+
+`toggleIconPanel(icon, content, section)` lazily builds a panel via `buildIconPanel(content)`
+on first click, sets `panel._bbIcon = icon` so the ✕ button can remove the
+`.bb-icon-active` highlight from the triggering icon, and appends it to `section`.
+Panels are **independent** — multiple panels across different events can be open simultaneously.
+
+`buildIconPanel` renders by content type:
+
+| `content.type` | Rendering |
+|---|---|
+| `images` | Flex-wrapped `<figure class="bb-thumb-item">` elements; clicking the `<img>` calls `showImageViewer(fullUrl)`. Caption from `filenameCaption(url)` strips the `YYYYMMDD_` prefix and underscores (e.g. `"Article 01"`, `"Setlist 02 Handwritten"`). |
+| `links` | `<p class="bb-news-item"><a>Title</a><span class="bb-link-source">(Source)</span></p>` per item. |
+| `html` | Raw tab `innerHTML`; relative `/` links rewritten to `http://brucebase.wikidot.com/…`. For `caption === 'Media'`: each `<iframe>`/`<object>`/`<embed>`/`<video>` is extracted from its wikidot wrapper into a clean `<div class="bb-media-item">` flex child to avoid wikidot CSS interfering with the flex layout. |
+
+### Extra-tab buttons (`addExtraTabButtons`)
+
+After processing icon images, `wireIconHandlers` calls `addExtraTabButtons(doc, tabMap, section)`.
+This iterates all labels in `tabMap`, skips those in `ICON_COVERED_TABS` or `SKIP_TABS`, and
+for each non-empty tab that does not start with `"Sorry, no X available"` creates a
+`<button class="bb-extra-tab-btn">` with the label as its text. All buttons for one event
+are wrapped in `<div class="bb-extra-tab-row">` (flex-wrap) appended to the section.
+
+Clicking a button uses the same `buildIconPanel` + `_bbIcon` mechanism as icon handlers.
+Because `tabMap` is built in YUI nav insertion order, `"On Stage"` (always tab 0) appears
+first in the row, before tabs like `"Performances"`, `"Appearances"`, `"Cancelled"`, etc.
+
+### CSS classes (icon feature)
+
+| CSS class | Purpose |
+|---|---|
+| `.bb-scheduled` | Monospace "Scheduled: …" block below event title (0.8em, #555) |
+| `img.bb-icon-active` | Blue outline on a clicked icon image |
+| `.bb-icon-panel` | Inline collapsible panel container |
+| `.bb-icon-panel-header` | Panel title + ✕ button row |
+| `.bb-icon-panel-body` | Panel content area |
+| `.bb-icon-thumbnails` | Flex-wrap thumbnail grid inside a panel |
+| `.bb-thumb-item` | `<figure>` wrapper for one thumbnail + caption |
+| `.bb-news-item` | `<p>` wrapper for one news link + source |
+| `.bb-link-source` | Italic grey source label after a news link |
+| `.bb-media-item` | Flex child wrapping one extracted video embed |
+| `.bb-extra-tab-row` | Flex-wrap row of extra-tab buttons |
+| `.bb-extra-tab-btn` | Individual extra-tab button; `.bb-icon-active` applied when open |
+| `#bb-lightbox` | Full-screen thumbnail grid overlay |
+| `#bb-lightbox-viewer` | Full-screen single-image viewer overlay (separate body child) |
+
+---
+
 ## HOME page mode (`runHomePage`)
 
 Runs on `http://brucebase.wikidot.com/` and `/start`.
@@ -330,6 +453,22 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 | `checkYearAnchorConsistency(detailDoc, yearAnchorName, anchorEl)` | Extracts fragment from the "Info & Setlist" link on the detail page; calls `addAnchorWarnYear` on mismatch |
 | `addAnchorWarnYear(anchorEl, …)` | Inserts `<span class="bb-anchor-warn">⚠️</span>` after `<a name>` on YEAR page when anchor ≠ detail fragment |
 | `addAnchorWarnDetail(linkEl, …)` | Appends `<span class="bb-anchor-warn"> ⚠️</span>` after the "Info & Setlist" link on the DETAIL page when fragment ≠ year anchor |
+| `extractScheduled(doc)` | Returns the text of the first `div.code pre code` element starting with `"Scheduled:"`, or `null` |
+| `addScheduledBlock(element, text)` | Inserts `<div class="bb-scheduled">` after the event-title `<p>` on the YEAR page |
+| `buildTabMap(doc)` | Builds `Map<label,index>` from `.yui-nav em` elements on a DETAIL page |
+| `getTabEl(doc, tabMap, label)` | Returns `#wiki-tab-0-N` for the given label, or `null` |
+| `extractIconContent(doc, canonical, tabMap)` | Dispatcher; calls the appropriate per-type extractor |
+| `extractRecordingContent(doc, tabMap, canonical)` | Extracts Bootleg/LiveDL slice from the Recording tab; splits at `<hr>` only when `isLiveDLSplit(tab)` is true |
+| `isLiveDLSplit(tab)` | Returns true when the Recording tab contains a LiveDL entry (cover image, nugs.net link, or "Official concert recording" text) |
+| `initLightbox()` | Lazily creates `_lightbox` and `_viewer` as independent `body` children |
+| `openLightbox(content, label)` | Populates and shows the thumbnail grid lightbox |
+| `closeLightbox()` | Hides both `_lightbox` and `_viewer` |
+| `showImageViewer(src)` | Shows a single full-size image in `_viewer` without opening the grid |
+| `filenameCaption(url)` | Derives a human-readable caption from a dated filename (strips `YYYYMMDD_` prefix, replaces `_` with spaces) |
+| `toggleIconPanel(icon, content, section)` | Lazily builds and toggles an inline panel for a YEAR-page icon; panels are independent (multiple can be open) |
+| `buildIconPanel(content)` | Creates a detached panel div for a content object; handles `images`, `links`, and `html` types |
+| `addExtraTabButtons(doc, tabMap, section)` | Appends a `.bb-extra-tab-row` with buttons for DETAIL tabs not in `ICON_COVERED_TABS` or `SKIP_TABS` |
+| `wireIconHandlers(eventLink, doc)` | Makes icon images interactive and calls `addExtraTabButtons`; called from `processOneYearEvent` |
 | `buildDiffHtml(a, b)` | Token-level diff on whitespace/comma splits (for name tooltips) |
 | `buildCharDiffHtml(a, b)` | Char-level LCS diff; shows year song chars with red/green spans |
 | `lcsDiff(yearSongs, detailSongs)` | Standard LCS producing `match`/`year-only`/`detail-only` items |
@@ -347,6 +486,9 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
   avoid it on the sidebar.
 - `--bb-header-h` CSS custom property is set by `setupStickyBar` on YEAR pages; defaults
   to `0px` on other page types via `:root { --bb-header-h: 0px; }`.
+- `--bb-sticky-bar-h` is set by `setupStickyBar` after measuring `#bb-sticky-bar.offsetHeight`.
+  The SmartTable `stickyOffset` option is passed `'calc(var(--bb-header-h) + var(--bb-sticky-bar-h))'`
+  so both `st-global-bar` and `thead` stick below the sticky bar rather than below the viewport top.
 
 ---
 
