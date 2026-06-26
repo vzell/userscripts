@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.60",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Extra-tab buttons: DETAIL page tabs not covered by icon images (e.g. 'Light Of Day', 'Performances', 'Appearances', 'Cancelled') are now rendered as small clickable buttons right after the icons on each YEAR-page event. Clicking a button toggles an inline panel with the tab content, using the same panel infrastructure as icon handlers. Tabs already handled by icons (Gallery, Setlist, News/Memorabilia, Media, Storyteller, Eyewitness, Recording) and the 'On Stage' meta-tab are excluded."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.59",
         "date": "2026-06-26",
         "sections": [

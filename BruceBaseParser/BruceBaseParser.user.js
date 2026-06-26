@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.59
+// @version      1.60
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -45,6 +45,14 @@
     'Bootleg': 'Bootleg',   'Audio': 'Bootleg', 'Audio / Video Bootleg': 'Bootleg',
     'LiveDL': 'LiveDL',     'Official Live Download': 'LiveDL',
   };
+
+  /** Tab labels already handled by icon images — not given extra buttons. */
+  const ICON_COVERED_TABS = new Set([
+    'Gallery', 'Setlist', 'News/Memorabilia', 'Media', 'Storyteller', 'Eyewitness', 'Recording',
+  ]);
+
+  /** Tab labels that carry no standalone content worth showing on the YEAR page. */
+  const SKIP_TABS = new Set(['On Stage']);
 
   function log(...a)     { console.log  ('[BruceBase]', ...a); }
   function logWarn(...a) { console.warn ('[BruceBase]', ...a); }
@@ -2103,6 +2111,48 @@
    * @param {HTMLElement} eventLink  The event <a> element on the YEAR page.
    * @param {Document}    doc        Parsed detail page document.
    */
+  /**
+   * Appends a row of small buttons for DETAIL page tabs that are not already
+   * covered by an icon image (e.g. "Light Of Day", "Performances"). Each
+   * button toggles an inline panel showing that tab's content, using the same
+   * buildIconPanel infrastructure as the icon handlers.
+   * @param {Document}          doc
+   * @param {Map<string,number>} tabMap
+   * @param {HTMLElement}       section
+   */
+  function addExtraTabButtons(doc, tabMap, section) {
+    const row = document.createElement('div');
+    row.className = 'bb-extra-tab-row';
+
+    for (const [label] of tabMap) {
+      if (ICON_COVERED_TABS.has(label) || SKIP_TABS.has(label)) continue;
+      const tab = getTabEl(doc, tabMap, label);
+      if (!tab) continue;
+      const text = tab.textContent.trim();
+      if (!text || /^Sorry, no .+ available/.test(text)) continue;
+
+      const content = { type: 'html', caption: label, html: tab.innerHTML };
+      const btn = document.createElement('button');
+      btn.className = 'bb-extra-tab-btn';
+      btn.textContent = label;
+
+      btn.addEventListener('click', () => {
+        if (!btn._bbPanel) {
+          btn._bbPanel = buildIconPanel(content);
+          btn._bbPanel._bbIcon = btn;
+          section.appendChild(btn._bbPanel);
+        }
+        const open = btn._bbPanel.style.display !== 'none';
+        btn._bbPanel.style.display = open ? 'none' : '';
+        btn.classList.toggle('bb-icon-active', !open);
+      });
+
+      row.appendChild(btn);
+    }
+
+    if (row.children.length > 0) section.appendChild(row);
+  }
+
   function wireIconHandlers(eventLink, doc) {
     const section = eventLink.closest('.bb-section-processed');
     if (!section) return;
@@ -2121,6 +2171,7 @@
         icon.addEventListener('click', () => toggleIconPanel(icon, content, section));
       }
     }
+    addExtraTabButtons(doc, tabMap, section);
   }
 
   // Returns the first <a href> on doc whose href matches INFO_SETLIST_HREF_RE
@@ -2490,6 +2541,10 @@
 
       /* ── Clickable icons ─────────────────────────────────── */
       img.bb-icon-active { outline: 2px solid #4a90d9; border-radius: 2px; }
+      .bb-extra-tab-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; }
+      .bb-extra-tab-btn { background: #e8e8e8; border: 1px solid #bbb; border-radius: 3px; cursor: pointer; font-size: 0.8em; padding: 1px 7px; color: #333; font-family: sans-serif; }
+      .bb-extra-tab-btn:hover { background: #d4d4d4; }
+      .bb-extra-tab-btn.bb-icon-active { background: #4a90d9; color: #fff; border-color: #357abd; }
 
       /* Inline icon panels */
       .bb-icon-panel { margin: 4px 0; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; font-size: 0.85em; }
