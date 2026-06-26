@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.54
+// @version      1.55
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1916,21 +1916,15 @@
 
   // ── Inline panels (all non-photo icons) ───────────────────────────────────
 
-  /** Currently visible panel, or null. Only one is open at a time. */
-  let _currentPanel = null;
-
   /**
-   * Toggles the inline panel for an icon. Closes any other open panel first.
+   * Toggles the inline panel for an icon. Each panel is independent — multiple
+   * panels across different events can be open simultaneously.
    * Lazily builds the panel on first click and appends it to section.
    * @param {HTMLImageElement} icon
    * @param {object} content
    * @param {HTMLElement} section  The .bb-section-processed container.
    */
   function toggleIconPanel(icon, content, section) {
-    if (_currentPanel && _currentPanel !== icon._bbPanel) {
-      _currentPanel.style.display = 'none';
-      if (_currentPanel._bbIcon) _currentPanel._bbIcon.classList.remove('bb-icon-active');
-    }
     if (!icon._bbPanel) {
       icon._bbPanel = buildIconPanel(content);
       icon._bbPanel._bbIcon = icon;
@@ -1939,7 +1933,6 @@
     const open = icon._bbPanel.style.display !== 'none';
     icon._bbPanel.style.display = open ? 'none' : '';
     icon.classList.toggle('bb-icon-active', !open);
-    _currentPanel = open ? null : icon._bbPanel;
   }
 
   /**
@@ -1962,7 +1955,6 @@
     closeBtn.addEventListener('click', () => {
       div.style.display = 'none';
       if (div._bbIcon) div._bbIcon.classList.remove('bb-icon-active');
-      _currentPanel = null;
     });
     header.append(titleSpan, closeBtn);
     div.appendChild(header);

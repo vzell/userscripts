@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.55",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Icon panels are now independent: clicking an icon in one event no longer closes panels open in other events. Each panel toggles on its own and is closed individually via its ✕ button."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.54",
         "date": "2026-06-26",
         "sections": [
