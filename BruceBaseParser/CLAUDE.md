@@ -166,15 +166,27 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
   - **(c) Nested fallback**: if no songs found from direct children, widens
     to `td.querySelectorAll('ol, ul')` to find lists nested inside `<div>`.
   Sections from layout (b) carry `paragraphBased: true`.
+  Each section carries `hasExplicitLabel: boolean` — `true` only when a
+  `<p><strong>…</strong></p>` header immediately preceded the `<ol>`/`<ul>`.
+  This flag is reset to `false` after each section push so a header does not
+  accidentally propagate to the next list.
 - `yearFlat` / `yearRawFlat` — flattened cleaned / raw song arrays from
   `yearSections`; `detailParaFlat` — flat bool array (one entry per detail song)
   indicating whether that song came from a paragraph-based section.
   Each `diffItem` is annotated with `rawYearSong` (year-side raw text) and
   `paragraphBased` (whether the detail-side song was in `<p>` format).
+- **Section label annotation**: `sec.detailLabel` is assigned by position index
+  before rendering. Three sentinel values:
+  - `string` — the matching DETAIL section's label (explicit `<strong>` header text)
+  - `null` — year section has no counterpart in the detail sections array at all
+  - `false` — DETAIL exists but ALL its sections have `hasExplicitLabel: false`
+    AND the year has at least one non-show/non-recording section (e.g. Soundcheck).
+    This means the DETAIL page is missing the `<p><strong>…</strong></p>` header
+    for this section.
 - `lcsDiff(yearFlat, detailFlat)` + `mergeCharDiffs()` → `diffItems[]`
 - `renderYearSetlist(yearSections, diffItems)` assigns diff items back to their
   source `<p>`/`<blockquote>` elements, then calls
-  `renderSetlistElement(el, label, items)` which:
+  `renderSetlistElement(el, label, items, detailLabel)` which:
   - re-captures `<sup>` footnote HTML before overwriting `innerHTML`
   - replaces `el.innerHTML` with colour-coded spans
   - for `match` items: wraps only the clean song name in the green span;
@@ -184,6 +196,10 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
   - for items with `paragraphBased: true`, appends a
     `<span class="bb-para-warn">⚠️</span>` with hover tooltip after the song span;
     listeners registered in a second `querySelectorAll('.bb-para-warn')` pass
+  - `detailLabel === null` → ⚠️ "Section X exists on YEAR page but DETAIL page has no corresponding section"
+  - `detailLabel === false && labelLc !== 'show'` → ⚠️ "Section label 'X', missing from DETAIL page"
+  - `detailLabel === false && labelLc === 'show'` → ⚠️ "Section 'show' exists on YEAR page but DETAIL page has no corresponding section label"
+  - `detailLabel` is string, label ≠ detailLabel (non-both-show) → ⚠️ "Section label mismatch: YEAR page has 'X', DETAIL page has 'Y'"
 
 ### Setlist colour coding (YEAR page)
 
@@ -427,7 +443,19 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
      with `.bb-song-year-only` before the current position.
    - After each element on paragraph-based pages, `addParaStructureWarning(el)`
      appends a ⚠️ span with tooltip.
-11. `insertDetailToggle(originalTdHtml)` wraps the setlist tab content in
+11. `flagDetailSectionHeaders(yearSections, detailSections, diffItems)` runs after rendering:
+   - **Case A** — DETAIL already has `<p><strong>…</strong></p>` headers: flags
+     each with ⚠️ when its label mismatches the positionally-corresponding YEAR
+     section label (or when the DETAIL has headers with no YEAR counterpart).
+   - **Case B** — DETAIL has NO section headers AND year has a non-show/non-recording
+     section (e.g. Soundcheck): synthesizes missing headers by splitting the rendered
+     `<ol>` into per-section sub-lists. Computes section boundaries from `diffItems`
+     via a `posMap` (year-song index → year section index), counting how many
+     rendered `<li>` items belong to each section. The original `<ol>` is removed
+     and replaced with interleaved `<p><strong>Label ⚠️</strong></p>` + `<ol>`
+     fragments, each with a warning tooltip explaining the label is missing from
+     the original DETAIL page.
+12. `insertDetailToggle(originalTdHtml)` wraps the setlist tab content in
    processed/original show-hide divs and inserts a toggle button after
    `#page-title`.
 
@@ -449,6 +477,7 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 | `setupGlobalToggle(btn, content, originalHtml)` | Wires click handler on pre-existing `#bb-global-toggle`; creates hidden `#bb-page-original` div |
 | `setupMismatchFilter(btn)` | Wires click handler on pre-existing `#bb-mismatch-toggle` |
 | `addParaStructureWarning(el)` | Appends a `<span class="bb-para-warn">⚠️</span>` with tooltip to a `<p>`-based song element on DETAIL pages |
+| `flagDetailSectionHeaders(yearSections, detailSections, diffItems)` | Case A: flags existing DETAIL `<p><strong>…</strong></p>` headers when their label mismatches the positional YEAR section. Case B: when DETAIL has no headers but YEAR has non-show sections, splits the rendered `<ol>` into per-section sub-lists and inserts synthetic `<p><strong>Label ⚠️</strong></p>` headers at the correct positions (computed via `diffItems` + `posMap`). |
 | `findInfoSetlistLink(doc)` | Returns the first `<a href>` whose href matches `INFO_SETLIST_HREF_RE` and text contains "info" — the "Info & Setlist" back-link on detail pages |
 | `checkYearAnchorConsistency(detailDoc, yearAnchorName, anchorEl)` | Extracts fragment from the "Info & Setlist" link on the detail page; calls `addAnchorWarnYear` on mismatch |
 | `addAnchorWarnYear(anchorEl, …)` | Inserts `<span class="bb-anchor-warn">⚠️</span>` after `<a name>` on YEAR page when anchor ≠ detail fragment |

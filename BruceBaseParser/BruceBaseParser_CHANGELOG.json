@@ -1,5 +1,19 @@
 [
     {
+        "version": "1.66",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR page: when the DETAIL page has content but no explicit <strong> section headers (e.g. Soundcheck missing on gig:1981-04-11-hallenstadion-zurich-switzerland), non-show sections now show the correct tooltip — 'Section label \"Soundcheck\", missing from DETAIL page' — and the implicit show section shows 'Section \"show\" exists on YEAR page but DETAIL page has no corresponding section label'. Previously the section label comparison produced spurious mismatch messages.",
+                    "DETAIL page: when a YEAR page event has Soundcheck/Show sections but the DETAIL page has no <p><strong>…</strong></p> section headers at all, synthetic headers are now inserted (flagged with ⚠️) at the correct positions. The original <ol>/<ul> is split into per-section sub-lists with <p><strong>Soundcheck ⚠️</strong></p> / <p><strong>Show ⚠️</strong></p> headers inserted before each. The warning tooltip names the reason the label is missing from the original page.",
+                    "parseDetailSetlist now tracks hasExplicitLabel per section (true only when a <p><strong>…</strong></p> header immediately preceded the list). This flag is used to distinguish implicit 'show' labels from explicitly authored section labels."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.65",
         "date": "2026-06-27",
         "sections": [
