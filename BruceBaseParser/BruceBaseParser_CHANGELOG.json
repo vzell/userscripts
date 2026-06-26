@@ -1,5 +1,19 @@
 [
     {
+        "version": "1.65",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Sorry-flag tooltip rendered HTML entity literals (&amp;#x201c; etc.) instead of plain quotes — replaced with straight ASCII quotes in dataset.msg.",
+                    "Older DETAIL pages use 'Sorry no X available.' without a comma after 'Sorry' — made the comma optional in all six regex guards (/^Sorry,? no/i).",
+                    "News tab label on older DETAIL pages is 'News' rather than 'News/Memorabilia': added 'News' to ICON_COVERED_TABS so no spurious extra-tab button is created; added getNewsMemTab() helper that tries 'News/Memorabilia' then 'News'; updated all four News/Memorabilia extractors (extractSetlistImages, extractTicketImages, extractNewsLinks, extractMemorabilia) to use it; similarly updated the Sorry-flag check in wireIconHandlers."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.64",
         "date": "2026-06-26",
         "sections": [

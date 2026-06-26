@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.64
+// @version      1.65
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -48,7 +48,7 @@
 
   /** Tab labels already handled by icon images — not given extra buttons. */
   const ICON_COVERED_TABS = new Set([
-    'Gallery', 'Setlist', 'News/Memorabilia', 'Media', 'Storyteller', 'Eyewitness', 'Recording',
+    'Gallery', 'Setlist', 'News/Memorabilia', 'News', 'Media', 'Storyteller', 'Eyewitness', 'Recording',
   ]);
 
   /** Tab labels that carry no standalone content worth showing on the YEAR page. */
@@ -1726,6 +1726,11 @@
     return idx !== undefined ? doc.getElementById(`wiki-tab-0-${idx}`) : null;
   }
 
+  // Tries 'News/Memorabilia' first, then the short-form 'News' used on older pages.
+  function getNewsMemTab(doc, tabMap) {
+    return getTabEl(doc, tabMap, 'News/Memorabilia') || getTabEl(doc, tabMap, 'News') || null;
+  }
+
   /** @returns {{type:'gallery', items:{thumbUrl:string,mediumUrl:string}[]}|null} */
   function extractGalleryContent(doc, tabMap) {
     const tab = getTabEl(doc, tabMap, 'Gallery');
@@ -1741,7 +1746,7 @@
 
   /** @returns {{type:'images', caption:string, items:{thumbUrl:string,fullUrl:string}[]}|null} */
   function extractSetlistImages(doc, tabMap) {
-    const tab = getTabEl(doc, tabMap, 'News/Memorabilia');
+    const tab = getNewsMemTab(doc, tabMap);
     if (!tab) return null;
     const items = [...tab.querySelectorAll('img')].filter(img =>
       /setlist/i.test(img.src) && !/ticket/i.test(img.src)
@@ -1754,7 +1759,7 @@
 
   /** @returns {{type:'images', caption:string, items:{thumbUrl:string,fullUrl:string}[]}|null} */
   function extractTicketImages(doc, tabMap) {
-    const tab = getTabEl(doc, tabMap, 'News/Memorabilia');
+    const tab = getNewsMemTab(doc, tabMap);
     if (!tab) return null;
     const items = [...tab.querySelectorAll('img')].filter(img =>
       /ticket/i.test(img.src)
@@ -1767,9 +1772,9 @@
 
   /** @returns {{type:'links', caption:string, items:{url:string,text:string,source:string}[]}|null} */
   function extractNewsLinks(doc, tabMap) {
-    const tab = getTabEl(doc, tabMap, 'News/Memorabilia');
+    const tab = getNewsMemTab(doc, tabMap);
     if (!tab) return null;
-    if (/^Sorry, no .+ available/.test(tab.textContent.trim())) return null;
+    if (/^Sorry,? no .+ available/.test(tab.textContent.trim())) return null;
     // Tabs populated via wikidot list-pages contain gallery images and rich
     // embedded blocks — render as full HTML instead of extracting sparse links.
     if (tab.querySelector('.list-pages-box')) {
@@ -1807,7 +1812,7 @@
 
   /** @returns {{type:'images', caption:string, items:{thumbUrl:string,fullUrl:string}[]}|null} */
   function extractMemorabilia(doc, tabMap) {
-    const tab = getTabEl(doc, tabMap, 'News/Memorabilia');
+    const tab = getNewsMemTab(doc, tabMap);
     if (!tab) return null;
     const items = [...tab.querySelectorAll('img')].filter(img =>
       /\/news:/.test(img.src)
@@ -1834,7 +1839,7 @@
   function extractTabHtml(doc, tabMap, label, caption) {
     const tab = getTabEl(doc, tabMap, label);
     if (!tab) return null;
-    if (/^Sorry, no .+ available/.test(tab.textContent.trim())) return null;
+    if (/^Sorry,? no .+ available/.test(tab.textContent.trim())) return null;
     return { type: 'html', caption, html: tab.innerHTML };
   }
 
@@ -1871,7 +1876,7 @@
   function extractRecordingContent(doc, tabMap, canonical) {
     const tab = getTabEl(doc, tabMap, 'Recording');
     if (!tab) return null;
-    if (/^Sorry, no .+ available/.test(tab.textContent.trim())) return null;
+    if (/^Sorry,? no .+ available/.test(tab.textContent.trim())) return null;
 
     const caption = canonical === 'LiveDL' ? 'Official Live Download' : 'Recording';
     const hr = tab.querySelector('hr');
@@ -2164,7 +2169,7 @@
       const tab = getTabEl(doc, tabMap, label);
       if (!tab) continue;
       const text = tab.textContent.trim();
-      if (!text || /^Sorry, no .+ available/.test(text)) continue;
+      if (!text || /^Sorry,? no .+ available/.test(text)) continue;
 
       const content = { type: 'html', caption: label, html: tab.innerHTML };
       const btn = document.createElement('button');
@@ -2209,12 +2214,14 @@
         // Flag icons whose DETAIL tab explicitly says "Sorry, no X available"
         const tabLabel = CANONICAL_TAB_LABEL[canonical];
         if (tabLabel) {
-          const sorryTab = getTabEl(doc, tabMap, tabLabel);
-          if (sorryTab && /^Sorry, no /i.test(sorryTab.textContent.trim())) {
+          const sorryTab = tabLabel === 'News/Memorabilia'
+            ? getNewsMemTab(doc, tabMap)
+            : getTabEl(doc, tabMap, tabLabel);
+          if (sorryTab && /^Sorry,? no /i.test(sorryTab.textContent.trim())) {
             const warn = document.createElement('span');
             warn.className = 'bb-glyph bb-icon-sorry';
             warn.textContent = '⚠️';
-            warn.dataset.msg = `${canonical} icon on YEAR page but DETAIL page tab &#x201c;${tabLabel}&#x201d; reports no content available.`;
+            warn.dataset.msg = `${canonical} icon on YEAR page but DETAIL page tab "${tabLabel}" reports no content available.`;
             warn.addEventListener('mouseenter', e => showErrorTooltip(e, warn.dataset.msg));
             warn.addEventListener('mouseleave', hideTooltip);
             icon.after(warn);
