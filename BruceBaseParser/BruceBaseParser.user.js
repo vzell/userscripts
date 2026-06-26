@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.62
+// @version      1.63
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -105,7 +105,7 @@
     const filterBtn = document.createElement('button');
     filterBtn.id = 'bb-home-mismatch-toggle';
     filterBtn.className = 'bb-toggle-btn';
-    filterBtn.textContent = '⚡ Mismatches Only';
+    filterBtn.textContent = '⚡ Mismatches';
     filterBtn.disabled = true;
 
     // Inserting after pageTitle in reverse order places fetchBtn left, filterBtn right
@@ -162,7 +162,7 @@
     let filterActive = false;
     filterBtn.addEventListener('click', () => {
       filterActive = !filterActive;
-      filterBtn.textContent = filterActive ? '⚡ All Events' : '⚡ Mismatches Only';
+      filterBtn.textContent = filterActive ? '⚡ All Events' : '⚡ Mismatches';
       applyMismatchFilter(filterActive);
     });
   }
@@ -280,7 +280,7 @@
     const mismatchBtn = document.createElement('button');
     mismatchBtn.id = 'bb-mismatch-toggle';
     mismatchBtn.className = 'bb-toggle-btn';
-    mismatchBtn.textContent = '⚡ Mismatches Only';
+    mismatchBtn.textContent = '⚡ Mismatches';
     mismatchBtn.disabled = true;
 
     btnContainer.append(globalBtn, mismatchBtn);
@@ -503,14 +503,14 @@
       !!div.querySelector('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn, .bb-anchor-warn')
     ).length;
 
-    btn.textContent = `⚡ Mismatches Only (${mismatchCount})`;
+    btn.textContent = `⚡ Mismatches (${mismatchCount})`;
 
     let filterActive = false;
     btn.addEventListener('click', () => {
       filterActive = !filterActive;
       btn.textContent = filterActive
         ? `⚡ All Events (${totalEvents})`
-        : `⚡ Mismatches Only (${mismatchCount})`;
+        : `⚡ Mismatches (${mismatchCount})`;
       applyMismatchFilter(filterActive);
     });
   }
@@ -1759,7 +1759,21 @@
     // Tabs populated via wikidot list-pages contain gallery images and rich
     // embedded blocks — render as full HTML instead of extracting sparse links.
     if (tab.querySelector('.list-pages-box')) {
-      return { type: 'html', caption: 'News', html: tab.innerHTML };
+      const clone = tab.cloneNode(true);
+      // Strip gallery-box images (already shown via Memorabilia/Setlist/Ticket icons)
+      clone.querySelectorAll('.gallery-box, script').forEach(el => el.remove());
+      // Strip copyright paragraphs whose only non-whitespace child is a <sup>
+      clone.querySelectorAll('p').forEach(p => {
+        const meaningful = [...p.childNodes].filter(
+          n => !(n.nodeType === 3 && !n.textContent.trim())
+        );
+        if (meaningful.length === 1 && meaningful[0].nodeName === 'SUP') p.remove();
+      });
+      // Remove list-pages-item containers that are now empty
+      clone.querySelectorAll('.list-pages-item').forEach(item => {
+        if (!item.textContent.trim()) item.remove();
+      });
+      return { type: 'html', caption: 'News', html: clone.innerHTML };
     }
     const items = [...tab.querySelectorAll('a[href]')].filter(a => {
       const href = a.getAttribute('href') || '';
@@ -2165,6 +2179,15 @@
     if (!section) return;
     const tabMap = buildTabMap(doc);
     for (const icon of section.querySelectorAll('img.image')) {
+      // Unwrap real navigation <a> parents (e.g. /stats:Official%20Live%20Downloads)
+      // so clicks reach our handler instead of navigating away.
+      const iconParent = icon.parentElement;
+      if (iconParent && iconParent.tagName === 'A') {
+        const href = iconParent.getAttribute('href') || '';
+        if (href && !/^javascript:/i.test(href)) {
+          iconParent.replaceWith(...iconParent.childNodes);
+        }
+      }
       const canonical = ICON_TITLE_MAP[icon.title];
       if (!canonical) continue;
       const content = extractIconContent(doc, canonical, tabMap);

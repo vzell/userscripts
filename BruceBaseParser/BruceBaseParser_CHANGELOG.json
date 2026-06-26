@@ -1,5 +1,19 @@
 [
     {
+        "version": "1.63",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "LiveDL icon: unwrap navigation <a href='/stats:…'> wrapper around the icon image in wireIconHandlers so clicks reach our panel handler instead of navigating away.",
+                    "News icon (list-pages-box path): strip .gallery-box images, <script> tags, and copyright <p><sup>…</sup></p> from the rendered HTML; those images are already shown via the Memorabilia/Setlist/Ticket icons. Empty list-pages-item containers are also removed.",
+                    "Button labels: 'Mismatches Only' renamed to 'Mismatches' (all occurrences on YEAR and HOME pages). SmartTable trigger button renamed from 'Show table' / 'Hide table' to 'Table View' / 'Hide Table'."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.62",
         "date": "2026-06-26",
         "sections": [
