@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.60
+// @version      1.61
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -52,7 +52,7 @@
   ]);
 
   /** Tab labels that carry no standalone content worth showing on the YEAR page. */
-  const SKIP_TABS = new Set(['On Stage']);
+  const SKIP_TABS = new Set([]);
 
   function log(...a)     { console.log  ('[BruceBase]', ...a); }
   function logWarn(...a) { console.warn ('[BruceBase]', ...a); }
@@ -1740,7 +1740,7 @@
 
   /** @returns {{type:'images', caption:string, items:{thumbUrl:string,fullUrl:string}[]}|null} */
   function extractTicketImages(doc, tabMap) {
-    const tab = getTabEl(doc, tabMap, 'Setlist');
+    const tab = getTabEl(doc, tabMap, 'News/Memorabilia');
     if (!tab) return null;
     const items = [...tab.querySelectorAll('img')].filter(img =>
       /ticket/i.test(img.src)

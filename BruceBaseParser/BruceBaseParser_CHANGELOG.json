@@ -1,5 +1,18 @@
 [
     {
+        "version": "1.61",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Ticket icon: images now sourced from the News/Memorabilia tab (files:ticket-… path) instead of the Setlist tab where they do not appear.",
+                    "On Stage tab: removed from SKIP_TABS so it now gets a button in the extra-tab row, appearing first (before Performances/Appearances etc.) since it is always the first YUI tab."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.60",
         "date": "2026-06-26",
         "sections": [
