@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.55
+// @version      1.56
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1796,6 +1796,57 @@
   }
 
   /**
+   * Extracts content from the Recording tab for Bootleg or LiveDL icons.
+   *
+   * When the tab contains an <hr>, it marks the boundary between the two
+   * sections: LiveDL content (official release + cover image) sits before it;
+   * Bootleg content (circulating recordings) sits after it. Each type receives
+   * only its own slice. When there is no <hr> both types receive the full tab.
+   *
+   * @param {Document} doc
+   * @param {Map<string,number>} tabMap
+   * @param {'Bootleg'|'LiveDL'} canonical
+   * @returns {{type:'html', caption:string, html:string}|null}
+   */
+  function extractRecordingContent(doc, tabMap, canonical) {
+    const tab = getTabEl(doc, tabMap, 'Recording');
+    if (!tab) return null;
+    if (/^Sorry, no .+ available/.test(tab.textContent.trim())) return null;
+
+    const hr = tab.querySelector('hr');
+    if (!hr) {
+      const caption = canonical === 'LiveDL' ? 'Official Live Download' : 'Recording';
+      return { type: 'html', caption, html: tab.innerHTML };
+    }
+
+    const clone   = tab.cloneNode(true);
+    const hrClone = clone.querySelector('hr');
+    const parent  = hrClone.parentElement;
+
+    if (canonical === 'LiveDL') {
+      // Remove <hr> and every node after it
+      let node = hrClone;
+      while (node) {
+        const next = node.nextSibling;
+        parent.removeChild(node);
+        node = next;
+      }
+    } else {
+      // Remove every node before <hr>, then remove <hr> itself
+      let node = parent.firstChild;
+      while (node && node !== hrClone) {
+        const next = node.nextSibling;
+        parent.removeChild(node);
+        node = next;
+      }
+      parent.removeChild(hrClone);
+    }
+
+    const caption = canonical === 'LiveDL' ? 'Official Live Download' : 'Recording';
+    return { type: 'html', caption, html: clone.innerHTML };
+  }
+
+  /**
    * Dispatches to the per-type extractor for a canonical icon type.
    * @param {Document} doc
    * @param {string} canonical
@@ -1812,8 +1863,8 @@
       case 'Video':       return extractMediaContent(doc, tabMap);
       case 'Storyteller': return extractTabHtml(doc, tabMap, 'Storyteller', 'Storyteller');
       case 'Eyewitness':  return extractTabHtml(doc, tabMap, 'Eyewitness', 'Eyewitness');
-      case 'Bootleg':     return extractTabHtml(doc, tabMap, 'Recording', 'Recording');
-      case 'LiveDL':      return extractTabHtml(doc, tabMap, 'Recording', 'Official Live Download');
+      case 'Bootleg':     return extractRecordingContent(doc, tabMap, 'Bootleg');
+      case 'LiveDL':      return extractRecordingContent(doc, tabMap, 'LiveDL');
       default:            return null;
     }
   }

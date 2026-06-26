@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.56",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Bootleg and LiveDL icons now show distinct slices of the Recording tab. When an <hr> is present it marks the boundary: LiveDL displays only the content before it (official release info + cover image); Bootleg displays only the content after it (circulating recordings). When no <hr> exists both icons show the full tab."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.55",
         "date": "2026-06-26",
         "sections": [
