@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.61
+// @version      1.62
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1755,9 +1755,15 @@
   function extractNewsLinks(doc, tabMap) {
     const tab = getTabEl(doc, tabMap, 'News/Memorabilia');
     if (!tab) return null;
+    if (/^Sorry, no .+ available/.test(tab.textContent.trim())) return null;
+    // Tabs populated via wikidot list-pages contain gallery images and rich
+    // embedded blocks — render as full HTML instead of extracting sparse links.
+    if (tab.querySelector('.list-pages-box')) {
+      return { type: 'html', caption: 'News', html: tab.innerHTML };
+    }
     const items = [...tab.querySelectorAll('a[href]')].filter(a => {
       const href = a.getAttribute('href') || '';
-      return href.startsWith('http') && !/\.(jpg|jpeg|png|gif)$/i.test(href);
+      return href.startsWith('http') && !/\.(jpg|jpeg|png|gif|webp)$/i.test(href);
     }).map(a => {
       let source = '';
       let node = a.nextSibling;
@@ -1767,7 +1773,8 @@
       }
       return { url: a.href, text: a.textContent.trim(), source };
     }).filter(l => l.text);
-    return items.length ? { type: 'links', caption: 'News', items } : null;
+    if (items.length) return { type: 'links', caption: 'News', items };
+    return { type: 'html', caption: 'News', html: tab.innerHTML };
   }
 
   /** @returns {{type:'images', caption:string, items:{thumbUrl:string,fullUrl:string}[]}|null} */

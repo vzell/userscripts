@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.62",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "News icon: when the News/Memorabilia tab is populated via wikidot list-pages (gallery images, rich embedded blocks), render the full tab HTML instead of extracting only the sparse external links. Fixes events like 1977-02-07 where only the nugs.net link was shown while the full article gallery and LiveDL write-up were silently dropped."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.61",
         "date": "2026-06-26",
         "sections": [
