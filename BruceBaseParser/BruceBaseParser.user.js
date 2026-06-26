@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.57
+// @version      1.58
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -2067,6 +2067,7 @@
         body.appendChild(p);
       }
     } else if (content.type === 'html') {
+      if (content.caption === 'Media') body.className += ' bb-icon-panel-body--media';
       body.innerHTML = content.html;
       body.querySelectorAll('a[href^="/"]').forEach(a => {
         a.href = 'http://brucebase.wikidot.com' + a.getAttribute('href');
@@ -2477,15 +2478,15 @@
       .bb-icon-panel-header { display: flex; justify-content: space-between; align-items: center; padding: 3px 8px; background: #e8e8e8; border-radius: 4px 4px 0 0; font-weight: bold; }
       .bb-icon-panel-close { background: none; border: none; cursor: pointer; font-size: 1em; color: #666; padding: 0 2px; }
       .bb-icon-panel-body { padding: 6px 8px; }
-      .bb-icon-panel-body a { display: block; color: #06c; text-decoration: none; margin: 2px 0; }
+      .bb-icon-panel-body a { color: #06c; text-decoration: none; }
       .bb-icon-panel-body a:hover { text-decoration: underline; }
+      .bb-icon-panel-body--media { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
       .bb-icon-thumbnails { display: flex; flex-wrap: wrap; gap: 6px; }
       .bb-thumb-item { display: flex; flex-direction: column; align-items: center; cursor: pointer; margin: 0; padding: 0; }
       .bb-thumb-item img { width: 80px; height: 60px; object-fit: cover; border-radius: 2px; }
       .bb-thumb-item img:hover { opacity: 0.85; }
       .bb-thumb-item figcaption { font-size: 0.72em; color: #555; text-align: center; margin-top: 2px; max-width: 80px; word-break: break-word; }
       .bb-news-item { margin: 2px 0; }
-      .bb-news-item a { display: inline; }
       .bb-link-source { color: #888; font-size: 0.9em; font-style: italic; }
 
       /* Lightbox overlay */

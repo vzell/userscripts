@@ -1,5 +1,18 @@
 [
     {
+        "version": "1.58",
+        "date": "2026-06-26",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Removed display:block from .bb-icon-panel-body a — links inside prose HTML panels (Recording, Storyteller, Eyewitness) are no longer forced onto their own line.",
+                    "Video (Media) panel now renders embeds side by side with flex-wrap so they flow horizontally and wrap only when the window is too narrow."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.57",
         "date": "2026-06-26",
         "sections": [
