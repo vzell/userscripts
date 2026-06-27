@@ -1,5 +1,18 @@
 [
     {
+        "version": "1.80",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR OVERVIEW pages: '⊞ Table View' now uses the SmartTable library (same as YEAR pages) instead of the custom buildListPageTable. Columns: Date (sortable/filterable date), Status (glyph), Event (string), Link. Rows are extracted after processOneListEvent runs so glyph values are already present. The SmartTable trigger button is moved into #bb-btn-container alongside '⇄ Original Page' and '⚡ Mismatches'. The tri-state setListView / listTableEl / viewState machinery and buildListPageTable have been removed.",
+                    "YEAR OVERVIEW pages: Original Page toggle now delegates to setupGlobalToggle (same helper used by YEAR pages) instead of inline tri-state logic."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.79",
         "date": "2026-06-27",
         "sections": [

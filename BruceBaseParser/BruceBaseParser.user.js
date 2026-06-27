@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.79
+// @version      1.80
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -533,59 +533,6 @@
         link.target = '_blank';
         link.textContent = a.textContent.trim();
         nameCell.appendChild(link);
-      }
-    }
-
-    container.appendChild(table);
-    return container;
-  }
-
-  /**
-   * Builds a two-column table (Date | Event) for YEAR OVERVIEW (list) pages.
-   * The event link text typically starts with "YYYY-MM-DD - " which is split
-   * into the Date column; the remainder becomes the Event column.
-   * The original glyph (✅ / ❌ / ⚠️ / ❓) is cloned into the Event column.
-   * @param {Array<{element: HTMLElement, rawName: string}>} listEvents
-   * @returns {HTMLElement} - A div#bb-list-table containing the <table>
-   */
-  function buildListPageTable(listEvents) {
-    const container = document.createElement('div');
-    container.id = 'bb-list-table';
-
-    const table = document.createElement('table');
-    table.className = 'bb-event-table';
-
-    const thead = table.createTHead();
-    const hrow  = thead.insertRow();
-    for (const col of ['Date', 'Event']) {
-      const th = document.createElement('th');
-      th.textContent = col;
-      hrow.appendChild(th);
-    }
-
-    const tbody = table.createTBody();
-
-    for (const { element } of listEvents) {
-      const name = element.textContent.trim();
-      // Split "YYYY-MM-DD - rest" (or "YYYY-MM-DD rest") into date and event name.
-      const m = name.match(/^(\d{4}-\d{2}-\d{2})\s*[-–]?\s*(.*)/s);
-      const date      = m ? m[1]          : '';
-      const eventName = m ? m[2].trim()   : name;
-
-      const row = tbody.insertRow();
-      row.insertCell().textContent = date;
-
-      const nameCell  = row.insertCell();
-      const linkClone = element.cloneNode(true);
-      if (m) linkClone.textContent = eventName; // strip date prefix from link text
-      linkClone.target = '_blank';
-      nameCell.appendChild(linkClone);
-
-      // Clone the glyph span (directly after the link on list pages).
-      const glyph = element.nextElementSibling;
-      if (glyph && glyph.classList.contains('bb-glyph')) {
-        nameCell.appendChild(document.createTextNode(' '));
-        nameCell.appendChild(glyph.cloneNode(true));
       }
     }
 
@@ -1975,6 +1922,37 @@
   // YEAR LIST PAGE MODE
   // ════════════════════════════════════════════════════════════════════════════
 
+  /** SmartTable column definitions for YEAR OVERVIEW (list) pages. */
+  const LIST_SMARTTABLE_COLUMNS = [
+    { key: 'date',   label: 'Date',   type: 'date',   width: '105px' },
+    { key: 'status', label: 'Status', type: 'string', width: '60px',  sortable: false },
+    { key: 'event',  label: 'Event',  type: 'string' },
+    { key: 'url',    label: 'Link',   type: 'string', sortable: false, filterable: false,
+      render: url => {
+        const a = document.createElement('a');
+        a.href = url; a.textContent = 'Open'; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        return a;
+      } },
+  ];
+
+  /**
+   * Converts processed listEvents into SmartTable NormalizedRow[].
+   * Called after processOneListEvent so glyph spans are already in the DOM.
+   * @param {Array<{element: HTMLElement}>} listEvents
+   * @returns {object[]}
+   */
+  function extractListSmartTableRows(listEvents) {
+    return listEvents.map(({ element }) => {
+      const name  = element.textContent.trim();
+      const m     = name.match(/^(\d{4}-\d{2}-\d{2})\s*[-–]?\s*(.*)/s);
+      const date  = m ? m[1] : '';
+      const event = m ? m[2].trim() : name;
+      const sib   = element.nextElementSibling;
+      const status = (sib && sib.classList.contains('bb-glyph')) ? sib.textContent.trim() : '';
+      return { date, event, status, url: element.href || '' };
+    });
+  }
+
   async function runListPage(year) {
     const content   = document.querySelector('#page-content') || document.body;
     const pageTitle = document.getElementById('page-title');
@@ -2005,13 +1983,7 @@
     mismatchBtn.textContent = '⚡ Mismatches';
     mismatchBtn.disabled = true;
 
-    const tableBtn = document.createElement('button');
-    tableBtn.id = 'bb-list-table-btn';
-    tableBtn.className = 'bb-toggle-btn';
-    tableBtn.textContent = '⊞ Table View';
-    tableBtn.disabled = true;
-
-    btnContainer.append(globalBtn, mismatchBtn, tableBtn);
+    btnContainer.append(globalBtn, mismatchBtn);
 
     // ── Progress ─────────────────────────────────────────────────────────────
     const progressEl = document.createElement('p');
@@ -2074,48 +2046,28 @@
     timerSpan.textContent = fmtElapsed(Date.now() - startTime);
     progressEl.replaceChildren(timerSpan, ` ... Done — ${listEvents.length} events processed`);
 
-    // ── Three-view toggle (list / original / table) ───────────────────────────
-    // All three buttons share this single view-state so switching one view never
-    // leaves content in an inconsistent hidden state.
-    const originalEl = document.createElement('div');
-    originalEl.id = 'bb-page-original';
-    originalEl.innerHTML = originalHtml;
-    originalEl.style.display = 'none';
-    content.parentNode.insertBefore(originalEl, content.nextSibling);
-
-    let listTableEl = null;
-    let viewState   = 'list';
-
-    function setListView(v) {
-      viewState = v;
-      content.style.display    = v === 'list'     ? '' : 'none';
-      originalEl.style.display = v === 'original' ? '' : 'none';
-      if (listTableEl) listTableEl.style.display  = v === 'table'    ? '' : 'none';
-      globalBtn.textContent = v === 'original' ? '⇄ Processed Page' : '⇄ Original Page';
-      tableBtn.textContent  = v === 'table'    ? '⊞ Event List'     : '⊞ Table View';
+    // ── SmartTable (mirrors runYearPage — trigger button moved into btnContainer) ──
+    if (typeof SmartTable !== 'undefined') {
+      const stHost = document.createElement('div');
+      stHost.id = 'bb-list-smarttable-host';
+      // Place between sticky bar and #page-content so the table appears there.
+      stickyBar.after(stHost);
+      SmartTable.render({
+        columns: LIST_SMARTTABLE_COLUMNS,
+        rows:    extractListSmartTableRows(listEvents),
+        container: stHost,
+        options: { stickyOffset: 'calc(var(--bb-header-h) + var(--bb-sticky-bar-h))' },
+      });
+      const stBtn = stHost.querySelector('.st-btn-trigger');
+      if (stBtn) btnContainer.appendChild(stBtn);
     }
 
-    globalBtn.addEventListener('click', () =>
-      setListView(viewState === 'original' ? 'list' : 'original'));
-
-    tableBtn.addEventListener('click', () => {
-      if (viewState === 'table') {
-        setListView('list');
-      } else {
-        if (!listTableEl) {
-          listTableEl = buildListPageTable(listEvents);
-          content.after(listTableEl);
-        }
-        listTableEl.style.display = '';
-        setListView('table');
-      }
-    });
-
+    // ── Wire up buttons ───────────────────────────────────────────────────────
+    setupGlobalToggle(globalBtn, content, originalHtml);
     setupListMismatchFilter(mismatchBtn, listEvents);
 
-    globalBtn.disabled  = false;
+    globalBtn.disabled   = false;
     mismatchBtn.disabled = false;
-    tableBtn.disabled   = false;
 
     log('All list events processed');
   }
