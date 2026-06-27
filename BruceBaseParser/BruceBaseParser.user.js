@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.88
+// @version      1.89
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1383,10 +1383,31 @@
 
       // ── Timing blocks ────────────────────────────────────────────────────
       const timingBlocks = extractTimingBlocks(doc);
+      let lastScheduledDiv = null;
       if (timingBlocks.length > 0) {
         let insertAfter = element.closest('p') || element.parentNode;
         for (const text of timingBlocks) {
-          insertAfter = addScheduledBlock(insertAfter, text);
+          lastScheduledDiv = addScheduledBlock(insertAfter, text);
+          insertAfter = lastScheduledDiv;
+        }
+      }
+
+      // ── Venue info ────────────────────────────────────────────────────────
+      const venueLink = findVenueLink(doc);
+      if (venueLink) {
+        try {
+          const venueHref  = venueLink.getAttribute('href');
+          const venueDoc   = await fetchPage(`${location.protocol}//${location.host}${venueHref}`);
+          const venueName  = venueDoc.querySelector('#page-title')?.textContent.trim() ?? '';
+          if (venueName) {
+            const venuePartM      = normalizedDetailName.match(/^\d{4}-\d{2}-\d{2}\s*-\s*(.*)/s);
+            const detailVenuePart = venuePartM ? venuePartM[1].trim() : '';
+            const match           = !!detailVenuePart && venueName.toUpperCase() === detailVenuePart;
+            const anchorEl        = element.closest('p') || element.parentNode;
+            renderVenueInfo(lastScheduledDiv || anchorEl, venueHref, venueName, match, detailVenuePart);
+          }
+        } catch (e) {
+          logWarn(`  Venue page fetch failed: ${e.message}`);
         }
       }
 
@@ -2613,6 +2634,62 @@
     return div;
   }
 
+  /**
+   * Returns the first <a href="/venue:…"> link found in the given document.
+   * @param {Document} doc
+   * @returns {HTMLAnchorElement|null}
+   */
+  function findVenueLink(doc) {
+    return [...doc.querySelectorAll('a[href]')]
+      .find(a => /^\/venue:/.test(a.getAttribute('href') || '')) || null;
+  }
+
+  /**
+   * Appends venue name (hyperlinked, bold-italic) to the last bb-scheduled div
+   * so the whole line reads "Scheduled: … at Venue Name ✅/⚠️".  If there is no
+   * scheduled div, inserts a new one after afterEl.
+   * @param {HTMLElement} afterEl        Last bb-scheduled div or event heading <p>
+   * @param {string}      venueHref      Relative href, e.g. "/venue:state-farm-…"
+   * @param {string}      venueName      Text from the venue page's #page-title
+   * @param {boolean}     match          True when venueName matches DETAIL event-name venue part
+   * @param {string}      detailVenuePart Uppercase venue part from normalizedDetailName
+   */
+  function renderVenueInfo(afterEl, venueHref, venueName, match, detailVenuePart) {
+    const isScheduled = afterEl.classList && afterEl.classList.contains('bb-scheduled');
+    let container;
+    if (isScheduled) {
+      container = afterEl;
+    } else {
+      container = document.createElement('div');
+      container.className = 'bb-scheduled';
+      afterEl.after(container);
+    }
+
+    container.appendChild(document.createTextNode(' at '));
+
+    const a = document.createElement('a');
+    a.href = location.protocol + '//' + location.host + venueHref;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = venueName;
+    const em = document.createElement('em');
+    const strong = document.createElement('strong');
+    em.appendChild(a);
+    strong.appendChild(em);
+    container.appendChild(strong);
+
+    const msg = match
+      ? `Venue match ✅\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`
+      : `Venue mismatch ⚠️\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
+    const glyph = document.createElement('span');
+    glyph.className = match ? 'bb-glyph' : 'bb-glyph bb-venue-warn';
+    glyph.textContent = match ? ' ✅' : ' ⚠️';
+    glyph.style.cursor = 'help';
+    glyph.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    glyph.addEventListener('mouseleave', hideTooltip);
+    container.appendChild(glyph);
+  }
+
   // ── Icon click feature ────────────────────────────────────────────────────
 
   /**
@@ -3721,7 +3798,7 @@
       .bb-event-type-detail { font-size: 0.6em; font-weight: normal; color: #666; font-style: italic; vertical-align: middle; }
       .bb-event-alias       { font-style: italic; font-weight: bold; color: #555; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }
-      .bb-scheduled { font-size: 0.8em; font-family: monospace; color: #555; margin: 1px 0 3px; }
+      .bb-scheduled { font-size: 0.9em; font-family: monospace; color: #555; margin: 1px 0 3px; }
 
       /* Toggle buttons */
       .bb-toggle-btn {

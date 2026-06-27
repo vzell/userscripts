@@ -1,5 +1,24 @@
 [
     {
+        "version": "1.89",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page: after fetching the DETAIL page, follows the Venue link to the VENUE page and appends the venue name (bold italic, hyperlinked) to the Scheduled timing block — or to a new styled line when no timing info exists — so the entry reads 'Scheduled: … at Venue Name'.",
+                    "YEAR page: venue name from the VENUE page is compared against the venue part of the DETAIL event name; a ✅ or ⚠️ glyph (with hover tooltip) is rendered after the venue link."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "bb-scheduled font size increased from 0.8em to 0.9em for better legibility."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.88",
         "date": "2026-06-27",
         "sections": [
