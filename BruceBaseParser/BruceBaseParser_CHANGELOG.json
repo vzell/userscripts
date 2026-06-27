@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.83",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "HOME / Mismatches filter: when active, entire year sections (h3 header + bb-year-wrapper) are now hidden when they contain no mismatches. For Gig-Overview fetches this is evaluated per wrapper using the bb-glyph sibling of each list link; for Gig-Pages fetches it is evaluated per wrapper using the same .bb-section-processed / .bb-glyph selector logic as applyMismatchFilter. Deactivating the filter restores all headers and wrappers regardless of mode."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.82",
         "date": "2026-06-27",
         "sections": [

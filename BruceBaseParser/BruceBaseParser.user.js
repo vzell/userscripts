@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.82
+// @version      1.83
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -302,11 +302,31 @@
         }).length;
         filterBtn.textContent = `⚡ Mismatches (${mismatchCount})`;
         currentMismatchFn = active => {
-          for (const a of allLinks) {
-            const sib    = a.nextElementSibling;
-            const isMatch = sib && sib.classList.contains('bb-glyph') && sib.textContent.includes('✅');
-            const row    = a.closest('li') || a.parentNode;
-            if (row) row.style.display = active && isMatch ? 'none' : '';
+          for (const wrapper of resultsEl.querySelectorAll('.bb-year-wrapper')) {
+            const header     = wrapper.previousElementSibling;
+            const hasHeader  = header && header.classList.contains('bb-year-header');
+            const secLinks   = [...wrapper.querySelectorAll('a[href]')]
+              .filter(a => LIST_LINK_RE.test(a.getAttribute('href') || ''));
+            const hasMismatch = secLinks.some(a => {
+              const sib = a.nextElementSibling;
+              return !sib || !sib.classList.contains('bb-glyph') || !sib.textContent.includes('✅');
+            });
+
+            if (active && !hasMismatch) {
+              // Entire year section is all-green — hide h3 + wrapper.
+              if (hasHeader) header.style.display = 'none';
+              wrapper.style.display = 'none';
+            } else {
+              if (hasHeader) header.style.display = '';
+              wrapper.style.display = '';
+              // Hide individual ✅ rows within the visible section.
+              for (const a of secLinks) {
+                const sib     = a.nextElementSibling;
+                const isMatch = sib && sib.classList.contains('bb-glyph') && sib.textContent.includes('✅');
+                const row     = a.closest('li') || a.parentNode;
+                if (row) row.style.display = active && isMatch ? 'none' : '';
+              }
+            }
           }
           filterBtn.textContent = active
             ? `⚡ All Events (${total})`
@@ -324,6 +344,23 @@
         filterBtn.textContent = `⚡ Mismatches (${mismatchCount})`;
         currentMismatchFn = active => {
           applyMismatchFilter(active);
+          // Also hide entire year sections that contain no mismatches.
+          for (const wrapper of resultsEl.querySelectorAll('.bb-year-wrapper')) {
+            const header    = wrapper.previousElementSibling;
+            const hasHeader = header && header.classList.contains('bb-year-header');
+            const hasMismatch = [...wrapper.querySelectorAll('.bb-section-processed')].some(p =>
+              [...p.querySelectorAll('.bb-glyph')].some(g =>
+                ['❌', '⚠️', '❓'].some(ch => g.textContent.includes(ch))) ||
+              !!p.querySelector('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn, .bb-anchor-warn')
+            );
+            if (active && !hasMismatch) {
+              if (hasHeader) header.style.display = 'none';
+              wrapper.style.display = 'none';
+            } else {
+              if (hasHeader) header.style.display = '';
+              wrapper.style.display = '';
+            }
+          }
           filterBtn.textContent = active
             ? `⚡ All Events (${total})`
             : `⚡ Mismatches (${mismatchCount})`;
