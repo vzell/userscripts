@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.85",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "DETAIL pages: 'Info & Setlist' link now shows a ✅ glyph (with tooltip) when all anchor checks pass — anchor matches YEAR page, date-derived anchor matches, and href year matches event date year. Previously only ⚠️ was shown on failure; success was silent."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.84",
         "date": "2026-06-27",
         "sections": [

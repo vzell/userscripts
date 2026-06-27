@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.84
+// @version      1.85
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1621,22 +1621,31 @@
 
         if (detailAnchorRef) {
           const detailIssues = [];
+          const detailPassed = [];
 
-          if (detailAnchorRef !== yearAnchorName) {
+          if (detailAnchorRef === yearAnchorName) {
+            detailPassed.push(`Anchor "#${detailAnchorRef}" matches YEAR page anchor "#${yearAnchorName}" ✅`);
+          } else {
             detailIssues.push(`Anchor mismatch: "Info & Setlist" refs "#${detailAnchorRef}" but YEAR page anchor for this event is "#${yearAnchorName}"`);
           }
 
           const eventDateForDetail = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
           if (eventDateForDetail) {
             const theoretical = dateToAnchor(eventDateForDetail[1]);
-            if (theoretical && !detailAnchorRef.startsWith(theoretical)) {
-              detailIssues.push(`Date-derived anchor: expected "#${theoretical}" (from ${eventDateForDetail[1]}) but "Info & Setlist" refs "#${detailAnchorRef}"`);
+            if (theoretical) {
+              if (detailAnchorRef.startsWith(theoretical)) {
+                detailPassed.push(`Date-derived anchor "#${theoretical}" (from ${eventDateForDetail[1]}) ✅`);
+              } else {
+                detailIssues.push(`Date-derived anchor: expected "#${theoretical}" (from ${eventDateForDetail[1]}) but "Info & Setlist" refs "#${detailAnchorRef}"`);
+              }
             }
             const hrefPathM = href.match(/^\/([^#]+)#/);
             if (hrefPathM) {
               const hrefYear = hrefPathM[1];
               const dateYear = eventDateForDetail[1].slice(0, 4);
-              if (hrefYear !== dateYear) {
+              if (hrefYear === dateYear) {
+                detailPassed.push(`Href year "${hrefYear}" matches event date year "${dateYear}" ✅`);
+              } else {
                 detailIssues.push(`Year mismatch: event date year "${dateYear}" ≠ href year "${hrefYear}"`);
               }
             }
@@ -1647,6 +1656,7 @@
             addAnchorWarnDetail(infoLink, yearAnchorName, detailAnchorRef, detailIssues);
           } else {
             log(`  Anchor MATCH ✅`);
+            addAnchorMatchDetail(infoLink, `Anchor checks passed:\n${detailPassed.join('\n')}`);
           }
         }
       } else {
@@ -3185,6 +3195,18 @@
     const msg = issues.length > 0
       ? issues.join('\n')
       : `Anchor mismatch: "Info & Setlist" links to "#${detailAnchorRef}" but actual YEAR page anchor for this event is "#${yearAnchorName}"`;
+    span.dataset.msg = msg;
+    span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    span.addEventListener('mouseleave', hideTooltip);
+    linkEl.after(span);
+  }
+
+  // Appends a ✅ glyph immediately after the "Info & Setlist" link on the
+  // DETAIL page when all anchor, DateToAnchor, and year checks pass.
+  function addAnchorMatchDetail(linkEl, msg) {
+    const span = document.createElement('span');
+    span.className = 'bb-anchor-match';
+    span.textContent = ' ✅';
     span.dataset.msg = msg;
     span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
     span.addEventListener('mouseleave', hideTooltip);
