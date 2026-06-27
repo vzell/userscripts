@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.80
+// @version      1.81
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -53,6 +53,19 @@
 
   /** Tab labels that carry no standalone content worth showing on the YEAR page. */
   const SKIP_TABS = new Set([]);
+
+  /** SmartTable column definitions for YEAR OVERVIEW (list) pages. */
+  const LIST_SMARTTABLE_COLUMNS = [
+    { key: 'date',   label: 'Date',   type: 'date',   width: '105px' },
+    { key: 'status', label: 'Status', type: 'string', width: '60px',  sortable: false },
+    { key: 'event',  label: 'Event',  type: 'string' },
+    { key: 'url',    label: 'Link',   type: 'string', sortable: false, filterable: false,
+      render: url => {
+        const a = document.createElement('a');
+        a.href = url; a.textContent = 'Open'; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        return a;
+      } },
+  ];
 
   /** Maps each canonical icon type to the DETAIL page tab that holds its content. */
   const CANONICAL_TAB_LABEL = {
@@ -1921,19 +1934,6 @@
   // ════════════════════════════════════════════════════════════════════════════
   // YEAR LIST PAGE MODE
   // ════════════════════════════════════════════════════════════════════════════
-
-  /** SmartTable column definitions for YEAR OVERVIEW (list) pages. */
-  const LIST_SMARTTABLE_COLUMNS = [
-    { key: 'date',   label: 'Date',   type: 'date',   width: '105px' },
-    { key: 'status', label: 'Status', type: 'string', width: '60px',  sortable: false },
-    { key: 'event',  label: 'Event',  type: 'string' },
-    { key: 'url',    label: 'Link',   type: 'string', sortable: false, filterable: false,
-      render: url => {
-        const a = document.createElement('a');
-        a.href = url; a.textContent = 'Open'; a.target = '_blank'; a.rel = 'noopener noreferrer';
-        return a;
-      } },
-  ];
 
   /**
    * Converts processed listEvents into SmartTable NormalizedRow[].

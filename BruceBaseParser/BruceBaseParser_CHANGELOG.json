@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.81",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR OVERVIEW pages: 'Original Page' and 'Mismatches' buttons were permanently disabled and 'Table View' was missing. Root cause: LIST_SMARTTABLE_COLUMNS was declared as a const after the top-level dispatch that calls runListPage, putting it in the temporal dead zone when runListPage referenced it inside SmartTable.render(). The ReferenceError halted execution before the button-enable lines. Fix: move LIST_SMARTTABLE_COLUMNS to the top of the IIFE alongside the other shared constants, before the dispatch."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.80",
         "date": "2026-06-27",
         "sections": [
