@@ -1,5 +1,19 @@
 [
     {
+        "version": "1.93",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added 💾 Save and 📂 Load buttons to all page types (YEAR, HOME, LIST, DETAIL). Save downloads the fully-processed DOM as a JSON cache file; Load restores it instantly without re-fetching.",
+                    "After loading from cache, song diff tooltips, error/warn tooltips, per-section ⇄ Original / ☰ List toggles, global ⇄ Original Page, and ⚡ Mismatches filter are all re-wired automatically.",
+                    "Icon panels and extra-tab buttons that require live DETAIL page data are dimmed after a cache load; a per-event ⟳ retry button refetches just that event's DETAIL page on demand to restore them."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.92",
         "date": "2026-06-27",
         "sections": [

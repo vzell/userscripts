@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.92
+// @version      1.93
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -28,6 +28,8 @@
 
   const EVENT_URL_RE  = /\/([a-z]+):\d{4}-\d{2}-\d{2}/;
   const LIST_LINK_RE  = /\/((?:\d{4}|1949-64))#([a-zA-Z0-9]+)$/;
+
+  let _savedOriginalHtml = null;   // pre-processing snapshot for YEAR page Save handler
   const DETAIL_TYPE_RE = /^(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/;
   // Matches "Info & Setlist" back-links on detail pages: /YEAR#ANCHOR or /1949-64#ANCHOR
   const INFO_SETLIST_HREF_RE = /^\/[\d][\w-]*#([a-zA-Z0-9]+)$/;
@@ -195,7 +197,11 @@
 
     const btnContainer = document.createElement('div');
     btnContainer.id = 'bb-btn-container';
-    btnContainer.append(fetchBtn, overviewBtn, stopBtn, filterBtn);
+
+    const [homeSaveBtn, homeLoadBtn] = makeSaveLoadBtns(
+      'home', () => resultsEl, () => ''
+    );
+    btnContainer.append(fetchBtn, overviewBtn, stopBtn, filterBtn, homeSaveBtn, homeLoadBtn);
 
     // ── Progress indicator (same structure as YEAR page) ─────────────────────
     const timerSpan = document.createElement('span');
@@ -275,6 +281,7 @@
       stopBtn.disabled = false;
       stopBtn.textContent = 'Stop fetching';
       filterBtn.disabled = true;
+      homeSaveBtn.disabled = true;
       resultsEl.innerHTML = '';
 
       const startTime = Date.now();
@@ -399,10 +406,14 @@
             : `⚡ Mismatches (${mismatchCount})`;
         };
       }
+      homeSaveBtn.disabled = false;
     }
 
     fetchBtn.addEventListener('click',    () => runFetch(fetchBtn,    s => s));
     overviewBtn.addEventListener('click', () => runFetch(overviewBtn, s => `${s}-list`));
+    homeLoadBtn.addEventListener('click', () =>
+      triggerLoadCache(data => loadPageCache('home', resultsEl, progressEl, data))
+    );
   }
 
   // Scans #page-content for links to YEAR-LIST pages (/YYYY-list, /1949-64-list)
@@ -663,6 +674,7 @@
   async function runYearPage() {
     const content = document.querySelector('#page-content') || document.body;
     const originalHtml = content.innerHTML;
+    _savedOriginalHtml = originalHtml;
 
     // Must run before wrapYearSections() wraps direct children into
     // .bb-section-processed divs — _splitOnHr() in the adapter iterates
@@ -699,7 +711,13 @@
     mismatchBtn.textContent = '⚡ Mismatches';
     mismatchBtn.disabled = true;
 
-    btnContainer.append(globalBtn, mismatchBtn);
+    const [yearSaveBtn, yearLoadBtn] = makeSaveLoadBtns(
+      'year', () => content, () => _savedOriginalHtml
+    );
+    yearLoadBtn.addEventListener('click', () =>
+      triggerLoadCache(data => loadPageCache('year', content, progressEl, data))
+    );
+    btnContainer.append(globalBtn, mismatchBtn, yearSaveBtn, yearLoadBtn);
 
     // ── SmartTable integration (optional) ────────────────────────────────────
     if (stRows) {
@@ -759,6 +777,7 @@
     setupMismatchFilter(mismatchBtn, events.length);
     globalBtn.disabled = false;
     mismatchBtn.disabled = false;
+    yearSaveBtn.disabled = false;
 
     log('All events processed');
   }
@@ -877,6 +896,309 @@
       btn.textContent = showingOriginal ? '⇄ Processed Page' : '⇄ Original Page';
     });
   }
+
+  // ── Save / Load cache helpers ─────────────────────────────────────────────
+
+  /**
+   * Downloads the fully-processed page state as a JSON cache file.
+   * Uses a Blob + temporary <a download> — no new @grant needed.
+   * @param {string} pageType
+   * @param {HTMLElement} contentEl
+   * @param {string} originalHtml
+   */
+  function savePageCache(pageType, contentEl, originalHtml) {
+    const data = {
+      schemaVersion: 1,
+      pageType,
+      url:           location.href,
+      pageTitle:     document.getElementById('page-title')?.textContent.trim() ?? '',
+      timestamp:     new Date().toISOString(),
+      processedHtml: contentEl.innerHTML,
+      originalHtml:  originalHtml ?? '',
+    };
+    const blob    = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const blobUrl = URL.createObjectURL(blob);
+    const m       = location.pathname.match(/\/(\w[\w-]*)/);
+    const a       = document.createElement('a');
+    a.download    = `bb-${m ? m[1] : 'page'}-cache.json`;
+    a.href        = blobUrl;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
+  }
+
+  /**
+   * Opens a native file picker and calls onLoaded with the parsed JSON data.
+   * @param {function(Object): void} onLoaded
+   */
+  function triggerLoadCache(onLoaded) {
+    const input  = document.createElement('input');
+    input.type   = 'file';
+    input.accept = '.json';
+    input.addEventListener('change', () => {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.schemaVersion !== 1) throw new Error('Unsupported schema version');
+          onLoaded(data);
+        } catch (err) {
+          logWarn(`Load cache failed: ${err.message}`);
+          alert(`Could not load cache file: ${err.message}`);
+        }
+      };
+      reader.readAsText(file);
+    });
+    input.click();
+  }
+
+  /**
+   * Creates a [saveBtn, loadBtn] pair pre-wired with the save handler.
+   * The loadBtn click handler must be added by the caller.
+   * Both use getContentEl() / getOriginalHtml() lazily at click time.
+   * @param {string} pageType
+   * @param {function(): HTMLElement} getContentEl
+   * @param {function(): string} getOriginalHtml
+   * @returns {[HTMLButtonElement, HTMLButtonElement]}
+   */
+  function makeSaveLoadBtns(pageType, getContentEl, getOriginalHtml) {
+    const saveBtn = document.createElement('button');
+    saveBtn.id        = 'bb-save-btn';
+    saveBtn.className = 'bb-toggle-btn';
+    saveBtn.textContent = '💾 Save';
+    saveBtn.disabled  = true;
+
+    const loadBtn = document.createElement('button');
+    loadBtn.id        = 'bb-load-btn';
+    loadBtn.className = 'bb-toggle-btn';
+    loadBtn.textContent = '📂 Load';
+
+    saveBtn.addEventListener('click', () =>
+      savePageCache(pageType, getContentEl(), getOriginalHtml())
+    );
+
+    return [saveBtn, loadBtn];
+  }
+
+  /**
+   * Injects saved HTML into contentEl and re-wires all recoverable listeners.
+   * @param {string} pageType
+   * @param {HTMLElement} contentEl
+   * @param {HTMLElement|null} progressEl
+   * @param {Object} data
+   */
+  function loadPageCache(pageType, contentEl, progressEl, data) {
+    contentEl.innerHTML = data.processedHtml;
+
+    rewireLoadedPage(contentEl, pageType);
+
+    // Global toggle
+    const oldGlobal = document.getElementById('bb-global-toggle');
+    if (oldGlobal) {
+      if (pageType === 'detail') {
+        rewireDetailToggle(contentEl);
+      } else {
+        document.getElementById('bb-page-original')?.remove();
+        const freshGlobal = oldGlobal.cloneNode(true);
+        freshGlobal.textContent = '⇄ Original Page';
+        freshGlobal.disabled = false;
+        oldGlobal.replaceWith(freshGlobal);
+        setupGlobalToggle(freshGlobal, contentEl, data.originalHtml);
+      }
+    }
+
+    // Mismatch filter (YEAR / LIST only; HOME relies on runtime state)
+    const oldMismatch = document.getElementById('bb-mismatch-toggle');
+    if (oldMismatch && pageType !== 'home' && pageType !== 'detail') {
+      const freshMismatch = oldMismatch.cloneNode(true);
+      oldMismatch.replaceWith(freshMismatch);
+      if (pageType === 'year') {
+        const eventCount = contentEl.querySelectorAll('.bb-section-processed').length;
+        setupMismatchFilter(freshMismatch, eventCount);
+      } else if (pageType === 'list') {
+        const listEvs = [...contentEl.querySelectorAll('a[href]')]
+          .filter(a => LIST_LINK_RE.test(a.getAttribute('href') || ''))
+          .map(a => ({ element: a }));
+        setupListMismatchFilter(freshMismatch, listEvs);
+      }
+      freshMismatch.disabled = false;
+    }
+
+    // Enable save button
+    const saveBtn = document.getElementById('bb-save-btn');
+    if (saveBtn) saveBtn.disabled = false;
+
+    // Update progress bar
+    if (progressEl) {
+      const ts        = new Date(data.timestamp).toLocaleString();
+      const timerSpan = document.getElementById('bb-year-timer');
+      progressEl.replaceChildren(timerSpan ?? '', ` … Loaded from cache (saved ${ts})`);
+    }
+  }
+
+  /**
+   * Re-wires all event listeners recoverable from DOM state after a cache load.
+   * @param {HTMLElement} container
+   * @param {string} pageType
+   */
+  function rewireLoadedPage(container, pageType) {
+    container.querySelectorAll(
+      '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff'
+    ).forEach(span => {
+      span.addEventListener('mouseenter', e => showSongTooltip(e, span));
+      span.addEventListener('mouseleave', hideTooltip);
+    });
+
+    container.querySelectorAll('[data-msg]').forEach(el => {
+      el.addEventListener('mouseenter', e => showErrorTooltip(e, el.dataset.msg));
+      el.addEventListener('mouseleave', hideTooltip);
+    });
+
+    if (pageType === 'year' || pageType === 'home') {
+      rewireSectionControls(container);
+    }
+
+    container.querySelectorAll('.bb-section-processed').forEach(section =>
+      addCacheRetryBtn(section)
+    );
+  }
+
+  /**
+   * Re-creates showView closures for per-section ⇄ Original and ☰ List buttons
+   * by scanning .bb-section-controls and their siblings in the saved DOM.
+   * @param {HTMLElement} container
+   */
+  function rewireSectionControls(container) {
+    container.querySelectorAll('.bb-section-controls').forEach(controls => {
+      const origBtnOld = controls.querySelector('.bb-section-toggle');
+      const listBtnOld = controls.querySelector('.bb-list-toggle');
+      if (!origBtnOld || !listBtnOld) return;
+
+      const origBtn = origBtnOld.cloneNode(true);
+      const listBtn = listBtnOld.cloneNode(true);
+      origBtnOld.replaceWith(origBtn);
+      listBtnOld.replaceWith(listBtn);
+
+      let el = controls.nextElementSibling;
+      let originalDiv = null, processedDiv = null;
+      while (el) {
+        if (el.classList.contains('bb-section-original'))  originalDiv  = el;
+        if (el.classList.contains('bb-section-processed')) { processedDiv = el; break; }
+        el = el.nextElementSibling;
+      }
+      if (!processedDiv) return;
+
+      let listDiv = null, setlistEls = null, viewState = 'flat';
+
+      function showView(view) {
+        viewState = view;
+        processedDiv.style.display = view === 'original' ? 'none' : '';
+        if (originalDiv) originalDiv.style.display = view === 'original' ? '' : 'none';
+        if (listDiv) {
+          listDiv.style.display = view === 'list' ? '' : 'none';
+          setlistEls?.forEach(s => { s.style.display = view === 'list' ? 'none' : ''; });
+        }
+        origBtn.textContent = view === 'original' ? '⇄ Processed' : '⇄ Original';
+        listBtn.textContent = view === 'list'      ? '☰ Flat'      : '☰ List';
+      }
+
+      origBtn.addEventListener('click', () =>
+        showView(viewState === 'original' ? 'flat' : 'original')
+      );
+      listBtn.addEventListener('click', () => {
+        if (viewState === 'list') { showView('flat'); return; }
+        if (!listDiv) {
+          setlistEls = [...processedDiv.querySelectorAll('p, blockquote')].filter(el =>
+            el.querySelector('.bb-sep, .bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff')
+          );
+          if (!setlistEls.length) return;
+          listDiv = buildListDiv(setlistEls);
+          setlistEls[0].parentNode.insertBefore(listDiv, setlistEls[0]);
+        }
+        showView('list');
+      });
+    });
+  }
+
+  /**
+   * Re-wires the DETAIL page global toggle using the .bb-detail-processed /
+   * .bb-detail-original divs inside the setlist container after a cache load.
+   * @param {HTMLElement} td
+   */
+  function rewireDetailToggle(td) {
+    const btn = document.getElementById('bb-global-toggle');
+    if (!btn) return;
+    const processedDiv = td.querySelector('.bb-detail-processed');
+    const originalDiv  = td.querySelector('.bb-detail-original');
+    if (!processedDiv || !originalDiv) return;
+
+    const freshBtn = btn.cloneNode(true);
+    freshBtn.textContent = '⇄ Original Page';
+    freshBtn.disabled = false;
+    btn.replaceWith(freshBtn);
+
+    let showingOriginal = false;
+    freshBtn.addEventListener('click', () => {
+      showingOriginal = !showingOriginal;
+      processedDiv.style.display = showingOriginal ? 'none'  : 'block';
+      originalDiv.style.display  = showingOriginal ? 'block' : 'none';
+      freshBtn.textContent = showingOriginal ? '⇄ Processed Page' : '⇄ Original Page';
+    });
+  }
+
+  /**
+   * Adds a ⟳ button to a .bb-section-processed div that refetches the event's
+   * DETAIL page to restore icon panels and tab buttons after a cache load.
+   * Icons and tab buttons are dimmed until the refetch completes.
+   * @param {HTMLElement} section
+   */
+  function addCacheRetryBtn(section) {
+    const eventLink = [...section.querySelectorAll('a[href]')]
+      .find(a => EVENT_URL_RE.test(a.getAttribute('href') || ''));
+    if (!eventLink) return;
+
+    section.querySelectorAll('img.image').forEach(img => { img.style.opacity = '0.45'; });
+    section.querySelectorAll('.bb-extra-tab-btn').forEach(b => {
+      b.style.opacity      = '0.45';
+      b.style.pointerEvents = 'none';
+    });
+
+    const retryBtn = document.createElement('button');
+    retryBtn.className   = 'bb-toggle-btn bb-cache-retry';
+    retryBtn.textContent = '⟳';
+    retryBtn.title =
+      'Refetch DETAIL page to restore icon panels and tab buttons\n' +
+      `(${location.protocol}//${location.host}${eventLink.getAttribute('href')})`;
+
+    retryBtn.addEventListener('click', async () => {
+      retryBtn.textContent = '⏳';
+      retryBtn.disabled    = true;
+      try {
+        const url = `${location.protocol}//${location.host}${eventLink.getAttribute('href')}`;
+        const doc = await fetchPage(url);
+
+        section.querySelectorAll('img.image').forEach(img => { img.style.opacity = ''; });
+        section.querySelector('.bb-extra-tab-row')?.remove();
+        section.querySelectorAll('.bb-icon-sorry').forEach(s => s.remove());
+
+        wireIconHandlers(eventLink, doc);
+        retryBtn.remove();
+      } catch (e) {
+        retryBtn.textContent = '⟳';
+        retryBtn.disabled    = false;
+        retryBtn.title       = `Refetch failed: ${e.message} — click to retry`;
+      }
+    });
+
+    const tabRow    = section.querySelector('.bb-extra-tab-row');
+    const firstIcon = section.querySelector('img.image');
+    if (tabRow)          tabRow.prepend(retryBtn);
+    else if (firstIcon)  firstIcon.before(retryBtn);
+    else                 section.appendChild(retryBtn);
+  }
+
+  // ── End Save / Load cache helpers ─────────────────────────────────────────
 
   // Inserts two per-section toggle buttons (wrapped in .bb-section-controls)
   // immediately after the given <hr>.  The original-view div is created here
@@ -1138,7 +1460,18 @@
       btn.textContent = showingOriginal ? '⇄ Processed Page' : '⇄ Original Page';
     });
 
-    pageTitle.after(btn);
+    const [detailSaveBtn, detailLoadBtn] = makeSaveLoadBtns(
+      'detail', () => td, () => originalTdHtml
+    );
+    detailSaveBtn.disabled = false;
+    detailLoadBtn.addEventListener('click', () =>
+      triggerLoadCache(data => loadPageCache('detail', td, null, data))
+    );
+
+    const detailBtnContainer = document.createElement('div');
+    detailBtnContainer.id = 'bb-btn-container';
+    detailBtnContainer.append(btn, detailSaveBtn, detailLoadBtn);
+    pageTitle.after(detailBtnContainer);
   }
 
   // Annotates the "Setlist" tab in the wikidot navigation regardless of whether
@@ -2174,7 +2507,13 @@
     mismatchBtn.textContent = '⚡ Mismatches';
     mismatchBtn.disabled = true;
 
-    btnContainer.append(globalBtn, mismatchBtn);
+    const [listSaveBtn, listLoadBtn] = makeSaveLoadBtns(
+      'list', () => content, () => originalHtml
+    );
+    listLoadBtn.addEventListener('click', () =>
+      triggerLoadCache(data => loadPageCache('list', content, progressEl, data))
+    );
+    btnContainer.append(globalBtn, mismatchBtn, listSaveBtn, listLoadBtn);
 
     // ── Progress ─────────────────────────────────────────────────────────────
     const progressEl = document.createElement('p');
@@ -2259,6 +2598,7 @@
 
     globalBtn.disabled   = false;
     mismatchBtn.disabled = false;
+    listSaveBtn.disabled = false;
 
     log('All list events processed');
   }
@@ -3975,6 +4315,8 @@
       .bb-extra-tab-btn { background: #e8e8e8; border: 1px solid #bbb; border-radius: 3px; cursor: pointer; font-size: 0.8em; padding: 1px 7px; color: #333; font-family: sans-serif; }
       .bb-extra-tab-btn:hover { background: #d4d4d4; }
       .bb-extra-tab-btn.bb-icon-active { background: #4a90d9; color: #fff; border-color: #357abd; }
+      .bb-cache-retry { font-size: 0.9em; padding: 1px 5px; opacity: 0.75; }
+      .bb-cache-retry:hover { opacity: 1; }
 
       /* Inline icon panels */
       .bb-icon-panel { margin: 4px 0; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; font-size: 0.85em; }
