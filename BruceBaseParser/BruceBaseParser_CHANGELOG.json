@@ -1,5 +1,25 @@
 [
     {
+        "version": "1.82",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "HOME / Fetch All Gig-Overview Pages: h1 section headers (e.g. '1949-1964 listing by date / location') and hr dividers are now stripped from each fetched list-page wrapper by stripYearWrapperNoise, eliminating the repeated noise after each YEAR OVERVIEW block.",
+                    "HOME / Fetch All Gig-Overview Pages: removed the erroneous wrapYearSections() call from fetchAndProcessListPage; this was creating empty .bb-section-processed divs and duplicate hr elements visible in the rendered output.",
+                    "HOME / Mismatches button: now works for both fetch modes. For Gig-Overview fetches it filters li rows by bb-glyph (✅ hides, ❌/⚠️/❓ keeps), mirroring the YEAR OVERVIEW page logic. For Gig-Pages fetches it delegates to applyMismatchFilter. Both modes show the count in the label ('⚡ Mismatches (N)') and toggle to '⚡ All Events (total)'. The mismatch state is rebuilt on each fetch and torn down at the start of the next."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "HOME / Table View: replaced custom buildHomePageTable with SmartTable (same approach as YEAR and YEAR OVERVIEW pages). Columns: Year (number), Date (date), Status (glyph), Event (string), Link. The SmartTable trigger button is inserted into #bb-btn-container before the Mismatches button, replacing the old static '⊞ Table View' button. extractHomeSmartTableRows strips the YYYY-MM-DD prefix from event names so the Date column is not duplicated. HOME_SMARTTABLE_COLUMNS added as a top-level const alongside LIST_SMARTTABLE_COLUMNS."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.81",
         "date": "2026-06-27",
         "sections": [
