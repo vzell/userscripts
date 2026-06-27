@@ -1,5 +1,89 @@
 [
     {
+        "version": "1.73",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: '☰ List' view was hiding the entire processedDiv, so the event title, scheduled block, icons, and descriptive text all disappeared. Fixed by inserting .bb-section-list inside processedDiv (before the first setlist element) and only toggling the visibility of the flat setlist <p>/<blockquote> elements in place — everything else in the event block remains visible. applyMismatchFilter backward walk simplified: no special handling for .bb-section-list since it now lives inside processedDiv."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.72",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR page: each event section now has a '☰ List' toggle button alongside '⇄ Original', both wrapped in a .bb-section-controls flex container. Clicking '☰ List' converts the flat 'SONG1 / SONG2 / …' setlist into an <ol> with one <li> per song; sections with a label (e.g. 'Soundcheck:') render the label above the list. The three views (flat, original, list) are mutually exclusive; the list view is built lazily on first click via buildListDiv() and tooltip listeners are re-wired. The mismatch filter backward walk is updated to skip .bb-section-controls (was .bb-section-toggle) and to always reset .bb-section-list to hidden when encountered."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.71",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: extractEventAlias now requires the <p><strong>…</strong></p> alias to be the first element child of #wiki-tab-0-0 AND immediately followed by <hr> as the second element child. Previously any <p><strong>…</strong></p> before the first <hr> was treated as an alias, so in-page section headers like 'Willie Nile Set' (with no following <hr>) were incorrectly shown as event aliases."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.70",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR page: when the first tab (#wiki-tab-0-0) of a DETAIL page opens with a <p><strong>…</strong></p> block before the first <hr>, that text is treated as an event alias and rendered on the YEAR page after the validation glyph in bold italic, preceded by an em dash (e.g. '(recording) ✅ — Streets Of Minneapolis Recording Session'). Extraction via extractEventAlias(); rendered by makeAliasSpan() as .bb-event-alias."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.69",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: songs with a '(with Artist A, and Artist B)' guest suffix were incorrectly split by renderMatchWithConnectives — the ', and' inside the raw suffix triggered the connective check, wrapping artist names in green spans and bypassing the hyperlink path. The connective regex is now tested against the cleaned song name (item.yearSong) rather than the raw text, so the (with ...) parenthetical is already absent and the false match cannot occur."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.68",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR page: confirmed (green) song matches are now hyperlinked to their song page on brucebase using the <a href> from the DETAIL page. Single-song entries link to /song:slug; medley entries (multiple links per <li>) and plain-text entries with no song page remain as plain green spans. parseDetailSetlist now stores songUrls[] alongside songs[] in each section; diffItems carry detailSongUrl for match items, and renderSetlistElement renders <a class=\"bb-song-match\"> instead of <span> when a URL is present."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.67",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: timing/scheduling blocks from DETAIL pages were only shown when the code block started with 'Scheduled:' — other patterns such as 'Local Start Time ??:?? / End Time ??:??' were silently dropped. extractScheduled() is now extractTimingBlocks() and returns all non-empty <div class=\"code\"><pre><code>…</code></pre></div> blocks; multiple blocks per event are inserted in document order below the event title."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.66",
         "date": "2026-06-27",
         "sections": [

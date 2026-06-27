@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.66
+// @version      1.73
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -476,9 +476,19 @@
     });
   }
 
-  // Inserts a per-section toggle button immediately after the given <hr>.
-  // Creates the original-view div here (after processing) so that
-  // extractYearPageEvents never encounters duplicate <a> links inside it.
+  // Inserts two per-section toggle buttons (wrapped in .bb-section-controls)
+  // immediately after the given <hr>.  The original-view div is created here
+  // (after processing) so that extractYearPageEvents never encounters duplicate
+  // <a> links inside it.
+  //
+  // Three mutually exclusive views:
+  //   'flat'     — default: processedDiv fully visible
+  //   'original' — pre-processing snapshot: processedDiv hidden, originalDiv shown
+  //   'list'     — processedDiv stays visible; only the flat setlist <p>/<blockquote>
+  //                elements are hidden in place and replaced by an <ol> view inserted
+  //                directly inside processedDiv before the first setlist element.
+  //                Everything else (title, scheduled block, icons, descriptive text)
+  //                remains visible and unchanged.
   function insertSectionToggle(hr, processedDiv, sectionOriginalHtml) {
     const originalDiv = document.createElement('div');
     originalDiv.className = 'bb-section-original';
@@ -486,19 +496,121 @@
     originalDiv.style.display = 'none';
     processedDiv.parentNode.insertBefore(originalDiv, processedDiv);
 
-    const btn = document.createElement('button');
-    btn.className = 'bb-toggle-btn bb-section-toggle';
-    btn.textContent = '⇄ Original';
+    let listDiv    = null;   // built lazily inside processedDiv
+    let setlistEls = null;   // the <p>/<blockquote> elements replaced in list mode
+    let viewState  = 'flat';
 
-    let showingOriginal = false;
-    btn.addEventListener('click', () => {
-      showingOriginal = !showingOriginal;
-      processedDiv.style.display = showingOriginal ? 'none'  : 'block';
-      originalDiv.style.display  = showingOriginal ? 'block' : 'none';
-      btn.textContent = showingOriginal ? '⇄ Processed' : '⇄ Original';
+    const origBtn = document.createElement('button');
+    origBtn.className = 'bb-toggle-btn bb-section-toggle';
+    origBtn.textContent = '⇄ Original';
+
+    const listBtn = document.createElement('button');
+    listBtn.className = 'bb-toggle-btn bb-list-toggle';
+    listBtn.textContent = '☰ List';
+
+    function showView(view) {
+      viewState = view;
+      // Only the original toggle hides the whole processedDiv.
+      processedDiv.style.display = view === 'original' ? 'none' : '';
+      originalDiv.style.display  = view === 'original' ? '' : 'none';
+      // The list toggle swaps only the setlist elements inside processedDiv.
+      if (listDiv) {
+        listDiv.style.display = view === 'list' ? '' : 'none';
+        setlistEls.forEach(el => { el.style.display = view === 'list' ? 'none' : ''; });
+      }
+      origBtn.textContent = view === 'original' ? '⇄ Processed' : '⇄ Original';
+      listBtn.textContent = view === 'list'     ? '☰ Flat'      : '☰ List';
+    }
+
+    origBtn.addEventListener('click', () => {
+      showView(viewState === 'original' ? 'flat' : 'original');
     });
 
-    hr.after(btn);
+    listBtn.addEventListener('click', () => {
+      if (viewState === 'list') {
+        showView('flat');
+      } else {
+        if (!listDiv) {
+          setlistEls = [...processedDiv.querySelectorAll('p, blockquote')].filter(el =>
+            el.querySelector('.bb-sep, .bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff')
+          );
+          if (setlistEls.length === 0) return;  // nothing to list-ify
+          listDiv = buildListDiv(setlistEls);
+          setlistEls[0].parentNode.insertBefore(listDiv, setlistEls[0]);
+        }
+        showView('list');
+      }
+    });
+
+    const controls = document.createElement('div');
+    controls.className = 'bb-section-controls';
+    controls.append(origBtn, listBtn);
+    hr.after(controls);
+  }
+
+  // Builds an ordered-list view from an array of setlist <p>/<blockquote> elements.
+  // The returned div is inserted INSIDE processedDiv before the first setlist element,
+  // so the event title, scheduled block, icons, and descriptive text remain visible.
+  // Each source element contributes:
+  //   - a label paragraph (from .bb-section-label/.bb-section-label-warn nodes)
+  //   - an <ol> with one <li> per song (nodes split on .bb-sep spans)
+  // Song colouring, <a href> links, and ⚠️ spans are preserved; tooltips re-wired.
+  function buildListDiv(setlistEls) {
+    const div = document.createElement('div');
+    div.className = 'bb-section-list';
+    div.style.display = 'none';
+
+    for (const el of setlistEls) {
+      let labelHtml = '';
+      const groups  = [[]];   // array of HTML-string arrays, split on .bb-sep
+
+      for (const node of el.childNodes) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          if (node.classList.contains('bb-section-label') ||
+              node.classList.contains('bb-section-label-warn')) {
+            labelHtml += node.outerHTML;
+          } else if (node.classList.contains('bb-sep')) {
+            groups.push([]);
+          } else {
+            groups[groups.length - 1].push(node.outerHTML);
+          }
+        } else if (node.nodeType === Node.TEXT_NODE) {
+          const text = node.textContent;
+          if (text.trim()) groups[groups.length - 1].push(esc(text));
+        }
+      }
+
+      if (labelHtml) {
+        const labelP = document.createElement('p');
+        labelP.className = 'bb-list-label';
+        labelP.innerHTML = labelHtml;
+        div.appendChild(labelP);
+      }
+
+      const validGroups = groups.filter(g => g.join('').trim());
+      if (validGroups.length > 0) {
+        const ol = document.createElement('ol');
+        ol.className = 'bb-list-view';
+        for (const group of validGroups) {
+          const li = document.createElement('li');
+          li.innerHTML = group.join('');
+          ol.appendChild(li);
+        }
+        div.appendChild(ol);
+      }
+    }
+
+    // Re-wire tooltip listeners so the list view is fully interactive.
+    div.querySelectorAll('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff').forEach(span => {
+      span.addEventListener('mouseenter', e => showSongTooltip(e, span));
+      span.addEventListener('mouseleave', hideTooltip);
+    });
+    div.querySelectorAll('.bb-para-warn').forEach(span => {
+      span.addEventListener('mouseenter', e => showErrorTooltip(e, span.dataset.msg));
+      span.addEventListener('mouseleave', hideTooltip);
+    });
+
+    return div;
   }
 
   // Wires up the pre-existing #bb-mismatch-toggle button.
@@ -548,11 +660,12 @@
       const hide = active && !hasMismatch;
       processedDiv.style.display = hide ? 'none' : '';
 
-      // Walk backward: [<hr>] [.bb-section-toggle] [.bb-section-original] [processedDiv]
-      // Skip bb-section-original (it has its own independent display state).
+      // Walk backward: [<hr>] [.bb-section-controls] [.bb-section-original] [processedDiv]
+      // bb-section-original has its own independent display state — skip without toggling.
+      // bb-section-list lives inside processedDiv and is hidden with it automatically.
       let el = processedDiv.previousElementSibling;
       if (el && el.classList.contains('bb-section-original')) el = el.previousElementSibling;
-      if (el && el.classList.contains('bb-section-toggle'))  { el.style.display = hide ? 'none' : ''; el = el.previousElementSibling; }
+      if (el && el.classList.contains('bb-section-controls')) { el.style.display = hide ? 'none' : ''; el = el.previousElementSibling; }
       if (el && el.tagName === 'HR')                          { el.style.display = hide ? 'none' : ''; }
     }
   }
@@ -834,11 +947,17 @@
       log(`  DETAIL : "${normalizedDetailName}"`);
       log(`  Result : ${nameMatch ? 'MATCH ✅' : isEarlyLate ? 'EARLY/LATE ⚠️' : 'MISMATCH ❌'}`);
 
-      addYearGlyph(element, nameMatch, isEarlyLate, yearNameUpper, normalizedDetailName, rawDetailName, eventType);
+      const eventAlias = extractEventAlias(doc);
+      addYearGlyph(element, nameMatch, isEarlyLate, yearNameUpper, normalizedDetailName, rawDetailName, eventType, eventAlias);
 
-      // ── Scheduled block ──────────────────────────────────────────────────
-      const scheduledText = extractScheduled(doc);
-      if (scheduledText) addScheduledBlock(element, scheduledText);
+      // ── Timing blocks ────────────────────────────────────────────────────
+      const timingBlocks = extractTimingBlocks(doc);
+      if (timingBlocks.length > 0) {
+        let insertAfter = element.closest('p') || element.parentNode;
+        for (const text of timingBlocks) {
+          insertAfter = addScheduledBlock(insertAfter, text);
+        }
+      }
 
       // ── Clickable icons ──────────────────────────────────────────────────
       wireIconHandlers(element, doc);
@@ -847,9 +966,10 @@
       if (setlistEls.length > 0) {
         const yearSections   = parseYearSetlist(setlistEls);
         const detailSections = parseDetailSetlist(doc);
-        const yearFlat    = yearSections.flatMap(s => s.songs);
-        const yearRawFlat = yearSections.flatMap(s => s.rawSongs);
-        const detailFlat  = detailSections.flatMap(s => s.songs);
+        const yearFlat      = yearSections.flatMap(s => s.songs);
+        const yearRawFlat   = yearSections.flatMap(s => s.rawSongs);
+        const detailFlat    = detailSections.flatMap(s => s.songs);
+        const detailUrlFlat = detailSections.flatMap(s => s.songUrls || s.songs.map(() => null));
         log(`  Setlist: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
 
         if (yearFlat.length > 0 || detailFlat.length > 0) {
@@ -858,7 +978,11 @@
           let yp = 0, dp = 0;
           for (const item of diffItems) {
             if (item.type !== 'detail-only') item.rawYearSong = yearRawFlat[yp++];
-            if (item.type !== 'year-only')   item.paragraphBased = detailParaFlat[dp++];
+            if (item.type !== 'year-only') {
+              item.paragraphBased = detailParaFlat[dp];
+              item.detailSongUrl  = detailUrlFlat[dp];
+              dp++;
+            }
           }
           // Annotate each year section with the corresponding detail section label
           // (by position) so renderSetlistElement can flag label mismatches.
@@ -976,11 +1100,17 @@
         : '';
       if (item.type === 'match') {
         const raw = item.rawYearSong || item.yearSong;
-        if (/,\s+(?:and\/or|and|or)\s+/i.test(raw)) {
+        // Test on the cleaned name so that ", and" inside a "(with ...)" suffix
+        // does not trigger the connective split.
+        if (/,\s+(?:and\/or|and|or)\s+/i.test(item.yearSong)) {
           html += renderMatchWithConnectives(raw) + paraWarn;
         } else {
           const rawSuffix = item.rawYearSong ? esc(item.rawYearSong.slice(item.yearSong.length)) : '';
-          html += `<span class="bb-song-match">${esc(item.yearSong)}</span>${rawSuffix}${paraWarn}`;
+          if (item.detailSongUrl) {
+            html += `<a href="${esc(item.detailSongUrl)}" class="bb-song-match">${esc(item.yearSong)}</a>${rawSuffix}${paraWarn}`;
+          } else {
+            html += `<span class="bb-song-match">${esc(item.yearSong)}</span>${rawSuffix}${paraWarn}`;
+          }
         }
       } else if (item.type === 'year-only') {
         const display = item.rawYearSong || item.yearSong;
@@ -1380,7 +1510,13 @@
 
     function flushPending() {
       if (pendingSongs.length > 0) {
-        sections.push({ label: currentLabel, songs: pendingSongs, paragraphBased: true, hasExplicitLabel });
+        sections.push({
+          label: currentLabel,
+          songs: pendingSongs.map(s => s.name),
+          songUrls: pendingSongs.map(s => s.url),
+          paragraphBased: true,
+          hasExplicitLabel
+        });
         pendingSongs = [];
         hasExplicitLabel = false;
         currentLabel = 'show';
@@ -1391,16 +1527,18 @@
       const songs = [];
       for (const li of listEl.querySelectorAll('li')) {
         const links = [...li.querySelectorAll('a[href^="/song:"]')];
-        let name;
+        let name, url = null;
         if (links.length > 0) {
           name = cleanSongName(links.map(a => a.textContent.trim()).join(' - '));
+          // Medley entries (multiple links) have no single song URL.
+          if (links.length === 1) url = links[0].getAttribute('href');
         } else {
           // Fall back to plain text for songs with no dedicated song page.
           // Skip venue/date entries (e.g. "2004-04-18 Hit Factory, NY").
           const text = li.textContent.trim();
           if (text && !/^\d{4}-\d{2}-\d{2}/.test(text)) name = cleanSongName(text);
         }
-        if (name) songs.push(name);
+        if (name) songs.push({ name, url });
       }
       return songs;
     }
@@ -1431,14 +1569,20 @@
           const links = [...child.querySelectorAll('a[href^="/song:"]')];
           if (links.length > 0) {
             const name = cleanSongName(links.map(a => a.textContent.trim()).join(' - '));
-            if (name) pendingSongs.push(name);
+            const url = links.length === 1 ? links[0].getAttribute('href') : null;
+            if (name) pendingSongs.push({ name, url });
           }
         }
       } else if (child.tagName === 'OL' || child.tagName === 'UL') {
         flushPending();
-        const songs = parseSongsFromList(child);
-        if (songs.length > 0) {
-          sections.push({ label: currentLabel, songs, hasExplicitLabel });
+        const songItems = parseSongsFromList(child);
+        if (songItems.length > 0) {
+          sections.push({
+            label: currentLabel,
+            songs: songItems.map(s => s.name),
+            songUrls: songItems.map(s => s.url),
+            hasExplicitLabel
+          });
           hasExplicitLabel = false;
           currentLabel = 'show';
         }
@@ -1450,8 +1594,12 @@
     // (handles pages where the <ol> is nested inside a <div> within #page-content).
     if (sections.length === 0) {
       for (const list of td.querySelectorAll('ol, ul')) {
-        const songs = parseSongsFromList(list);
-        if (songs.length > 0) sections.push({ label: currentLabel, songs });
+        const songItems = parseSongsFromList(list);
+        if (songItems.length > 0) sections.push({
+          label: currentLabel,
+          songs: songItems.map(s => s.name),
+          songUrls: songItems.map(s => s.url)
+        });
       }
     }
 
@@ -1734,11 +1882,12 @@
 
   // ── DOM mutation ──────────────────────────────────────────────────────────
 
-  function addYearGlyph(element, match, isEarlyLate, yearName, normalizedDetailName, rawDetailName, eventType) {
+  function addYearGlyph(element, match, isEarlyLate, yearName, normalizedDetailName, rawDetailName, eventType, alias) {
     const glyph     = match ? '✅' : isEarlyLate ? '⚠️' : '❌';
     const typeSpan  = makeEventTypeSpan(eventType);
     const glyphSpan = makeGlyphSpan(glyph);
-    element.after(typeSpan, glyphSpan);
+    const nodes     = alias ? [typeSpan, glyphSpan, makeAliasSpan(alias)] : [typeSpan, glyphSpan];
+    element.after(...nodes);
     const enter = e => showYearTooltip(e, yearName, normalizedDetailName, rawDetailName, eventType, match, isEarlyLate);
     [element, typeSpan, glyphSpan].forEach(n => {
       n.addEventListener('mouseenter', enter);
@@ -1780,24 +1929,52 @@
     });
   }
 
-  // Returns the text of the "Scheduled:" code block from a detail page, or null.
-  // The block is a <div class="code"><pre><code>Scheduled: …</code></pre></div>.
-  function extractScheduled(doc) {
-    for (const code of doc.querySelectorAll('div.code pre code')) {
-      const text = code.textContent.trim();
-      if (text.startsWith('Scheduled:')) return text;
-    }
-    return null;
+  // Returns the event alias from the first tab of a detail page, or null.
+  // The alias must be the very first element child of #wiki-tab-0-0, as a
+  // <p><strong>…</strong></p>, AND must be immediately followed by <hr> as
+  // the second element child.  Both conditions must hold to avoid treating
+  // in-page section headers (e.g. "Willie Nile Set") as aliases.
+  function extractEventAlias(doc) {
+    const tab = doc.getElementById('wiki-tab-0-0');
+    if (!tab) return null;
+    const kids = tab.children;
+    if (kids.length < 2) return null;
+    if (kids[1].tagName !== 'HR') return null;
+    const first = kids[0];
+    if (first.tagName !== 'P') return null;
+    const strong = first.querySelector('strong');
+    if (!strong || first.textContent.trim() !== strong.textContent.trim()) return null;
+    const text = strong.textContent.trim();
+    return text || null;
   }
 
-  // Inserts a small styled block containing the scheduled text below the event
-  // title paragraph on the YEAR page.
-  function addScheduledBlock(element, text) {
+  function makeAliasSpan(alias) {
+    const span = document.createElement('span');
+    span.className = 'bb-event-alias';
+    span.textContent = ` — ${alias}`;
+    return span;
+  }
+
+  // Returns all timing/scheduling code blocks from a detail page.
+  // Blocks are <div class="code"><pre><code>…</code></pre></div> elements.
+  // Covers "Scheduled: …", "Local Start Time …", and any future patterns.
+  function extractTimingBlocks(doc) {
+    const blocks = [];
+    for (const code of doc.querySelectorAll('div.code pre code')) {
+      const text = code.textContent.trim();
+      if (text) blocks.push(text);
+    }
+    return blocks;
+  }
+
+  // Inserts a small styled block containing the timing text after afterEl on
+  // the YEAR page. Returns the inserted div for chaining multiple blocks.
+  function addScheduledBlock(afterEl, text) {
     const div = document.createElement('div');
     div.className = 'bb-scheduled';
     div.textContent = text;
-    const para = element.closest('p') || element.parentNode;
-    para.after(div);
+    afterEl.after(div);
+    return div;
   }
 
   // ── Icon click feature ────────────────────────────────────────────────────
@@ -2601,6 +2778,7 @@
       .bb-fail { color: #f66; }
       .bb-event-type        { color: #888; font-style: italic; font-weight: normal; }
       .bb-event-type-detail { font-size: 0.6em; font-weight: normal; color: #666; font-style: italic; vertical-align: middle; }
+      .bb-event-alias       { font-style: italic; font-weight: bold; color: #555; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }
       .bb-scheduled { font-size: 0.8em; font-family: monospace; color: #555; margin: 1px 0 3px; }
 
@@ -2624,7 +2802,12 @@
       #bb-controls       { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 6px 0 2px; }
       #bb-btn-container  { display: flex; gap: 6px; align-items: center; margin: 0; }
       #bb-global-toggle  { margin: 0; }
-      .bb-section-toggle { margin-left: 0; }
+      .bb-section-controls { display: inline-flex; gap: 4px; margin: 2px 0; }
+      .bb-section-toggle   { margin-left: 0; }
+      .bb-list-toggle      { margin-left: 0; }
+      .bb-list-label       { margin: 2px 0 1px; }
+      ol.bb-list-view      { margin: 0 0 4px 1.8em; padding: 0; }
+      ol.bb-list-view li   { margin: 1px 0; }
       #bb-fetch-all-btn  { margin: 6px 6px 2px 0; }
       #bb-year-progress  { color: #666; font-style: italic; margin: 0; font-size: 0.9em; font-family: monospace; }
 
@@ -2685,6 +2868,8 @@
 
       /* Setlist song states */
       .bb-song-match       { color: #2a2; }
+      a.bb-song-match      { text-decoration: none; }
+      a.bb-song-match:hover { text-decoration: underline; }
       .bb-song-year-only   { background: #add8e6; border-radius: 3px; padding: 0 2px; cursor: default; }
       .bb-song-detail-only { background: #ffff88; border-radius: 3px; padding: 0 2px; cursor: default; }
       .bb-song-char-diff   { cursor: default; }

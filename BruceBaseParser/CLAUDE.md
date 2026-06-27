@@ -127,15 +127,17 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
 - Appends ✅ or ❌ glyph; hover shows a tooltip with both names and a
   token-level diff (`buildDiffHtml`)
 
-**Scheduled block** (always):
-- `extractScheduled(doc)` scans `div.code pre code` elements for text starting
-  with `"Scheduled:"`.
-- If found, `addScheduledBlock(element, text)` inserts a `<div class="bb-scheduled">`
-  in monospace below the event-title `<p>` on the YEAR page.
+**Timing blocks** (always):
+- `extractTimingBlocks(doc)` returns all non-empty texts from `div.code pre code`
+  elements on the DETAIL page (covers `"Scheduled: …"`, `"Local Start Time …"`,
+  and any future patterns).
+- For each text, `addScheduledBlock(afterEl, text)` inserts a `<div class="bb-scheduled">`
+  in monospace below the event-title `<p>` on the YEAR page and returns the inserted
+  div so that multiple blocks are chained in document order.
 
 **Clickable icon handlers** (always):
 - `wireIconHandlers(eventLink, doc)` — see the "Clickable YEAR-page icons" section below.
-  Called after `addScheduledBlock`.
+  Called after timing blocks are inserted.
 
 **Anchor consistency check** (always, when `anchorEl` and `anchorName` are set):
 - Calls `checkYearAnchorConsistency(detailDoc, anchorName, anchorEl)`
@@ -170,11 +172,16 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
   `<p><strong>…</strong></p>` header immediately preceded the `<ol>`/`<ul>`.
   This flag is reset to `false` after each section push so a header does not
   accidentally propagate to the next list.
+  Each section also carries `songUrls: (string|null)[]` — one entry per song,
+  the `href` attribute from the single `<a href="/song:…">` link for that song,
+  or `null` for medley entries (multiple links) and plain-text entries with no link.
 - `yearFlat` / `yearRawFlat` — flattened cleaned / raw song arrays from
   `yearSections`; `detailParaFlat` — flat bool array (one entry per detail song)
-  indicating whether that song came from a paragraph-based section.
-  Each `diffItem` is annotated with `rawYearSong` (year-side raw text) and
-  `paragraphBased` (whether the detail-side song was in `<p>` format).
+  indicating whether that song came from a paragraph-based section;
+  `detailUrlFlat` — flat `(string|null)[]` of song URLs from `detailSections`.
+  Each `diffItem` is annotated with `rawYearSong` (year-side raw text),
+  `paragraphBased` (whether the detail-side song was in `<p>` format), and
+  `detailSongUrl` (the `/song:…` href from the DETAIL page, or `null`).
 - **Section label annotation**: `sec.detailLabel` is assigned by position index
   before rendering. Three sentinel values:
   - `string` — the matching DETAIL section's label (explicit `<strong>` header text)
@@ -189,9 +196,10 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
   `renderSetlistElement(el, label, items, detailLabel)` which:
   - re-captures `<sup>` footnote HTML before overwriting `innerHTML`
   - replaces `el.innerHTML` with colour-coded spans
-  - for `match` items: wraps only the clean song name in the green span;
-    any raw qualifier suffix (e.g. ` (parts)`, ` (with Willie Nile)`) is
-    appended outside the span as plain text
+  - for `match` items with `detailSongUrl`: renders `<a href="/song:…" class="bb-song-match">NAME</a>`;
+    without a URL (medley, no song page): renders `<span class="bb-song-match">NAME</span>`.
+    Any raw qualifier suffix (e.g. ` (parts)`, ` (with Willie Nile)`) is
+    appended outside the element as plain text.
   - re-appends footnote HTML after `<br>` so "Setlist incomplete." notes remain
   - for items with `paragraphBased: true`, appends a
     `<span class="bb-para-warn">⚠️</span>` with hover tooltip after the song span;
@@ -205,7 +213,7 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
 
 | CSS class              | Meaning                     | Visual          |
 |------------------------|-----------------------------|-----------------|
-| `.bb-song-match`       | same in both pages          | green text      |
+| `.bb-song-match`       | same in both pages — on `<a>` if DETAIL has a `/song:` URL, else `<span>` | green text; link underlines on hover |
 | `.bb-song-year-only`   | in year, not detail         | light-blue bg   |
 | `.bb-song-detail-only` | in detail, not year (inserted) | yellow bg    |
 | `.bb-song-char-diff`   | similar but slightly different | char-level red/green |
@@ -352,7 +360,7 @@ first in the row, before tabs like `"Performances"`, `"Appearances"`, `"Cancelle
 
 | CSS class | Purpose |
 |---|---|
-| `.bb-scheduled` | Monospace "Scheduled: …" block below event title (0.8em, #555) |
+| `.bb-scheduled` | Monospace timing block below event title (0.8em, #555) — covers "Scheduled: …", "Local Start Time …", etc. |
 | `img.bb-icon-active` | Blue outline on a clicked icon image |
 | `.bb-icon-panel` | Inline collapsible panel container |
 | `.bb-icon-panel-header` | Panel title + ✕ button row |
@@ -482,8 +490,8 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 | `checkYearAnchorConsistency(detailDoc, yearAnchorName, anchorEl)` | Extracts fragment from the "Info & Setlist" link on the detail page; calls `addAnchorWarnYear` on mismatch |
 | `addAnchorWarnYear(anchorEl, …)` | Inserts `<span class="bb-anchor-warn">⚠️</span>` after `<a name>` on YEAR page when anchor ≠ detail fragment |
 | `addAnchorWarnDetail(linkEl, …)` | Appends `<span class="bb-anchor-warn"> ⚠️</span>` after the "Info & Setlist" link on the DETAIL page when fragment ≠ year anchor |
-| `extractScheduled(doc)` | Returns the text of the first `div.code pre code` element starting with `"Scheduled:"`, or `null` |
-| `addScheduledBlock(element, text)` | Inserts `<div class="bb-scheduled">` after the event-title `<p>` on the YEAR page |
+| `extractTimingBlocks(doc)` | Returns all non-empty texts from `div.code pre code` elements — covers `"Scheduled:"`, `"Local Start Time …"`, and any future patterns |
+| `addScheduledBlock(afterEl, text)` | Inserts `<div class="bb-scheduled">` after `afterEl` on the YEAR page; returns the inserted div for chaining multiple blocks |
 | `buildTabMap(doc)` | Builds `Map<label,index>` from `.yui-nav em` elements on a DETAIL page |
 | `getTabEl(doc, tabMap, label)` | Returns `#wiki-tab-0-N` for the given label, or `null` |
 | `extractIconContent(doc, canonical, tabMap)` | Dispatcher; calls the appropriate per-type extractor |
