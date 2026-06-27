@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.89
+// @version      1.90
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1400,9 +1400,9 @@
           const venueDoc   = await fetchPage(`${location.protocol}//${location.host}${venueHref}`);
           const venueName  = venueDoc.querySelector('#page-title')?.textContent.trim() ?? '';
           if (venueName) {
-            const venuePartM      = normalizedDetailName.match(/^\d{4}-\d{2}-\d{2}\s*-\s*(.*)/s);
-            const detailVenuePart = venuePartM ? venuePartM[1].trim() : '';
-            const match           = !!detailVenuePart && venueName.toUpperCase() === detailVenuePart;
+            const rawVenuePartM   = rawDetailName.match(/^\d{4}-\d{2}-\d{2}\s*(?:-\s*)?(.*)/s);
+            const detailVenuePart = rawVenuePartM ? rawVenuePartM[1].trim() : '';
+            const match           = !!detailVenuePart && venueName === detailVenuePart;
             const anchorEl        = element.closest('p') || element.parentNode;
             renderVenueInfo(lastScheduledDiv || anchorEl, venueHref, venueName, match, detailVenuePart);
           }
@@ -1721,6 +1721,25 @@
         }
       } else {
         log(`  Anchor check: no "Info & Setlist" link found on this detail page`);
+      }
+    }
+
+    // ── Venue name check on DETAIL page ──────────────────────────────────────
+    const detailVenueLink = findVenueLink(document);
+    if (detailVenueLink) {
+      try {
+        const venueHref  = detailVenueLink.getAttribute('href');
+        const venueDoc   = await fetchPage(`${location.protocol}//${location.host}${venueHref}`);
+        const venueName  = venueDoc.querySelector('#page-title')?.textContent.trim() ?? '';
+        if (venueName) {
+          const rawVenuePartM   = rawDetailName.match(/^\d{4}-\d{2}-\d{2}\s*(?:-\s*)?(.*)/s);
+          const detailVenuePart = rawVenuePartM ? rawVenuePartM[1].trim() : '';
+          const venueMatch      = !!detailVenuePart && venueName === detailVenuePart;
+          log(`  Venue: "${venueName}" ${venueMatch ? '✅' : '⚠️'} vs detail "${detailVenuePart}"`);
+          addVenueGlyphDetail(detailVenueLink, venueName, venueMatch, detailVenuePart);
+        }
+      } catch (e) {
+        logWarn(`  Venue page fetch failed: ${e.message}`);
       }
     }
 
@@ -2674,6 +2693,7 @@
     a.textContent = venueName;
     const em = document.createElement('em');
     const strong = document.createElement('strong');
+    strong.style.fontSize = '1.1em';
     em.appendChild(a);
     strong.appendChild(em);
     container.appendChild(strong);
@@ -3589,6 +3609,26 @@
     span.className = 'bb-anchor-match';
     span.textContent = ' ✅';
     span.dataset.msg = msg;
+    span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    span.addEventListener('mouseleave', hideTooltip);
+    linkEl.after(span);
+  }
+
+  /**
+   * Appends a ✅ or ⚠️ glyph after the Venue link on the DETAIL page.
+   * @param {HTMLAnchorElement} linkEl
+   * @param {string} venueName      VENUE page #page-title text
+   * @param {boolean} match
+   * @param {string} detailVenuePart Raw venue part from the DETAIL event name
+   */
+  function addVenueGlyphDetail(linkEl, venueName, match, detailVenuePart) {
+    const msg = match
+      ? `Venue match ✅\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`
+      : `Venue mismatch ⚠️\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
+    const span = document.createElement('span');
+    span.className = match ? 'bb-anchor-match' : 'bb-venue-warn';
+    span.textContent = match ? ' ✅' : ' ⚠️';
+    span.style.cursor = 'help';
     span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
     span.addEventListener('mouseleave', hideTooltip);
     linkEl.after(span);

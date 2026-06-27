@@ -1,5 +1,29 @@
 [
     {
+        "version": "1.90",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Venue name comparison now uses the raw (non-normalized, non-uppercased) venue part from the DETAIL event name, matching the Title Case of the VENUE page title."
+                ]
+            },
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "DETAIL page: the 'Venue' link now gets a ✅ or ⚠️ glyph (with tooltip) comparing the VENUE page title against the venue part of the DETAIL event name."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Venue name in the YEAR page scheduled block is now rendered at 1.1em (slightly larger than the surrounding timing text)."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.89",
         "date": "2026-06-27",
         "sections": [
