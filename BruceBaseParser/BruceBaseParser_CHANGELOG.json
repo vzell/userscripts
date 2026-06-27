@@ -1,5 +1,19 @@
 [
     {
+        "version": "1.87",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Tags panel: zero-padded day numbers (e.g. tag '07') no longer false-positive as missing when the expected day is '7'. New isTagPresent() helper accepts both padded and stripped forms for purely numeric tags.",
+                    "Tags panel: 'Missing expected tags:' header is now rendered as a <p> element before the <ol>, not as a <li> inside the ordered list.",
+                    "Tags panel: missing expected tags are now inserted at their correct alphabetical position within the merged sorted tag list instead of being appended at the end."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.86",
         "date": "2026-06-27",
         "sections": [

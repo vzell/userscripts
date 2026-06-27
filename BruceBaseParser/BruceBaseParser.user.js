@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.86
+// @version      1.87
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -3092,6 +3092,24 @@
    * @param {string}             eventType - "gig" | "recording" | etc.
    * @returns {Set<string>}
    */
+  /**
+   * Returns true when an expected tag string is satisfied by the actual tag set.
+   * For purely numeric tags (day numbers), both the zero-padded form ("07") and
+   * the stripped form ("7") are accepted so that either brucebase convention works.
+   * @param {string}      tag
+   * @param {Set<string>} actualTags
+   * @returns {boolean}
+   */
+  function isTagPresent(tag, actualTags) {
+    if (actualTags.has(tag)) return true;
+    if (/^\d+$/.test(tag)) {
+      const stripped = String(parseInt(tag, 10));
+      const padded   = stripped.padStart(2, '0');
+      return actualTags.has(stripped) || actualTags.has(padded);
+    }
+    return false;
+  }
+
   function computeExpectedTags(doc, tabMap, eventDate, eventType) {
     const expected = new Set();
 
@@ -3149,17 +3167,24 @@
 
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
     const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType);
-    const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+    const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
 
-    let html = '<ol class="bb-tags-list" style="margin:4px 0; padding-left:18px;">';
-    for (const a of tagLinks) {
-      html += `<li>${a.outerHTML}</li>`;
-    }
+    // Merge existing tag links with missing placeholders into one sorted list.
+    const existingItems = tagLinks.map(a => ({
+      tag: a.textContent.trim().toLowerCase(), html: a.outerHTML, missing: false,
+    }));
+    const missingItems = missingTags.map(tag => ({ tag, html: null, missing: true }));
+    const allItems = [...existingItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
+
+    let html = '';
     if (missingTags.length > 0) {
-      html += '<li style="margin-top:8px; list-style:none; color:red; font-weight:bold">⚠️ Missing expected tags:</li>';
-      for (const tag of missingTags) {
-        html += `<li style="color:red; font-weight:bold">⚠️ ${esc(tag)}</li>`;
-      }
+      html += '<p style="color:red; font-weight:bold; margin:0 0 6px 0">⚠️ Missing expected tags:</p>';
+    }
+    html += '<ol class="bb-tags-list" style="margin:4px 0; padding-left:18px;">';
+    for (const item of allItems) {
+      html += item.missing
+        ? `<li style="color:red; font-weight:bold">⚠️ ${esc(item.tag)}</li>`
+        : `<li>${item.html}</li>`;
     }
     html += '</ol>';
 
@@ -3205,7 +3230,7 @@
     const tagLinks    = [...tagsContainer.querySelectorAll('a[href]')];
     const actualTags  = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
     const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType);
-    const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+    const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
 
     if (missingTags.length === 0) return;
 
