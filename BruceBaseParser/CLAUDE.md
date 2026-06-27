@@ -134,6 +134,22 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
 - For each text, `addScheduledBlock(afterEl, text)` inserts a `<div class="bb-scheduled">`
   in monospace below the event-title `<p>` on the YEAR page and returns the inserted
   div so that multiple blocks are chained in document order.
+- `lastScheduledDiv` tracks the final inserted div for venue appending below.
+
+**Venue info** (always, when DETAIL page has a `/venue:` link):
+- `findVenueLink(doc)` scans `doc.querySelectorAll('a[href]')` for the first link whose
+  `href` starts with `/venue:`.
+- Fetches the venue page with `fetchPage`; reads `venueName` from `#page-title`.
+- Extracts the raw venue part from `rawDetailName` with
+  `/^\d{4}-\d{2}-\d{2}\s*(?:-\s*)?(.*)/s` (preserves Title Case; no normalization).
+- Compares with `venueName` directly (trimmed, case-sensitive).
+- `renderVenueInfo(lastScheduledDiv || eventP, venueHref, venueName, match, detailVenuePart)`:
+  - If `afterEl` is a `.bb-scheduled` div, appends inline so the line reads
+    `Scheduled: … at <strong><em><a>Venue Name</a></em></strong> ✅/⚠️`.
+  - Otherwise creates a new `.bb-scheduled` div and inserts it after `afterEl`.
+  - The `<strong>` wrapping the venue name carries `font-size: 1.1em` so it stands out
+    slightly against the surrounding timing text.
+  - A ✅ or ⚠️ glyph with `showErrorTooltip` is appended after the venue link.
 
 **Clickable icon handlers** (always):
 - `wireIconHandlers(eventLink, doc)` — see the "Clickable YEAR-page icons" section below.
@@ -364,7 +380,8 @@ first in the row, before tabs like `"Performances"`, `"Appearances"`, `"Cancelle
 
 | CSS class | Purpose |
 |---|---|
-| `.bb-scheduled` | Monospace timing block below event title (0.8em, #555) — covers "Scheduled: …", "Local Start Time …", etc. |
+| `.bb-scheduled` | Monospace timing block below event title (0.9em, #555) — covers "Scheduled: …", "Local Start Time …", and appended venue info |
+| `.bb-venue-warn` | Orange ⚠️ glyph when venue page name ≠ DETAIL event name venue part (YEAR and DETAIL pages) |
 | `img.bb-icon-active` | Blue outline on a clicked icon image |
 | `.bb-icon-panel` | Inline collapsible panel container |
 | `.bb-icon-panel-header` | Panel title + ✕ button row |
@@ -438,11 +455,17 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
    the current page via `findInfoSetlistLink(document)`. Compares `FRAGMENT` with
    `yearAnchorName`. On mismatch: `addAnchorWarnDetail(infoLink, …)` appends a
    `<span class="bb-anchor-warn">⚠️</span>` after the link, with a hover tooltip.
-8. Collects and parses the year-side setlist with `collectSetlistElements` +
+8. **Venue name check**: `findVenueLink(document)` locates `<a href="/venue:…">Venue</a>`.
+   Fetches the venue page; reads `#page-title` for the canonical venue name. Extracts the
+   raw venue part from `rawDetailName` (after the date, no normalization, Title Case).
+   Calls `addVenueGlyphDetail(venueLink, venueName, match, detailVenuePart)` to append
+   ✅ or ⚠️ after the Venue link. Comparison is case-sensitive; the `(The)` article
+   rewrite is NOT applied so any formatting difference is flagged.
+9. Collects and parses the year-side setlist with `collectSetlistElements` +
    `parseYearSetlist`.
-9. Runs `lcsDiff` + `mergeCharDiffs`; annotates each `diffItem` with
+10. Runs `lcsDiff` + `mergeCharDiffs`; annotates each `diffItem` with
    `rawYearSong`.
-10. `renderDetailSetlist(diffItems)` via `styleDetailLi`:
+11. `renderDetailSetlist(diffItems)` via `styleDetailLi`:
    - Detects `isParagraphBased` by checking whether the container has any `<li>`.
      If not, collects `<p>` elements with `/song:` links as the song element list.
    - `match` → adds `.bb-song-match` to each `a[href^="/song:"]` inside the
@@ -455,7 +478,7 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
      with `.bb-song-year-only` before the current position.
    - After each element on paragraph-based pages, `addParaStructureWarning(el)`
      appends a ⚠️ span with tooltip.
-11. `flagDetailSectionHeaders(yearSections, detailSections, diffItems)` runs after rendering:
+12. `flagDetailSectionHeaders(yearSections, detailSections, diffItems)` runs after rendering:
    - **Case A** — DETAIL already has `<p><strong>…</strong></p>` headers: flags
      each with ⚠️ when its label mismatches the positionally-corresponding YEAR
      section label (or when the DETAIL has headers with no YEAR counterpart).
@@ -467,7 +490,7 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
      and replaced with interleaved `<p><strong>Label ⚠️</strong></p>` + `<ol>`
      fragments, each with a warning tooltip explaining the label is missing from
      the original DETAIL page.
-12. `insertDetailToggle(originalTdHtml)` wraps the setlist tab content in
+13. `insertDetailToggle(originalTdHtml)` wraps the setlist tab content in
    processed/original show-hide divs and inserts a toggle button after
    `#page-title`.
 
@@ -498,6 +521,9 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 | `addAnchorMatchDetail(linkEl, msg)` | Appends `<span class="bb-anchor-match"> ✅</span>` after the "Info & Setlist" link when ALL anchor checks pass; `msg` describes what was verified |
 | `extractTimingBlocks(doc)` | Returns all non-empty texts from `div.code pre code` elements — covers `"Scheduled:"`, `"Local Start Time …"`, and any future patterns |
 | `addScheduledBlock(afterEl, text)` | Inserts `<div class="bb-scheduled">` after `afterEl` on the YEAR page; returns the inserted div for chaining multiple blocks |
+| `findVenueLink(doc)` | Returns the first `<a href="/venue:…">` element found in `doc`, or `null` |
+| `renderVenueInfo(afterEl, venueHref, venueName, match, detailVenuePart)` | Appends ` at <strong><em><a>venueName</a></em></strong> ✅/⚠️` to `afterEl` (if it is a `bb-scheduled` div) or creates a new `bb-scheduled` div after it; venue `<strong>` is at `font-size: 1.1em`; comparison is raw Title Case (no uppercasing) |
+| `addVenueGlyphDetail(linkEl, venueName, match, detailVenuePart)` | Appends a ✅ (`bb-anchor-match`) or ⚠️ (`bb-venue-warn`) span after the `<a href="/venue:…">Venue</a>` link on DETAIL pages |
 | `buildTabMap(doc)` | Builds `Map<label,index>` from `.yui-nav em` elements on a DETAIL page |
 | `getTabEl(doc, tabMap, label)` | Returns `#wiki-tab-0-N` for the given label, or `null` |
 | `extractIconContent(doc, canonical, tabMap)` | Dispatcher; calls the appropriate per-type extractor |
