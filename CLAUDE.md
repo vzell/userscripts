@@ -58,3 +58,42 @@ At merge time (on `main`):
 - 4-space indentation, no tabs, no trailing whitespace
 - All functions must have JSDoc `/** … */` blocks
 
+## BruceBaseParser — architecture notes
+
+### Page types and button container
+
+Four page types: HOME, YEAR, LIST, DETAIL. All have `#bb-btn-container` inserted
+immediately after `#page-title`.
+
+| Page | Button order |
+|------|-------------|
+| HOME | ▶ Fetch All Year Pages \| ▶ Fetch All Year-List Pages \| ⚡ Mismatches \| 💾 Save \| 📂 Load |
+| YEAR | ▶ Start \| 💾 Save \| 📂 Load \| ⇄ Original Page \| ⚡ Mismatches \| [SmartTable] |
+| LIST | ⇄ Original Page \| ⚡ Mismatches \| 💾 Save \| 📂 Load |
+| DETAIL | 💾 Save \| 📂 Load (⇄ Original Page prepended after processing) |
+
+### Save / Load — no new `@grant` needed
+
+- **Save**: `Blob` + `<a download>` — filename `bb-${pageType.toUpperCase()}-${pageTitle}.json`
+- **Load**: hidden `<input type="file">` + `FileReader`
+- **Cache schema v1**: `{ schemaVersion, pageType, url, pageTitle, timestamp, processedHtml, originalHtml }`
+
+### YEAR page Start/Stop restart safety
+
+Before each new processing run the click handler:
+1. Removes `#bb-page-original`, `.bb-section-controls`, `.bb-section-original`
+2. Resets each `sec.processedDiv.innerHTML = sec.sectionOriginalHtml` and `sec.toggleInserted = false`
+3. Clone-replaces `globalBtn` and `mismatchBtn` to strip stale listeners
+4. Re-runs `extractYearPageEvents(content)` for fresh DOM references
+
+### Range-slug year pages (`1949-64`)
+
+`LIST_LINK_RE` matches both `\d{4}` and `1949-64` slugs. Year comparisons must use
+`yearMatchesHrefSlug(dateYear, hrefSlug)` (not `===`) so that e.g. `"1953"` correctly
+matches the `"1949-64"` slug (covering 1949–1964). Applied at all three check sites:
+YEAR page event anchors, DETAIL page "Info & Setlist" anchor, LIST page event links.
+
+### `@grant` declarations
+
+Only `GM_xmlhttpRequest` and `GM_addStyle`. Do not add new grants without explicit discussion.
+

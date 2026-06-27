@@ -962,7 +962,7 @@ with the anchor reference on the corresponding DETAIL page e.g.
 #+end_example
 
 If they do NOT match, render the anchor text with a warning symbol (plus tooltip) on the YEAR page right where it
-actually sits in the page and on the DETAIL page render the "Info & Setlist" hyper text with an additional warning symbol appended (plus tooltip)
+actually sits in the page and on the DETAIL page render the "Info & Setlist" or just "Info" hyper text with an additional warning symbol appended (plus tooltip)
 
 Download/parse the relevant example page if neccessary to find the full context
 
@@ -1568,6 +1568,454 @@ for rendering the table when on YEAR OVERVIEW pages
 ** bug
 
 now the "Original" and "Mismatches" buttons on YEAR OVERVIEW pages are always greyed out, you can't click them. Also the "Table View" button is missing
+
+** mismatches
+
+On the BruceBase URL when pressing the "Fetch All Gig-Overview Pages" button on the resulting final rendered page
+the repeating noise should be removed
+
+1.)
+
+all the h1 header lines
+
+#+begin_example
+<h1 id="toc0"><span>1949-1964 listing by date / location</span></h1>
+#+end_example
+
+2.)
+
+the two repeating horizontal lines after earch YEAR OVERVIEW unordered list
+
+#+begin_example
+<hr>
+<div class="bb-section-processed"></div>
+<hr>
+<div class="bb-section-processed"></div>
+#+end_example
+
+3.)
+
+The "Mismatches" button doesn't work right, it should show all the mismatch event entries ONLY after either fetching all
+YEAR OVERVIEW pages or the ones after pressing the "Stop fetching" button. The button text should also show the number
+of mismatches. Equivalent to what happens when pressing the "Fetch All Gig Pages"
+
+4.)
+
+Additionally the "Table View" button should also use the smarttable library
+
+** bug
+
+Completely hide the h3 header and all it's content up to the next h3 header if there is NO mismatch in the event list, e.g.
+
+#+begin_example
+<h3 class="bb-year-header" title="Click to collapse · Ctrl+click to collapse all"><span class="bb-year-toggle-glyph">▼ </span><a href="/1967-list" target="_blank">1967-list</a></h3>
+#+end_example
+
+** anchor
+
+1.)
+
+on the YEAR pages e.g. http://brucebase.wikidot.com/1977 in each event name tooltip, add the anchor information to the tooltip after the "Event type:"
+
+E.g. for the event http://brucebase.wikidot.com/1977#000177a with event name "1977-01-00 - COLUMBIA RECORDING STUDIOS, NEW YORK CITY, NY"
+it would be "Event anchor: 000177a"
+
+#+begin_example
+<a name="000177a"></a>
+#+end_example
+
+2.)
+
+#+begin_example
+Currently we have implemented the following logic:
+
+Compare the anchor text for each event on a YEAR page http://brucebase.wikidot.com/2026#170126 e.g. "170126" for the following event
+
+  #+begin_example
+  <p><a name="170126"></a><br>
+  <strong><a href="/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n">2026-01-17 - HACKENSACK MERIDIAN HEALTH THEATRE, RED BANK, NJ</a></strong></p>
+  #+end_example
+
+with the anchor reference on the corresponding DETAIL page e.g.
+
+  #+begin_example
+  <a href="/2026#170126">Info &amp; Setlist</a>
+  #+end_example
+
+If they do NOT match, render the anchor text with a warning symbol (plus tooltip) on the YEAR page right where it
+actually sits in the page and on the DETAIL page render the "Info & Setlist" or just "Info" hyper text with an additional warning symbol appended (plus tooltip)
+
+#+end_example
+
+a.)
+
+The 'or just "Info"' part is new, check if the current logic already covers this part also 
+
+b.)
+
+Write a DateToAnchor helper function which calculates from the date part "2026-01-17" in an event name like "2026-01-17 - HACKENSACK MERIDIAN HEALTH THEATRE, RED BANK, NJ"
+the theoretical anchor expression, in this case "170126" and additionally compare these for matches, if not also display this fact in the Warning tooltips on both YEAR and DETAIL pages
+
+c.)
+
+also compare the 4-digit year e.g. "2026" before the anchor in
+
+#+begin_example
+<a href="/2026#170126">Info &amp; Setlist</a>
+#+end_example
+
+to the 4-digit year part of the date in the event name and also flag this when they differ in the anchor tooltips on both YEAR and DETAIL pages
+
+3.)
+
+On the YEAR OVERVIEW pages e.g http://brucebase.wikidot.com/1977-list
+
+#+begin_example
+<li><a href="/1976#001177b">1977-01-00 - TELEGRAPH HILL STUDIO, HOLMDEL, NJ</a> <span style="font-size:80%;"><em>(Studio Rehearsals)</em></span></li>
+#+end_example
+
+do the same comparisons against the YEAR page entries and also render the warning icon above the "<li>" entry when there are mismatches
+
+For example in this case there is a mismatch in the 4-digit year in the "a href" and the 4-digit year in the event name.
+
+** detail
+
+on DETAIL pages e.g. http://brucebase.wikidot.com/gig:1977-02-17-coliseum-richfield-oh 
+
+do the date and anchor checks for the "Info & Setlist" 'a href' 
+
+#+begin_example
+<a href="/1977#170277">Info &amp; Setlist</a>
+#+end_example
+
+against the date in the event name, check if the computed anchor would match and also check the   
+YEAR page http://brucebase.wikidot.com/gig:1977-02-17-coliseum-richfield-oh anchor match
+
+If all is good, render the ✅ glyph after the "Info & Setlist" text otherwise the warning symbol. both symbols shoud have a descriptive tooltip as usual
+
+** tags
+
+1.)
+
+On the event DETAIL pages a flat list of tags is rendered in the following kind of structure @debug/TAGS.html
+
+On the corresponding YEAR event entry add a new button "Tags" as the last button in '<div class="bb-extra-tab-row">'
+When clicked render the hyperlinked tag values as an ordered list 
+
+2.)
+
+Make some consistency checks on the tag values:
+
+a.)
+
+for an event with name like "1977-02-17 Richfield Coliseum, Richfield, OH" e.g. http://brucebase.wikidot.com/gig:1977-02-17-coliseum-richfield-oh
+the tag values should at least have an entry for
+
+- 1977 - the 4-digit year
+- february - the month name in lowercase
+- 17 - the 2-digit day
+- thursday - the weekday of the event date
+- bootleg - if the "Recording" tab has content except text starting with "Sorry, no ..." or "Sorry no ..." 
+- news - if the "News" or "News/Memorabilia" tab has content except text starting with "Sorry, no ..." or "Sorry no ..." 
+- memorabilia - if the "News/Memorabilia" tab has content except text starting with "Sorry, no ..." or "Sorry no ..." 
+- gig - the event-type
+- ticket - if there are ticket images in the "News/Memorabilia" tab
+- handwritten - if there are handwritten setlist images in the "News/Memorabilia" tab
+
+If one or more of this entries are missing, add them to the rendered list in "bold red" text on the YEAR pages with a warning symbol explaining the fact.
+On DETAIL pages surround the '<div class="page-tags">' container with a bold yellow warning box and also add them to the flat '<div class="page-tags">' structure in "bold red" text  
+
+** bug
+
+Render the whole "Tags" button on the YEAR pages in "red" and add warning symbol righ beside it with a tooltip that there are tag value inconsistencies
+
+** bugs
+
+read @debug/TAGS-BUG.html for event http://brucebase.wikidot.com/gig:2026-04-07-kia-forum-inglewood-ca
+
+Curretnly on the YEAR pages the tag problem section
+
+#+begin_example
+    <li style="color:red; font-weight:bold">⚠️ 7
+    </li>
+    <li style="color:red; font-weight:bold">⚠️ bootleg
+    </li>
+    <li style="color:red; font-weight:bold">⚠️ handwritten
+    </li>
+#+end_example
+
+is written at the end of the ordered list. Make the following changes:
+
+1.)
+
+A 2-digit day like e.g. "07" should actually not be flagged as a missing tag value, as in the above list a "0" needs to
+be prepended to the "7" and in that case it would match with an existing entry
+
+2.)
+
+the
+
+#+begin_example
+    <li style="margin-top:8px; list-style:none; color:red; font-weight:bold">⚠️ Missing expected tags:
+    </li>
+#+end_example
+
+entry shuld actually be rendered at the beginning of the list but without being an ordered list entry itself
+
+3.)
+
+the missing entries should be rendered at the right position in the ordered list, as the list is sorted anyway, so the
+position can easily be determined
+
+** adjust
+
+1.)
+
+adjust the list:
+
+the tag values should at least have an entry for
+
+- setlist - if there are setlist images in the "News/Memorabilia" tab
+- handwritten - if there are handwritten setlist images in the "News/Memorabilia" tab (deducable from the image filename)
+- printed - if there are printed setlist images in the "News/Memorabilia" tab (deducable from the image filename)
+- soundcheck - if the event entry has a "Soundcheck:" label before the actual soundcheck setlist
+- livedl - if the DETAIL "Recording" tab has an entry for a "Official concert recording available"
+- storyteller - if the "Storyteller" tab has content except text starting with "Sorry, no ..." or "Sorry no ..." 
+
+2.)
+
+Also check if a tag value exists, but NOT the referenced information, then also flag the tag value with a warning icon and a tooltip
+
+** place
+
+1.)
+
+On each YEAR event entry e.g. http://brucebase.wikidot.com/2026 get the "Venue" link from the DETAIL page e.g http://brucebase.wikidot.com/gig:2026-05-02-state-farm-arena-atlanta-ga
+
+#+begin_example
+<a href="/venue:state-farm-arena-atlanta-ga">Venue</a>
+#+end_example
+
+and follow to the VENUE page at e.g.
+
+http://brucebase.wikidot.com/venue:state-farm-arena-atlanta-ga
+
+From there grab the venue name from
+
+#+begin_example
+<div id="page-title">State Farm Arena, Atlanta, GA</div>
+#+end_example
+
+and render it on the YEAR page after the
+
+#+begin_example
+<div class="bb-scheduled">Scheduled: 19:30 | Local Start Time 19:42 / End Time 22:35</div>
+#+end_example
+
+in "bold italic" with the hyperlink information prepend the prefix " at " (not in bold italic), so that the whole line reads
+
+Scheduled: 19:30 | Local Start Time 19:42 / End Time 22:35 at State Farm Arena, Atlanta, GA
+
+2.)
+
+Check for a venue name mismatch betwwen the venue name from the VENUE page and the derived venue name from the event name on the DETAIL page e.g "2026-05-02 State Farm Arena, Atlanta, GA"
+Everything after the date in the event name is the venue name. Matches/Mismatches should be flagged as usual on the YEAR page rendered venue name and the VENUE page venue name
+
+3.)
+
+The font in '<div class="bb-scheduled">' should be a little bit larger
+
+** bugs
+
+1.)
+
+The font for the venue name should also be a little bit larger
+
+2.)
+
+The venue name from the VENUE page should be compared to the NON-normalized venue name extracted from the event name on
+the DETAIL pages as both are not rendered in UPPERCASE.
+
+3.)
+
+"Venue" in
+
+#+begin_example
+<a href="/venue:state-farm-arena-atlanta-ga">Venue</a>
+#+end_example
+
+should also get the Matches/Mismatches glyphs with tooltips
+
+** empty line
+
+when clicking the '<button class="bb-toggle-btn bb-list-toggle">☰ List</button>' on an event entry on the YEAR page
+render an additional new line before the song list
+
+** bugs
+
+1.)
+
+On events of type "recording" e.g. http://brucebase.wikidot.com/recording:2026-01-27-stone-hill-studio-colts-neck-nj
+render the prefix "Recording session" before e.g.
+
+#+begin_example
+<div class="bb-scheduled"> at <strong style="font-size: 1.1em;"><em><a href="http://brucebase.wikidot.com/venue:stone-hill-studio-colts-neck-nj" target="_blank" rel="noopener noreferrer">Stone Hill Studio, Colts Neck, NJ</a></em></strong><span class="bb-glyph" style="cursor: help;"> ✅</span></div>
+#+end_example
+
+2.)
+
+On events e.g. http://brucebase.wikidot.com/gig:2026-01-30-first-avenue-minneapolis-mn
+which have on the YEAR page labeled event lists like e.g. "Soundcheck:" plus the unlabeled standard "Show:" event list, when clicking the button
+'<button class="bb-toggle-btn bb-list-toggle">☰ List</button>' the standard ordered "Show:" event list should explicitly get the "Show:" label
+
+** venue button list
+
+#+begin_example
+<ul class="yui-nav">
+<li title=""><a href="javascript:;"><em>Performances</em></a></li><li title="active" class="selected"><a href="javascript:;"><em>Gallery</em></a></li></ul>
+#+end_example
+
+** TODO "Recording:" and "Show:"
+*** initial
+
+when clicking the button'<button class="bb-toggle-btn bb-list-toggle">☰ List</button>':
+
+"Recording:" should be changed to "Recordings:" and both "Recordings:" and "Show:" should be rendered in italic, so they should get the "bb-section-label" class attribute
+
+** plan: serializing the final rendered page (inclusive the hidden original page) to the filesystem and reading the page back in
+
+Create two new buttons inside the '<div id="bb-btn-container">' with the texts "Save" and "Load"
+
+When clicking "Save" the final rendered page (inclusive the hidden original page) should be serialized to the filesystem
+and clicking "Load" should read the page back in as if it had been renderd by fetching all the data from the web
+
+Is this possible ? Especially the OVERVIEW page would bebefit as it takes quite a while to fetch and process
+
+*** followup
+
+1.)
+
+actually the "Save" and "Load" should work also on HOME / LIST / DETAIL pages 
+
+2.)
+
+Is it possible to create a little reload glyph "⟳" (with a proper tooltip) when loading from disk in front of the "Icon panels" and the "Extra tab buttons"
+so when clicking a refetch is done for that specific event
+
+<button id="mb-caa-toggle-btn-retry-0" type="button" title="Retry loading all CAA cover art images for this table (forces network reload)" style="cursor: pointer; padding: 1px 4px; border: 1px solid rgb(170, 170, 170); border-radius: 3px; background: rgb(245, 245, 245); vertical-align: middle; font-size: 0.8em; margin-left: 3px; line-height: 1; display: inline-flex; align-items: center; box-sizing: border-box; transition: transform 0.1s, box-shadow 0.1s;">⟳</button>
+
+** bugs
+
+1.)
+
+add proper tooltips to the buttons in
+
+- <div id="bb-btn-container">
+- '<div class="bb-section-controls">' for each event on the YEAR pages
+- '<div class="bb-extra-tab-row">' for each event on the YEAR pages
+
+2.)
+
+when clicking the button'<button class="bb-toggle-btn bb-list-toggle">☰ List</button>':
+
+"Recording:" should be changed to "Recordings:" and both "Recordings:" and "Show:" should be rendered in italic, so they should get the "bb-section-label" class attribute
+
+** create a start fetching and stop button also on the YEAR, LIST and DETAIL pages
+
+1.)
+
+create a "Start/Stop processing" toggle button on the YEAR, LIST and DETAIL pages and do not process the pages right away as we now have the "Load"/"Save" infrastructure in place
+
+2.)
+
+"Load" from disk and then clicking retry to refetch the DETAIL page works, but only pressing the buttons works later, clicking the icons doesn't show anything
+
+** nogig
+
+1.)
+
+When start/stop multiple times the processing on YEAR pages, lots of entities are rendered multiple times @debug/multiple.html
+
+2.) on YEAR pages with events of type "nogig"
+
+On events of type "nogig" e.g. http://brucebase.wikidot.com/2022#210122
+render the prefix "No gig" before e.g.
+
+#+begin_example
+<div class="bb-scheduled"> at <strong style="font-size: 1.1em;"><em><a href="http://brucebase.wikidot.com/venue:transparent-clinch-gallery-asbury-park-nj" target="_blank" rel="noopener noreferrer">Transparent Clinch Gallery, Asbury Park, NJ</a></em></strong><span class="bb-glyph" style="cursor: help;"> ✅</span></div>
+#+end_example
+
+3.)
+
+remove the "Start/Done" button from DETAIL and LIST pages and do the processing there right away
+
+4.)
+
+When pressing the "Save" button, the default filename should be "bb-<PAGE TYPE>-<original page title>.json"
+e.g, "bb-YEAR-2026", or "bb-DETAIL-2022-01-21 Transparent Clinch Gallery, Asbury Park, NJ.json"
+
+** start/stop
+
+1.)
+
+rename the
+
+"Fetch All Gig Pages" -> "Fetch All Year Pages"
+"Fetch All Gig-Overview Pages" -> "Fetch All Year-List Pages"
+
+and make them toggle buttons prepended with the glyphs "▶ Start" and "⏹ Stop", remove the "Stop fetching" button
+
+2.)
+
+On YEAR pages the button order should be "Start", "Save", "Load", "Original Page", "Mismatches" and then "Table View" (which also needs a proper tooltip)
+
+** summary
+
+#+begin_example
+ What works after Load
+
+     ┌──────────────────────────────────────────┬────────┬─────────────────────────────────────────────────────────────┐
+     │                 Feature                  │ Works? │                            Notes                            │
+     ├──────────────────────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+     │ Visual diff colours                      │ ✅     │ CSS classes preserved                                       │
+     ├──────────────────────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+     │ Song diff tooltips                       │ ✅     │ data-year-song/data-detail-song re-wired                    │
+     ├──────────────────────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+     │ data-msg tooltips (⚠️ warn/anchor/venue) │ ✅     │ Re-wired                                                    │
+     ├──────────────────────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+     │ Per-section ⇄ Original / ☰List          │ ✅     │ rewireSectionControls rebuilds closures                     │
+     ├──────────────────────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+     │ ⇄ Original Page (global)                 │ ✅     │ setupGlobalToggle called with originalHtml                  │
+     ├──────────────────────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+     │ ⚡ Mismatches filter                     │ ✅     │ setupMismatchFilter re-called                               │
+     ├──────────────────────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+     │ Main event glyph tooltips (✅/❌/⚠️)     │ ⚠️     │ Glyph visible; hover silent (closure params not serialised) │
+     ├──────────────────────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+     │ Icon panels + tab buttons                │ ⟳      │ Dimmed; ⟳ button re-fetches on demand                       │
+     ├──────────────────────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+     │ SmartTable                               │ ✅     │ HTML preserved; trigger re-wired by setupGlobalToggle       │
+     ├──────────────────────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+     │ Tags panel                               │ ⟳      │ Inside tab row, restored by ⟳ retry                         │
+     └──────────────────────────────────────────┴────────┴─────────────────────────────────────────────────────────────┘
+#+end_example
+
+** 1949
+
+Specifically for the "http://brucebase.wikidot.com/1949-64" and "http://brucebase.wikidot.com/1949-64-list" YEAR pages
+the date check
+
+#+begin_example
+<span class="bb-anchor-warn" data-msg="Year mismatch: event date year &quot;1949&quot; ≠ DETAIL href year &quot;1949-64&quot;">⚠️</span>
+#+end_example
+
+should succeed when the actual event date falls in the "1949-64" range 
+
+** TODO retail
+
+add retail support
+
+http://brucebase.wikidot.com/gig:1973-05-01-ahmanson-theatre-los-angeles-ca
+
 
 * question
 ** initial

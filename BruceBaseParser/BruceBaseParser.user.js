@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.94
+// @version      1.98
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -176,21 +176,14 @@
     const fetchBtn = document.createElement('button');
     fetchBtn.id = 'bb-fetch-all-btn';
     fetchBtn.className = 'bb-toggle-btn';
-    fetchBtn.textContent = 'Fetch All Gig Pages';
-    fetchBtn.title = 'Fetch all gig year pages (YEAR mode) and validate name/setlist consistency';
+    fetchBtn.textContent = '▶ Fetch All Year Pages';
+    fetchBtn.title = 'Fetch all year pages (YEAR mode) and validate name/setlist consistency — click again to stop';
 
     const overviewBtn = document.createElement('button');
     overviewBtn.id = 'bb-fetch-overview-btn';
     overviewBtn.className = 'bb-toggle-btn';
-    overviewBtn.textContent = 'Fetch All Gig-Overview Pages';
-    overviewBtn.title = 'Fetch all gig-overview list pages (LIST mode) and validate event name consistency';
-
-    const stopBtn = document.createElement('button');
-    stopBtn.id = 'bb-stop-btn';
-    stopBtn.className = 'bb-toggle-btn';
-    stopBtn.textContent = 'Stop fetching';
-    stopBtn.title = 'Abort the ongoing fetch operation';
-    stopBtn.disabled = true;
+    overviewBtn.textContent = '▶ Fetch All Year-List Pages';
+    overviewBtn.title = 'Fetch all year-list pages (LIST mode) and validate event name consistency — click again to stop';
 
     const filterBtn = document.createElement('button');
     filterBtn.id = 'bb-mismatch-toggle';
@@ -205,7 +198,7 @@
     const [homeSaveBtn, homeLoadBtn] = makeSaveLoadBtns(
       'home', () => resultsEl, () => ''
     );
-    btnContainer.append(fetchBtn, overviewBtn, stopBtn, filterBtn, homeSaveBtn, homeLoadBtn);
+    btnContainer.append(fetchBtn, overviewBtn, filterBtn, homeSaveBtn, homeLoadBtn);
 
     // ── Progress indicator (same structure as YEAR page) ─────────────────────
     const timerSpan = document.createElement('span');
@@ -257,15 +250,9 @@
     let stopRequested = false;
     const fetchBtns = [fetchBtn, overviewBtn];
 
-    stopBtn.addEventListener('click', () => {
-      stopRequested = true;
-      stopBtn.disabled = true;
-      stopBtn.textContent = 'Stopping…';
-    });
-
     /**
      * Fetches and processes all year slugs, transforming each via slugTransform.
-     * activeBtn is the button that triggered the fetch (its label is reset on finish).
+     * activeBtn is the button that triggered the fetch; it toggles to ⏹ Stop while running.
      * @param {HTMLButtonElement} activeBtn
      * @param {function(string): string} slugTransform
      */
@@ -273,17 +260,18 @@
       if (fetching) return;
       fetching = true;
       stopRequested = false;
-      const origLabel = activeBtn.textContent;
+      const idleLabel = activeBtn.textContent;
+      const stopLabel = activeBtn === fetchBtn ? '⏹ Stop Year Pages' : '⏹ Stop Year-List Pages';
       // Tear down any SmartTable and mismatch state from the previous run.
       if (stBtnEl)  { stBtnEl.remove();  stBtnEl  = null; }
       if (stHostEl) { stHostEl.remove(); stHostEl = null; }
       filterActive = false;
       currentMismatchFn = null;
       filterBtn.textContent = '⚡ Mismatches';
-      fetchBtns.forEach(b => { b.disabled = true; });
-      activeBtn.textContent = 'Fetching…';
-      stopBtn.disabled = false;
-      stopBtn.textContent = 'Stop fetching';
+      // Disable the other fetch button while this one is running.
+      fetchBtns.forEach(b => { if (b !== activeBtn) b.disabled = true; });
+      activeBtn.textContent = stopLabel;
+      activeBtn.title = 'Click to abort after the current page fetch completes';
       filterBtn.disabled = true;
       homeSaveBtn.disabled = true;
       resultsEl.innerHTML = '';
@@ -310,10 +298,11 @@
         ? `Stopped after ${processed} / ${slugs.length} year pages.`
         : `Done — ${slugs.length} year pages processed.`;
       progressEl.replaceChildren(timerSpan, ` ... ${doneMsg}`);
-      activeBtn.textContent = origLabel;
+      activeBtn.textContent = idleLabel;
+      activeBtn.title = activeBtn === fetchBtn
+        ? 'Fetch all year pages (YEAR mode) and validate name/setlist consistency — click again to stop'
+        : 'Fetch all year-list pages (LIST mode) and validate event name consistency — click again to stop';
       fetchBtns.forEach(b => { b.disabled = false; });
-      stopBtn.disabled = true;
-      stopBtn.textContent = 'Stop fetching';
       filterBtn.disabled = processed === 0;
       fetching = false;
 
@@ -413,8 +402,24 @@
       homeSaveBtn.disabled = false;
     }
 
-    fetchBtn.addEventListener('click',    () => runFetch(fetchBtn,    s => s));
-    overviewBtn.addEventListener('click', () => runFetch(overviewBtn, s => `${s}-list`));
+    fetchBtn.addEventListener('click', () => {
+      if (fetching) {
+        stopRequested = true;
+        fetchBtn.textContent = '⏹ Stopping…';
+        fetchBtn.disabled = true;
+      } else {
+        runFetch(fetchBtn, s => s);
+      }
+    });
+    overviewBtn.addEventListener('click', () => {
+      if (fetching) {
+        stopRequested = true;
+        overviewBtn.textContent = '⏹ Stopping…';
+        overviewBtn.disabled = true;
+      } else {
+        runFetch(overviewBtn, s => `${s}-list`);
+      }
+    });
     homeLoadBtn.addEventListener('click', () =>
       triggerLoadCache(data => loadPageCache('home', resultsEl, progressEl, data))
     );
@@ -703,14 +708,15 @@
     const btnContainer = document.createElement('div');
     btnContainer.id = 'bb-btn-container';
 
-    const globalBtn = document.createElement('button');
+    // Use let so the click handler can clone-replace buttons on restart to strip stale listeners.
+    let globalBtn = document.createElement('button');
     globalBtn.id = 'bb-global-toggle';
     globalBtn.className = 'bb-toggle-btn';
     globalBtn.textContent = '⇄ Original Page';
     globalBtn.title = 'Toggle between the original unprocessed page and the annotated processed view';
     globalBtn.disabled = true;
 
-    const mismatchBtn = document.createElement('button');
+    let mismatchBtn = document.createElement('button');
     mismatchBtn.id = 'bb-mismatch-toggle';
     mismatchBtn.className = 'bb-toggle-btn';
     mismatchBtn.textContent = '⚡ Mismatches';
@@ -723,7 +729,13 @@
     yearLoadBtn.addEventListener('click', () =>
       triggerLoadCache(data => loadPageCache('year', content, progressEl, data))
     );
-    btnContainer.append(globalBtn, mismatchBtn, yearSaveBtn, yearLoadBtn);
+
+    const yearStartBtn = document.createElement('button');
+    yearStartBtn.className = 'bb-toggle-btn';
+    yearStartBtn.textContent = '▶ Start';
+    yearStartBtn.title = 'Start processing all events on this page';
+
+    btnContainer.append(yearStartBtn, yearSaveBtn, yearLoadBtn, globalBtn, mismatchBtn);
 
     // ── SmartTable integration (optional) ────────────────────────────────────
     if (stRows) {
@@ -743,7 +755,10 @@
       // Move the trigger button into our button bar. The SmartTable click
       // handler still targets stHost, so the table renders in the right place.
       const stBtn = stHost.querySelector('.st-btn-trigger');
-      if (stBtn) btnContainer.appendChild(stBtn);
+      if (stBtn) {
+        stBtn.title = 'Toggle the SmartTable view for sorting and filtering events';
+        btnContainer.appendChild(stBtn);
+      }
     }
 
     // ── Processing indicator ─────────────────────────────────────────────────
@@ -752,7 +767,7 @@
     const timerSpan = document.createElement('span');
     timerSpan.id = 'bb-year-timer';
     timerSpan.textContent = '00:00';
-    progressEl.append(timerSpan, ' ... Starting…');
+    progressEl.append(timerSpan, ' … Ready — click ▶ Start to process, or 📂 Load from cache');
 
     // Wrap buttons and progress in a single flex row, then build sticky bar.
     const controlsEl = document.createElement('div');
@@ -761,31 +776,91 @@
 
     setupStickyBar(content, pageTitle, controlsEl);
 
-    const startTime = Date.now();
-    const timerId = setInterval(() => {
+    // ── Start/Stop toggle ────────────────────────────────────────────────────
+    let _yearProcessing = false;
+    let _yearStopRequested = false;
+
+    yearStartBtn.addEventListener('click', async () => {
+      if (_yearProcessing) {
+        _yearStopRequested = true;
+        yearStartBtn.textContent = '⏹ Stopping…';
+        yearStartBtn.disabled = true;
+        return;
+      }
+      _yearProcessing = true;
+      _yearStopRequested = false;
+      yearStartBtn.textContent = '⏹ Stop';
+      yearStartBtn.title = 'Abort processing after the current batch completes';
+
+      // ── Restore DOM before each run to prevent duplicate annotations ───────
+      // Remove artifacts inserted by the previous run.
+      document.getElementById('bb-page-original')?.remove();
+      content.querySelectorAll('.bb-section-controls, .bb-section-original').forEach(el => el.remove());
+      for (const sec of sections) {
+        sec.processedDiv.innerHTML = sec.sectionOriginalHtml;
+        sec.toggleInserted = false;
+      }
+
+      // Clone-replace toggle buttons to strip stale click listeners from prior runs.
+      const freshGlobal = globalBtn.cloneNode(true);
+      freshGlobal.disabled = true;
+      globalBtn.replaceWith(freshGlobal);
+      globalBtn = freshGlobal;
+
+      const freshMismatch = mismatchBtn.cloneNode(true);
+      freshMismatch.disabled = true;
+      mismatchBtn.replaceWith(freshMismatch);
+      mismatchBtn = freshMismatch;
+
+      yearSaveBtn.disabled = true;
+
+      // Re-extract events from the now-clean DOM.
+      const currentEvents = extractYearPageEvents(content);
+      log(`Found ${currentEvents.length} event link(s)`);
+      if (currentEvents.length === 0) {
+        logWarn('No event links found — check selector / page structure');
+        progressEl.replaceChildren(timerSpan, ' ... No events found on this page');
+        _yearProcessing = false;
+        yearStartBtn.textContent = '▶ Start';
+        yearStartBtn.title = 'Start processing all events on this page';
+        yearStartBtn.disabled = false;
+        return;
+      }
+
+      const startTime = Date.now();
+      timerSpan.textContent = '00:00';
+      const timerId = setInterval(() => {
+        timerSpan.textContent = fmtElapsed(Date.now() - startTime);
+      }, 1000);
+
+      await processYearEvents(currentEvents, sections, (idx, name, total) => {
+        progressEl.replaceChildren(
+          timerSpan,
+          ` ... Processing event "${String(idx).padStart(3, '0')} / ${total}: ${name}"`
+        );
+      }, () => _yearStopRequested);
+
+      clearInterval(timerId);
       timerSpan.textContent = fmtElapsed(Date.now() - startTime);
-    }, 1000);
+      const wasStopped = _yearStopRequested;
+      progressEl.replaceChildren(timerSpan, wasStopped
+        ? ` ... Stopped — partial results shown`
+        : ` ... Done — ${currentEvents.length} events processed`);
 
-    // ── Process events ───────────────────────────────────────────────────────
-    await processYearEvents(events, sections, (idx, name, total) => {
-      progressEl.replaceChildren(
-        timerSpan,
-        ` ... Processing event "${String(idx).padStart(3, '0')} / ${total}: ${name}"`
-      );
+      setupGlobalToggle(globalBtn, content, originalHtml);
+      setupMismatchFilter(mismatchBtn, currentEvents.length);
+      globalBtn.disabled = false;
+      mismatchBtn.disabled = false;
+      yearSaveBtn.disabled = false;
+
+      _yearProcessing = false;
+      yearStartBtn.textContent = '▶ Start';
+      yearStartBtn.title = wasStopped
+        ? 'Start processing all events on this page'
+        : 'Re-run processing (resets current annotations)';
+      yearStartBtn.disabled = false;
+      log(wasStopped ? 'Processing stopped by user' : 'All events processed');
     });
-
-    // ── Finalise ─────────────────────────────────────────────────────────────
-    clearInterval(timerId);
-    timerSpan.textContent = fmtElapsed(Date.now() - startTime);
-    progressEl.replaceChildren(timerSpan, ` ... Done — ${events.length} events processed`);
-
-    setupGlobalToggle(globalBtn, content, originalHtml);
-    setupMismatchFilter(mismatchBtn, events.length);
-    globalBtn.disabled = false;
-    mismatchBtn.disabled = false;
-    yearSaveBtn.disabled = false;
-
-    log('All events processed');
   }
 
   // Hides the "Jump to most recent show/event" navigation box injected by wikidot
@@ -922,12 +997,13 @@
       processedHtml: contentEl.innerHTML,
       originalHtml:  originalHtml ?? '',
     };
-    const blob    = new Blob([JSON.stringify(data)], { type: 'application/json' });
-    const blobUrl = URL.createObjectURL(blob);
-    const m       = location.pathname.match(/\/(\w[\w-]*)/);
-    const a       = document.createElement('a');
-    a.download    = `bb-${m ? m[1] : 'page'}-cache.json`;
-    a.href        = blobUrl;
+    const blob      = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const blobUrl   = URL.createObjectURL(blob);
+    const rawTitle  = data.pageTitle || location.pathname.replace(/\//g, '-').replace(/^-/, '');
+    const safeTitle = rawTitle.replace(/[/\\?%*:|"<>]/g, '-').replace(/\s+$/g, '');
+    const a         = document.createElement('a');
+    a.download      = `bb-${pageType.toUpperCase()}-${safeTitle}.json`;
+    a.href          = blobUrl;
     a.click();
     URL.revokeObjectURL(blobUrl);
   }
@@ -1436,13 +1512,10 @@
     }
   }
 
-  // Inserts a toggle button after #page-title on DETAIL pages.
-  // Wraps the processed td children and an original snapshot in show/hide divs
-  // so wikidot's tab-switching JavaScript and all tooltip listeners survive toggling.
+  // Wraps the processed td children and an original snapshot in show/hide divs,
+  // then prepends the ⇄ Original Page button to the existing #bb-btn-container.
+  // The container is created earlier in runDetailPage so Load works immediately.
   function insertDetailToggle(originalTdHtml) {
-    const pageTitle = document.getElementById('page-title');
-    if (!pageTitle) return;
-
     const td = getSetlistContainer(document);
     if (!td) return;
 
@@ -1474,18 +1547,8 @@
       btn.textContent = showingOriginal ? '⇄ Processed Page' : '⇄ Original Page';
     });
 
-    const [detailSaveBtn, detailLoadBtn] = makeSaveLoadBtns(
-      'detail', () => td, () => originalTdHtml
-    );
-    detailSaveBtn.disabled = false;
-    detailLoadBtn.addEventListener('click', () =>
-      triggerLoadCache(data => loadPageCache('detail', td, null, data))
-    );
-
-    const detailBtnContainer = document.createElement('div');
-    detailBtnContainer.id = 'bb-btn-container';
-    detailBtnContainer.append(btn, detailSaveBtn, detailLoadBtn);
-    pageTitle.after(detailBtnContainer);
+    // Prepend to existing #bb-btn-container created in runDetailPage.
+    document.getElementById('bb-btn-container')?.prepend(btn);
   }
 
   // Annotates the "Setlist" tab in the wikidot navigation regardless of whether
@@ -1676,10 +1739,11 @@
     return clean;
   }
 
-  async function processYearEvents(events, sections, onProgress) {
+  async function processYearEvents(events, sections, onProgress, shouldStop) {
     const BATCH_SIZE = 3;
     let started = 0;
     for (let i = 0; i < events.length; i += BATCH_SIZE) {
+      if (shouldStop?.()) break;
       const batch = events.slice(i, i + BATCH_SIZE);
       log(`Batch ${Math.floor(i / BATCH_SIZE) + 1}: events ${i + 1}–${Math.min(i + BATCH_SIZE, events.length)} of ${events.length}`);
       await Promise.allSettled(batch.map(async ev => {
@@ -1754,7 +1818,9 @@
             const detailVenuePart = rawVenuePartM ? rawVenuePartM[1].trim() : '';
             const match           = !!detailVenuePart && venueName === detailVenuePart;
             const anchorEl        = element.closest('p') || element.parentNode;
-            const venuePrefix = eventType === 'recording' ? 'Recording session' : '';
+            const venuePrefix = eventType === 'recording' ? 'Recording session'
+                                            : eventType === 'nogig'     ? 'No gig'
+                                            : '';
             renderVenueInfo(lastScheduledDiv || anchorEl, venueHref, venueName, match, detailVenuePart, venuePrefix);
           }
         } catch (e) {
@@ -1957,177 +2023,201 @@
     const rawDetailName  = extractDetailEventName(document, location.pathname);
     const normalizedDetailName = normalizeDetailName(rawDetailName);
 
-    const info = detailPathToYearAndAnchor(path);
-    if (!info) {
-      logWarn('Could not derive year from path:', path);
-      return;
-    }
+    // ── Button container ──────────────────────────────────────────────────────
+    // Created immediately so Load works before any processing starts.
+    const pageTitle = document.getElementById('page-title');
+    const td = getSetlistContainer(document);
+    let _detailOriginalHtml = '';
 
-    const yearPageUrl = `${location.protocol}//${location.host}/${yearPageSlug(info.year)}`;
-    log(`Fetching YEAR page for setlist comparison: ${yearPageUrl}`);
+    const [detailSaveBtn, detailLoadBtn] = makeSaveLoadBtns(
+      'detail', () => td, () => _detailOriginalHtml
+    );
+    detailLoadBtn.addEventListener('click', () =>
+      triggerLoadCache(data => loadPageCache('detail', td, null, data))
+    );
 
-    let yearDoc;
-    try {
-      yearDoc = await fetchPage(yearPageUrl);
-    } catch (e) {
-      logErr('Failed to fetch YEAR page:', e.message);
-      return;
-    }
+    const detailBtnContainer = document.createElement('div');
+    detailBtnContainer.id = 'bb-btn-container';
+    detailBtnContainer.append(detailSaveBtn, detailLoadBtn);
+    pageTitle?.after(detailBtnContainer);
 
-    const yearContent = yearDoc.querySelector('#page-content') || yearDoc.body;
-
-    // Match by href rather than by derived anchor name — the DETAIL page URL may
-    // lack the a/b suffix that the YEAR page anchor carries (e.g. anchor "150571a"
-    // for URL "/gig:1971-05-15-…"), so anchor lookup would fail.
-    const eventLink = [...yearContent.querySelectorAll('a[href]')]
-      .filter(a => EVENT_URL_RE.test(a.getAttribute('href') || ''))
-      .find(a => a.getAttribute('href') === '/' + path);
-
-    if (!eventLink) {
-      logWarn('No matching event link found on YEAR page for path:', path);
-      return;
-    }
-    log(`  Event link found: "${eventLink.textContent.trim()}" href="${eventLink.getAttribute('href')}"`);
-
-    // ── Event name check on DETAIL page ────────────────────────────────────
-    const yearNameUpper = eventLink.textContent.trim().toUpperCase();
-    const nameMatch     = yearNameUpper === normalizedDetailName.trim();
-    const normTrimmed   = normalizedDetailName.trim();
-    const isEarlyLate   = !nameMatch && [' (EARLY)', ' (LATE)', ' (AFTERNOON)', ' (EVENING)']
-      .some(sfx => normTrimmed === yearNameUpper + sfx);
-    log(`  YEAR   : "${yearNameUpper}"`);
-    log(`  DETAIL : "${normalizedDetailName}"`);
-    log(`  Result : ${nameMatch ? 'MATCH ✅' : isEarlyLate ? 'EARLY/LATE ⚠️' : 'MISMATCH ❌'}`);
-    addDetailTitleAnnotation(detailEventType, yearNameUpper, normalizedDetailName, rawDetailName, nameMatch, isEarlyLate);
-
-    const detailTabMap = buildTabMap(document);
-    const detailDateM  = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (detailDateM) {
-      annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType);
-    }
-
-    const allYearNamedAnchors = [...yearContent.querySelectorAll('a[name]')];
-    const nextAnchor = allYearNamedAnchors
-      .find(a => eventLink.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
-    log(`  Next anchor: ${nextAnchor ? `name="${nextAnchor.getAttribute('name')}"` : 'none (end of page)'}`);
-
-    // ── Anchor consistency check on DETAIL page ───────────────────────────
-    // Find the named anchor on the YEAR page that precedes this event link.
-    let yearAnchorEl = null;
-    for (const a of allYearNamedAnchors) {
-      if (a.compareDocumentPosition(eventLink) & Node.DOCUMENT_POSITION_FOLLOWING) {
-        yearAnchorEl = a;
+    async function runDetailProcessing() {
+      const info = detailPathToYearAndAnchor(path);
+      if (!info) {
+        logWarn('Could not derive year from path:', path);
+        return;
       }
-    }
-    const yearAnchorName = yearAnchorEl ? yearAnchorEl.getAttribute('name') : null;
-    log(`  YEAR page anchor for this event: ${yearAnchorName ? `"${yearAnchorName}"` : 'none found'}`);
 
-    if (yearAnchorName) {
-      const infoLink = findInfoSetlistLink(document);
-      if (infoLink) {
-        const href = infoLink.getAttribute('href') || '';
-        const m = href.match(INFO_SETLIST_HREF_RE);
-        const detailAnchorRef = m ? m[1] : null;
-        log(`  DETAIL "Info & Setlist" refs: ${detailAnchorRef ? `"#${detailAnchorRef}"` : 'no fragment'}`);
+      const yearPageUrl = `${location.protocol}//${location.host}/${yearPageSlug(info.year)}`;
+      log(`Fetching YEAR page for setlist comparison: ${yearPageUrl}`);
 
-        if (detailAnchorRef) {
-          const detailIssues = [];
-          const detailPassed = [];
-
-          if (detailAnchorRef === yearAnchorName) {
-            detailPassed.push(`Anchor "#${detailAnchorRef}" matches YEAR page anchor "#${yearAnchorName}" ✅`);
-          } else {
-            detailIssues.push(`Anchor mismatch: "Info & Setlist" refs "#${detailAnchorRef}" but YEAR page anchor for this event is "#${yearAnchorName}"`);
-          }
-
-          const eventDateForDetail = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
-          if (eventDateForDetail) {
-            const theoretical = dateToAnchor(eventDateForDetail[1]);
-            if (theoretical) {
-              if (detailAnchorRef.startsWith(theoretical)) {
-                detailPassed.push(`Date-derived anchor "#${theoretical}" (from ${eventDateForDetail[1]}) ✅`);
-              } else {
-                detailIssues.push(`Date-derived anchor: expected "#${theoretical}" (from ${eventDateForDetail[1]}) but "Info & Setlist" refs "#${detailAnchorRef}"`);
-              }
-            }
-            const hrefPathM = href.match(/^\/([^#]+)#/);
-            if (hrefPathM) {
-              const hrefYear = hrefPathM[1];
-              const dateYear = eventDateForDetail[1].slice(0, 4);
-              if (hrefYear === dateYear) {
-                detailPassed.push(`Href year "${hrefYear}" matches event date year "${dateYear}" ✅`);
-              } else {
-                detailIssues.push(`Year mismatch: event date year "${dateYear}" ≠ href year "${hrefYear}"`);
-              }
-            }
-          }
-
-          if (detailIssues.length > 0) {
-            logWarn(`  Anchor/year issue(s): ${detailIssues.join('; ')}`);
-            addAnchorWarnDetail(infoLink, yearAnchorName, detailAnchorRef, detailIssues);
-          } else {
-            log(`  Anchor MATCH ✅`);
-            addAnchorMatchDetail(infoLink, `Anchor checks passed:\n${detailPassed.join('\n')}`);
-          }
-        }
-      } else {
-        log(`  Anchor check: no "Info & Setlist" link found on this detail page`);
-      }
-    }
-
-    // ── Venue name check on DETAIL page ──────────────────────────────────────
-    const detailVenueLink = findVenueLink(document);
-    if (detailVenueLink) {
+      let yearDoc;
       try {
-        const venueHref  = detailVenueLink.getAttribute('href');
-        const venueDoc   = await fetchPage(`${location.protocol}//${location.host}${venueHref}`);
-        const venueName  = venueDoc.querySelector('#page-title')?.textContent.trim() ?? '';
-        if (venueName) {
-          const rawVenuePartM   = rawDetailName.match(/^\d{4}-\d{2}-\d{2}\s*(?:-\s*)?(.*)/s);
-          const detailVenuePart = rawVenuePartM ? rawVenuePartM[1].trim() : '';
-          const venueMatch      = !!detailVenuePart && venueName === detailVenuePart;
-          log(`  Venue: "${venueName}" ${venueMatch ? '✅' : '⚠️'} vs detail "${detailVenuePart}"`);
-          addVenueGlyphDetail(detailVenueLink, venueName, venueMatch, detailVenuePart);
-        }
+        yearDoc = await fetchPage(yearPageUrl);
       } catch (e) {
-        logWarn(`  Venue page fetch failed: ${e.message}`);
+        logErr('Failed to fetch YEAR page:', e.message);
+        return;
       }
+
+      const yearContent = yearDoc.querySelector('#page-content') || yearDoc.body;
+
+      // Match by href rather than by derived anchor name — the DETAIL page URL may
+      // lack the a/b suffix that the YEAR page anchor carries (e.g. anchor "150571a"
+      // for URL "/gig:1971-05-15-…"), so anchor lookup would fail.
+      const eventLink = [...yearContent.querySelectorAll('a[href]')]
+        .filter(a => EVENT_URL_RE.test(a.getAttribute('href') || ''))
+        .find(a => a.getAttribute('href') === '/' + path);
+
+      if (!eventLink) {
+        logWarn('No matching event link found on YEAR page for path:', path);
+        return;
+      }
+      log(`  Event link found: "${eventLink.textContent.trim()}" href="${eventLink.getAttribute('href')}"`);
+
+      // ── Event name check on DETAIL page ──────────────────────────────────
+      const yearNameUpper = eventLink.textContent.trim().toUpperCase();
+      const nameMatch     = yearNameUpper === normalizedDetailName.trim();
+      const normTrimmed   = normalizedDetailName.trim();
+      const isEarlyLate   = !nameMatch && [' (EARLY)', ' (LATE)', ' (AFTERNOON)', ' (EVENING)']
+        .some(sfx => normTrimmed === yearNameUpper + sfx);
+      log(`  YEAR   : "${yearNameUpper}"`);
+      log(`  DETAIL : "${normalizedDetailName}"`);
+      log(`  Result : ${nameMatch ? 'MATCH ✅' : isEarlyLate ? 'EARLY/LATE ⚠️' : 'MISMATCH ❌'}`);
+      addDetailTitleAnnotation(detailEventType, yearNameUpper, normalizedDetailName, rawDetailName, nameMatch, isEarlyLate);
+
+      const detailTabMap = buildTabMap(document);
+      const detailDateM  = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (detailDateM) {
+        annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType);
+      }
+
+      const allYearNamedAnchors = [...yearContent.querySelectorAll('a[name]')];
+      const nextAnchor = allYearNamedAnchors
+        .find(a => eventLink.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
+      log(`  Next anchor: ${nextAnchor ? `name="${nextAnchor.getAttribute('name')}"` : 'none (end of page)'}`);
+
+      // ── Anchor consistency check on DETAIL page ───────────────────────────
+      // Find the named anchor on the YEAR page that precedes this event link.
+      let yearAnchorEl = null;
+      for (const a of allYearNamedAnchors) {
+        if (a.compareDocumentPosition(eventLink) & Node.DOCUMENT_POSITION_FOLLOWING) {
+          yearAnchorEl = a;
+        }
+      }
+      const yearAnchorName = yearAnchorEl ? yearAnchorEl.getAttribute('name') : null;
+      log(`  YEAR page anchor for this event: ${yearAnchorName ? `"${yearAnchorName}"` : 'none found'}`);
+
+      if (yearAnchorName) {
+        const infoLink = findInfoSetlistLink(document);
+        if (infoLink) {
+          const href = infoLink.getAttribute('href') || '';
+          const m = href.match(INFO_SETLIST_HREF_RE);
+          const detailAnchorRef = m ? m[1] : null;
+          log(`  DETAIL "Info & Setlist" refs: ${detailAnchorRef ? `"#${detailAnchorRef}"` : 'no fragment'}`);
+
+          if (detailAnchorRef) {
+            const detailIssues = [];
+            const detailPassed = [];
+
+            if (detailAnchorRef === yearAnchorName) {
+              detailPassed.push(`Anchor "#${detailAnchorRef}" matches YEAR page anchor "#${yearAnchorName}" ✅`);
+            } else {
+              detailIssues.push(`Anchor mismatch: "Info & Setlist" refs "#${detailAnchorRef}" but YEAR page anchor for this event is "#${yearAnchorName}"`);
+            }
+
+            const eventDateForDetail = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
+            if (eventDateForDetail) {
+              const theoretical = dateToAnchor(eventDateForDetail[1]);
+              if (theoretical) {
+                if (detailAnchorRef.startsWith(theoretical)) {
+                  detailPassed.push(`Date-derived anchor "#${theoretical}" (from ${eventDateForDetail[1]}) ✅`);
+                } else {
+                  detailIssues.push(`Date-derived anchor: expected "#${theoretical}" (from ${eventDateForDetail[1]}) but "Info & Setlist" refs "#${detailAnchorRef}"`);
+                }
+              }
+              const hrefPathM = href.match(/^\/([^#]+)#/);
+              if (hrefPathM) {
+                const hrefYear = hrefPathM[1];
+                const dateYear = eventDateForDetail[1].slice(0, 4);
+                if (yearMatchesHrefSlug(dateYear, hrefYear)) {
+                  detailPassed.push(`Href year "${hrefYear}" matches event date year "${dateYear}" ✅`);
+                } else {
+                  detailIssues.push(`Year mismatch: event date year "${dateYear}" ≠ href year "${hrefYear}"`);
+                }
+              }
+            }
+
+            if (detailIssues.length > 0) {
+              logWarn(`  Anchor/year issue(s): ${detailIssues.join('; ')}`);
+              addAnchorWarnDetail(infoLink, yearAnchorName, detailAnchorRef, detailIssues);
+            } else {
+              log(`  Anchor MATCH ✅`);
+              addAnchorMatchDetail(infoLink, `Anchor checks passed:\n${detailPassed.join('\n')}`);
+            }
+          }
+        } else {
+          log(`  Anchor check: no "Info & Setlist" link found on this detail page`);
+        }
+      }
+
+      // ── Venue name check on DETAIL page ────────────────────────────────────
+      const detailVenueLink = findVenueLink(document);
+      if (detailVenueLink) {
+        try {
+          const venueHref  = detailVenueLink.getAttribute('href');
+          const venueDoc   = await fetchPage(`${location.protocol}//${location.host}${venueHref}`);
+          const venueName  = venueDoc.querySelector('#page-title')?.textContent.trim() ?? '';
+          if (venueName) {
+            const rawVenuePartM   = rawDetailName.match(/^\d{4}-\d{2}-\d{2}\s*(?:-\s*)?(.*)/s);
+            const detailVenuePart = rawVenuePartM ? rawVenuePartM[1].trim() : '';
+            const venueMatch      = !!detailVenuePart && venueName === detailVenuePart;
+            log(`  Venue: "${venueName}" ${venueMatch ? '✅' : '⚠️'} vs detail "${detailVenuePart}"`);
+            addVenueGlyphDetail(detailVenueLink, venueName, venueMatch, detailVenuePart);
+          }
+        } catch (e) {
+          logWarn(`  Venue page fetch failed: ${e.message}`);
+        }
+      }
+
+      // Setlist comparison — only when the detail page actually has a setlist.
+      if (!hasSetlist) {
+        annotateSetlistTab(nameMatch, false);
+        return;
+      }
+
+      const setlistEls = collectSetlistElements(eventLink, nextAnchor, yearContent);
+      log(`  Collected ${setlistEls.length} setlist element(s) from YEAR page`);
+
+      const yearSections  = parseYearSetlist(setlistEls);
+      const yearFlat      = yearSections.flatMap(s => s.songs);
+      const yearRawFlat   = yearSections.flatMap(s => s.rawSongs);
+      const detailFlat    = detailSections.flatMap(s => s.songs);
+      log(`Detail mode: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
+      log(`  Year songs:   ${JSON.stringify(yearFlat)}`);
+      log(`  Detail songs: ${JSON.stringify(detailFlat)}`);
+
+      const diffItems = mergeCharDiffs(lcsDiff(yearFlat, detailFlat));
+      log(`  Diff: ${diffItems.map(i => `${i.type}(${i.yearSong || i.detailSong})`).join(', ')}`);
+      const detailParaFlat = detailSections.flatMap(s => s.songs.map(() => !!s.paragraphBased));
+      let yp = 0, dp = 0;
+      for (const item of diffItems) {
+        if (item.type !== 'detail-only') item.rawYearSong = yearRawFlat[yp++];
+        if (item.type !== 'year-only')   item.paragraphBased = detailParaFlat[dp++];
+      }
+
+      // Snapshot td content just before rendering so the original is unmodified.
+      _detailOriginalHtml = td ? td.innerHTML : '';
+
+      renderDetailSetlist(diffItems);
+      flagDetailSectionHeaders(yearSections, detailSections, diffItems);
+      insertDetailToggle(_detailOriginalHtml);
+      annotateSetlistTab(nameMatch, true);
+
+      detailSaveBtn.disabled = false;
     }
 
-    // Setlist comparison — only when the detail page actually has a setlist.
-    if (!hasSetlist) {
-      annotateSetlistTab(nameMatch, false);
-      return;
-    }
-
-    const setlistEls = collectSetlistElements(eventLink, nextAnchor, yearContent);
-    log(`  Collected ${setlistEls.length} setlist element(s) from YEAR page`);
-
-    const yearSections  = parseYearSetlist(setlistEls);
-    const yearFlat      = yearSections.flatMap(s => s.songs);
-    const yearRawFlat   = yearSections.flatMap(s => s.rawSongs);
-    const detailFlat    = detailSections.flatMap(s => s.songs);
-    log(`Detail mode: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
-    log(`  Year songs:   ${JSON.stringify(yearFlat)}`);
-    log(`  Detail songs: ${JSON.stringify(detailFlat)}`);
-
-    const diffItems = mergeCharDiffs(lcsDiff(yearFlat, detailFlat));
-    log(`  Diff: ${diffItems.map(i => `${i.type}(${i.yearSong || i.detailSong})`).join(', ')}`);
-    const detailParaFlat = detailSections.flatMap(s => s.songs.map(() => !!s.paragraphBased));
-    let yp = 0, dp = 0;
-    for (const item of diffItems) {
-      if (item.type !== 'detail-only') item.rawYearSong = yearRawFlat[yp++];
-      if (item.type !== 'year-only')   item.paragraphBased = detailParaFlat[dp++];
-    }
-
-    // Snapshot the td content just before rendering so the original is unmodified
-    const td             = getSetlistContainer(document);
-    const originalTdHtml = td ? td.innerHTML : '';
-
-    renderDetailSetlist(diffItems);
-    flagDetailSectionHeaders(yearSections, detailSections, diffItems);
-    insertDetailToggle(originalTdHtml);
-    annotateSetlistTab(nameMatch, true);
+    // Auto-process on page load.
+    await runDetailProcessing();
   }
 
   // Appends a ⚠️ warning to <p><strong>…</strong></p> section-header elements
@@ -2529,6 +2619,7 @@
     listLoadBtn.addEventListener('click', () =>
       triggerLoadCache(data => loadPageCache('list', content, progressEl, data))
     );
+
     btnContainer.append(globalBtn, mismatchBtn, listSaveBtn, listLoadBtn);
 
     // ── Progress ─────────────────────────────────────────────────────────────
@@ -2653,6 +2744,27 @@
     return day + month + year.slice(2);
   }
 
+  /**
+   * Returns true when a 4-digit dateYear falls within the year expressed by a
+   * page slug, including range slugs like "1949-64" (meaning 1949–1964).
+   * The end year is formed by replacing the last two digits of the start year
+   * with the two-digit suffix (same century).
+   * @param {string} dateYear  Four-digit year string, e.g. "1953"
+   * @param {string} hrefSlug  Page slug, e.g. "1953" or "1949-64"
+   * @returns {boolean}
+   */
+  function yearMatchesHrefSlug(dateYear, hrefSlug) {
+    if (dateYear === hrefSlug) return true;
+    const rangeM = hrefSlug.match(/^(\d{4})-(\d{2})$/);
+    if (rangeM) {
+      const start = parseInt(rangeM[1], 10);
+      const end   = parseInt(rangeM[1].slice(0, 2) + rangeM[2], 10);
+      const year  = parseInt(dateYear, 10);
+      return year >= start && year <= end;
+    }
+    return false;
+  }
+
   function buildAnchorToNameMap(yearDoc) {
     const content      = yearDoc.querySelector('#page-content') || yearDoc.body;
     const anchorEls    = [...content.querySelectorAll('a[name]')];
@@ -2685,7 +2797,7 @@
     const dateYear  = eventDate ? eventDate.slice(0, 4) : null;
 
     const preIssues = [];
-    if (dateYear && hrefYear && dateYear !== hrefYear) {
+    if (dateYear && hrefYear && !yearMatchesHrefSlug(dateYear, hrefYear)) {
       preIssues.push(`Year mismatch: event date year "${dateYear}" ≠ href year "${hrefYear}"`);
     }
     if (eventDate && anchor) {
@@ -3847,7 +3959,9 @@
           iconParent.replaceWith(...iconParent.childNodes);
         }
       }
-      const canonical = ICON_TITLE_MAP[icon.title];
+      // Strip suffix added on a previous run so the lookup works after a ⟳ retry.
+      const rawTitle = icon.title.replace(/ — click to expand$/, '');
+      const canonical = ICON_TITLE_MAP[rawTitle];
       if (!canonical) continue;
       const content = extractIconContent(doc, canonical, tabMap);
       if (!content) {
@@ -3870,7 +3984,6 @@
         }
         continue;
       }
-      const rawTitle = icon.title;
       icon.style.cursor = 'pointer';
       icon.title = `${rawTitle} — click to expand`;
       if (canonical === 'Photo') {
@@ -3923,7 +4036,7 @@
       if (hrefPathM) {
         const hrefYear = hrefPathM[1];
         const dateYear = eventDate.slice(0, 4);
-        if (hrefYear !== dateYear) {
+        if (!yearMatchesHrefSlug(dateYear, hrefYear)) {
           issues.push(`Year mismatch: event date year "${dateYear}" ≠ DETAIL href year "${hrefYear}"`);
         }
       }

@@ -1,5 +1,71 @@
 [
     {
+        "version": "1.98",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Year mismatch checks now accept range slugs: events on the '1949-64' / '1949-64-list' pages whose date falls anywhere in 1949–1964 no longer trigger a false '⚠️ Year mismatch' warning. Applies to all three check sites (YEAR page event anchors, DETAIL page 'Info & Setlist' anchor, LIST page event links)."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.97",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "HOME page: 'Fetch All Gig Pages' renamed to '▶ Fetch All Year Pages' and 'Fetch All Gig-Overview Pages' renamed to '▶ Fetch All Year-List Pages'. Both are now toggle buttons — clicking while active stops the fetch (showing '⏹ Stop Year Pages' / '⏹ Stop Year-List Pages'). The separate 'Stop fetching' button is removed.",
+                    "YEAR page: button order changed to Start | Save | Load | Original Page | Mismatches | Table View.",
+                    "YEAR page: SmartTable trigger button now has a descriptive tooltip."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.96",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: clicking ▶ Start multiple times (after a mid-run stop) no longer produces duplicate glyphs and annotations. The DOM is now restored to its original state before each new processing run.",
+                    "nogig events on YEAR pages: the venue block now renders as 'No gig at Venue ✅/⚠️' instead of the bare 'at Venue' shown for regular gig events."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "LIST and DETAIL pages auto-process on load (▶ Start button removed from both); ▶ Start / ⏹ Stop is kept only on YEAR pages where multi-minute processing makes it useful.",
+                    "💾 Save filename now uses the page title: 'bb-YEAR-2026.json', 'bb-DETAIL-2022-01-21 Transparent Clinch Gallery, Asbury Park, NJ.json', etc."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.95",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added ▶ Start / ⏹ Stop toggle button to YEAR and LIST pages; ▶ Start / ✓ Done button on DETAIL pages. Pages no longer auto-process on load — use ▶ Start to process or 📂 Load to restore from cache.",
+                    "YEAR processing can be stopped mid-run; partial results remain visible and ▶ Start re-enables for a restart.",
+                    "LIST processing can be stopped after the YEAR page fetch completes; ▶ Start re-enables for a restart."
+                ]
+            },
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed: after loading from cache and clicking ⟳ retry, icon images were unresponsive. The icon-title lookup in wireIconHandlers now strips the '— click to expand' suffix that was appended during the original processing run, so ICON_TITLE_MAP resolves correctly on retry."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.94",
         "date": "2026-06-27",
         "sections": [
