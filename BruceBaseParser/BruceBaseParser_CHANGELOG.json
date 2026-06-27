@@ -1,5 +1,19 @@
 [
     {
+        "version": "1.94",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Added descriptive tooltips to all buttons in #bb-btn-container (YEAR, HOME, LIST, DETAIL pages), per-event .bb-section-controls (⇄ Original, ☰ List), and .bb-extra-tab-row (tab content buttons and Tags button).",
+                    "List view (☰ List): synthesized section labels 'Show:' and 'Recordings:' are now rendered in italic using the bb-section-label class, consistent with explicit labels.",
+                    "List view (☰ List): 'Recording:' label renamed to 'Recordings:' for consistency with Brucebase terminology."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.93",
         "date": "2026-06-27",
         "sections": [

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.93
+// @version      1.94
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -177,22 +177,26 @@
     fetchBtn.id = 'bb-fetch-all-btn';
     fetchBtn.className = 'bb-toggle-btn';
     fetchBtn.textContent = 'Fetch All Gig Pages';
+    fetchBtn.title = 'Fetch all gig year pages (YEAR mode) and validate name/setlist consistency';
 
     const overviewBtn = document.createElement('button');
     overviewBtn.id = 'bb-fetch-overview-btn';
     overviewBtn.className = 'bb-toggle-btn';
     overviewBtn.textContent = 'Fetch All Gig-Overview Pages';
+    overviewBtn.title = 'Fetch all gig-overview list pages (LIST mode) and validate event name consistency';
 
     const stopBtn = document.createElement('button');
     stopBtn.id = 'bb-stop-btn';
     stopBtn.className = 'bb-toggle-btn';
     stopBtn.textContent = 'Stop fetching';
+    stopBtn.title = 'Abort the ongoing fetch operation';
     stopBtn.disabled = true;
 
     const filterBtn = document.createElement('button');
     filterBtn.id = 'bb-mismatch-toggle';
     filterBtn.className = 'bb-toggle-btn';
     filterBtn.textContent = '⚡ Mismatches';
+    filterBtn.title = 'Filter to show only events or year sections with mismatches';
     filterBtn.disabled = true;
 
     const btnContainer = document.createElement('div');
@@ -703,12 +707,14 @@
     globalBtn.id = 'bb-global-toggle';
     globalBtn.className = 'bb-toggle-btn';
     globalBtn.textContent = '⇄ Original Page';
+    globalBtn.title = 'Toggle between the original unprocessed page and the annotated processed view';
     globalBtn.disabled = true;
 
     const mismatchBtn = document.createElement('button');
     mismatchBtn.id = 'bb-mismatch-toggle';
     mismatchBtn.className = 'bb-toggle-btn';
     mismatchBtn.textContent = '⚡ Mismatches';
+    mismatchBtn.title = 'Filter to show only events with name or setlist mismatches';
     mismatchBtn.disabled = true;
 
     const [yearSaveBtn, yearLoadBtn] = makeSaveLoadBtns(
@@ -967,12 +973,14 @@
     saveBtn.id        = 'bb-save-btn';
     saveBtn.className = 'bb-toggle-btn';
     saveBtn.textContent = '💾 Save';
+    saveBtn.title     = 'Save the processed page to a JSON cache file for offline use';
     saveBtn.disabled  = true;
 
     const loadBtn = document.createElement('button');
     loadBtn.id        = 'bb-load-btn';
     loadBtn.className = 'bb-toggle-btn';
     loadBtn.textContent = '📂 Load';
+    loadBtn.title     = 'Load a previously saved JSON cache file to restore the processed view';
 
     saveBtn.addEventListener('click', () =>
       savePageCache(pageType, getContentEl(), getOriginalHtml())
@@ -1227,10 +1235,12 @@
     const origBtn = document.createElement('button');
     origBtn.className = 'bb-toggle-btn bb-section-toggle';
     origBtn.textContent = '⇄ Original';
+    origBtn.title = 'Toggle between original and processed view for this event';
 
     const listBtn = document.createElement('button');
     listBtn.className = 'bb-toggle-btn bb-list-toggle';
     listBtn.textContent = '☰ List';
+    listBtn.title = 'Toggle between flat paragraph view and numbered list view for this setlist';
 
     function showView(view) {
       viewState = view;
@@ -1310,7 +1320,10 @@
       if (labelHtml) {
         labelP.innerHTML = labelHtml;
       } else {
-        labelP.textContent = el.tagName === 'BLOCKQUOTE' ? 'Recording:' : 'Show:';
+        const syntheticSpan = document.createElement('span');
+        syntheticSpan.className = 'bb-section-label';
+        syntheticSpan.textContent = el.tagName === 'BLOCKQUOTE' ? 'Recordings:' : 'Show:';
+        labelP.appendChild(syntheticSpan);
       }
       div.appendChild(labelP);
 
@@ -1451,6 +1464,7 @@
     btn.id = 'bb-global-toggle';
     btn.className = 'bb-toggle-btn';
     btn.textContent = '⇄ Original Page';
+    btn.title = 'Toggle between the original unprocessed setlist and the annotated processed view';
 
     let showingOriginal = false;
     btn.addEventListener('click', () => {
@@ -2499,12 +2513,14 @@
     globalBtn.id = 'bb-global-toggle';
     globalBtn.className = 'bb-toggle-btn';
     globalBtn.textContent = '⇄ Original Page';
+    globalBtn.title = 'Toggle between the original unprocessed page and the annotated processed view';
     globalBtn.disabled = true;
 
     const mismatchBtn = document.createElement('button');
     mismatchBtn.id = 'bb-mismatch-toggle';
     mismatchBtn.className = 'bb-toggle-btn';
     mismatchBtn.textContent = '⚡ Mismatches';
+    mismatchBtn.title = 'Filter to show only events with name or setlist mismatches';
     mismatchBtn.disabled = true;
 
     const [listSaveBtn, listLoadBtn] = makeSaveLoadBtns(
@@ -3531,6 +3547,7 @@
       const btn = document.createElement('button');
       btn.className = 'bb-extra-tab-btn';
       btn.textContent = label;
+      btn.title = `Click to expand/collapse the ${label} panel`;
 
       btn.addEventListener('click', () => {
         if (!btn._bbPanel) {
@@ -3741,6 +3758,9 @@
     const btn = document.createElement('button');
     btn.className = 'bb-extra-tab-btn';
     btn.textContent = issueParts.length > 0 ? `Tags ⚠️ (${issueParts.join(', ')})` : 'Tags';
+    btn.title = issueParts.length > 0
+      ? `Tags panel — issues detected: ${issueParts.join(', ')}`
+      : 'Click to expand/collapse the Tags panel';
     if (missingTags.length > 0)      btn.style.color = 'red';
     else if (spuriousCount > 0)      btn.style.color = 'darkorange';
 
