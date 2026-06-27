@@ -220,7 +220,11 @@ Fetches the DETAIL page with `GM_xmlhttpRequest`, then:
 | `.bb-char-match`       | matching char within diff   | green           |
 | `.bb-char-diff`        | differing char              | red bold        |
 | `.bb-para-warn`        | song in `<p>` format (old page) | ⚠️ cursor:help |
-| `.bb-anchor-warn`      | year/detail anchor fragment mismatch | ⚠️ cursor:help |
+| `.bb-anchor-warn`      | anchor/date/year mismatch on YEAR or DETAIL page | ⚠️ cursor:help; hover shows issues array |
+| `.bb-anchor-match`     | "Info & Setlist" link on DETAIL page passed all anchor checks | ✅ cursor:help; hover shows passed checks |
+| `.bb-tag-missing`      | expected tag not present in `.page-tags` (DETAIL page inline span) | bold red |
+| `.bb-tag-spurious`     | managed tag present but condition not met (DETAIL page inline span) | orange ⚠️ cursor:help |
+| `.bb-tags-warn-box`    | wraps `.page-tags` container on DETAIL page when any tag issue found | gold border, #fffbe6 bg |
 
 Hover over any non-match span shows `showSongTooltip()` with year/detail names
 and a word-level diff. Hover over `.bb-para-warn` shows `showErrorTooltip()`.
@@ -487,9 +491,11 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 | `addParaStructureWarning(el)` | Appends a `<span class="bb-para-warn">⚠️</span>` with tooltip to a `<p>`-based song element on DETAIL pages |
 | `flagDetailSectionHeaders(yearSections, detailSections, diffItems)` | Case A: flags existing DETAIL `<p><strong>…</strong></p>` headers when their label mismatches the positional YEAR section. Case B: when DETAIL has no headers but YEAR has non-show sections, splits the rendered `<ol>` into per-section sub-lists and inserts synthetic `<p><strong>Label ⚠️</strong></p>` headers at the correct positions (computed via `diffItems` + `posMap`). |
 | `findInfoSetlistLink(doc)` | Returns the first `<a href>` whose href matches `INFO_SETLIST_HREF_RE` and text contains "info" — the "Info & Setlist" back-link on detail pages |
-| `checkYearAnchorConsistency(detailDoc, yearAnchorName, anchorEl)` | Extracts fragment from the "Info & Setlist" link on the detail page; calls `addAnchorWarnYear` on mismatch |
-| `addAnchorWarnYear(anchorEl, …)` | Inserts `<span class="bb-anchor-warn">⚠️</span>` after `<a name>` on YEAR page when anchor ≠ detail fragment |
-| `addAnchorWarnDetail(linkEl, …)` | Appends `<span class="bb-anchor-warn"> ⚠️</span>` after the "Info & Setlist" link on the DETAIL page when fragment ≠ year anchor |
+| `dateToAnchor(dateStr)` | `"YYYY-MM-DD"` → `"DDMMYY"` (Brucebase anchor format); returns `null` for invalid input |
+| `checkYearAnchorConsistency(detailDoc, yearAnchorName, anchorEl, eventDate?)` | Runs anchor-fragment match, `dateToAnchor` match, and href-year-vs-date-year checks; collects all issues into an array and calls `addAnchorWarnYear` (or logs match ✅) |
+| `addAnchorWarnYear(anchorEl, yearAnchorName, detailAnchorRef, detailHref, issues[])` | Inserts `<span class="bb-anchor-warn">⚠️</span>` after `<a name>` on YEAR page; `issues[]` is the message array from the consistency check |
+| `addAnchorWarnDetail(linkEl, yearAnchorName, detailAnchorRef, issues[])` | Appends `<span class="bb-anchor-warn"> ⚠️</span>` after the "Info & Setlist" link on the DETAIL page; `issues[]` is the message array |
+| `addAnchorMatchDetail(linkEl, msg)` | Appends `<span class="bb-anchor-match"> ✅</span>` after the "Info & Setlist" link when ALL anchor checks pass; `msg` describes what was verified |
 | `extractTimingBlocks(doc)` | Returns all non-empty texts from `div.code pre code` elements — covers `"Scheduled:"`, `"Local Start Time …"`, and any future patterns |
 | `addScheduledBlock(afterEl, text)` | Inserts `<div class="bb-scheduled">` after `afterEl` on the YEAR page; returns the inserted div for chaining multiple blocks |
 | `buildTabMap(doc)` | Builds `Map<label,index>` from `.yui-nav em` elements on a DETAIL page |
@@ -505,7 +511,13 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 | `toggleIconPanel(icon, content, section)` | Lazily builds and toggles an inline panel for a YEAR-page icon; panels are independent (multiple can be open) |
 | `buildIconPanel(content)` | Creates a detached panel div for a content object; handles `images`, `links`, and `html` types |
 | `addExtraTabButtons(doc, tabMap, section)` | Appends a `.bb-extra-tab-row` with buttons for DETAIL tabs not in `ICON_COVERED_TABS` or `SKIP_TABS` |
-| `wireIconHandlers(eventLink, doc)` | Makes icon images interactive and calls `addExtraTabButtons`; called from `processOneYearEvent` |
+| `addTagsButton(doc, tabMap, section, eventLink)` | Appends a "Tags" button (last in `.bb-extra-tab-row`) that opens a panel showing all DETAIL page tags as hyperlinks; missing expected tags shown in bold red, spurious managed tags shown with an orange ⚠️ tooltip; button label turns red/orange and shows counts |
+| `wireIconHandlers(eventLink, doc)` | Makes icon images interactive, calls `addExtraTabButtons`, then `addTagsButton`; called from `processOneYearEvent` |
+| `computeExpectedTags(doc, tabMap, eventDate, eventType)` | Returns `Set<string>` of lowercase tags expected for an event — date-derived (year, month name, day, weekday), event-type, and content-based (bootleg, livedl, news, memorabilia, ticket, setlist, handwritten, printed, soundcheck, storyteller); see "Tag consistency checks" section below |
+| `isManagedTag(tag)` | Returns `true` for tags whose presence can be verified: content tags in `MANAGED_CONTENT_TAGS`, month names, weekday names, 4-digit years, 1–2 digit day numbers ≤ 31 |
+| `spuriousTagMsg(tag, expectedTags)` | Returns a human-readable tooltip string for a tag that is present but whose condition is not met; uses `SPURIOUS_TAG_REASONS` dict for content tags and derives contextual messages for date tags |
+| `isTagPresent(tag, actualTags)` | Like `actualTags.has(tag)` but also accepts numeric day aliases: `"7"` and `"07"` are equivalent |
+| `annotateDetailPageTags(tabMap, eventDate, eventType)` | On DETAIL pages: runs `computeExpectedTags`, wraps `.page-tags` in a gold warning box when issues found, adds orange ⚠️ after spurious tag links and red bold spans for missing tags |
 | `buildDiffHtml(a, b)` | Token-level diff on whitespace/comma splits (for name tooltips) |
 | `buildCharDiffHtml(a, b)` | Char-level LCS diff; shows year song chars with red/green spans |
 | `lcsDiff(yearSongs, detailSongs)` | Standard LCS producing `match`/`year-only`/`detail-only` items |
@@ -580,3 +592,89 @@ Qualifiers stripped by `cleanSongName` are **not** lost for display purposes:
 When rendering a `match` on the YEAR page, the portion after the clean name
 (e.g. ` (parts)`, ` (with Willie Nile)`) is appended as plain unstyled text
 outside the green span.
+
+---
+
+## Anchor and date checks
+
+All three checks are run in both `checkYearAnchorConsistency` (called from `processOneYearEvent` on the YEAR page, and also on the DETAIL page anchor section in `runDetailPage`) and in `processOneListEvent` (YEAR LIST pages).
+
+### `dateToAnchor(dateStr)` — DDMMYY derivation
+
+```
+"2026-01-17"  →  "170126"   (DD + MM + last-two-of-YYYY)
+"1977-02-17"  →  "170277"
+```
+
+### Three checks
+
+1. **Anchor fragment match** — `yearAnchorName === detailAnchorRef` (exact string).
+2. **DateToAnchor match** — `anchor.startsWith(dateToAnchor(eventDate))`. Uses `startsWith` to allow letter disambiguation suffixes (`"170277a"`).
+3. **Href year match** — 4-digit year in the "Info & Setlist" href path (e.g. `/1977#…`) must equal the 4-digit year in the event date.
+
+### Where applied
+
+| Page | Check triggered by | Failure annotation |
+|---|---|---|
+| YEAR page | `checkYearAnchorConsistency` (after detail fetch) | `addAnchorWarnYear` → `bb-anchor-warn` ⚠️ after `<a name>` |
+| DETAIL page | anchor block in `runDetailPage` (after detail fetch) | `addAnchorWarnDetail` → `bb-anchor-warn` ⚠️ after "Info & Setlist" link; `addAnchorMatchDetail` → `bb-anchor-match` ✅ on success |
+| LIST page | `processOneListEvent` pre-checks (no fetch required) | `addWarningGlyph` ⚠️ on cross-year hrefs; `bb-anchor-warn` span after ✅/❌ glyph for same-year anchor issues |
+
+### LIST page `hrefYear` check
+
+`extractListPageEvents` no longer filters out cross-year hrefs (`hrefYear !== pageYear`). All matching hrefs are extracted; `hrefYear` is stored in the event record. In `processOneListEvent(event, anchorMap, pageYear)`:
+
+- **Cross-year** (`hrefYear !== pageYear`): immediately flags with `addWarningGlyph`; skips name comparison (anchor map is built for `pageYear`, not `hrefYear`).
+- **Same-year**: runs name comparison as before, then appends a `bb-anchor-warn` span if either DateToAnchor or day-year check fails.
+
+---
+
+## Tag consistency checks
+
+### Constants (defined at top of IIFE)
+
+| Constant | Value / purpose |
+|---|---|
+| `SORRY_RE` | `/^Sorry,? no /i` — matches empty-tab placeholder text |
+| `MONTH_NAMES` | `['january', …, 'december']` — indexed 0–11 |
+| `DAY_NAMES` | `['sunday', …, 'saturday']` — indexed 0–6 |
+| `MANAGED_CONTENT_TAGS` | `Set` of content tags we can verify: event types + `bootleg`, `livedl`, `news`, `memorabilia`, `ticket`, `setlist`, `handwritten`, `printed`, `soundcheck`, `storyteller` |
+| `SPURIOUS_TAG_REASONS` | `{tag: 'human-readable reason'}` — used by `spuriousTagMsg` for content tags |
+
+### Expected tag rules (`computeExpectedTags`)
+
+| Expected tag | Condition |
+|---|---|
+| `YYYY` (year) | from event date |
+| month name | from event date |
+| day number (stripped) | `parseInt(dd)` — `"07"` → stored as `"7"`; `isTagPresent` accepts both forms |
+| weekday name | `new Date(yr, mo-1, dd).getDay()`; skipped when day = 0 (unknown) |
+| event type | `eventType.toLowerCase()` (`"gig"`, `"recording"`, etc.) |
+| `bootleg` | Recording tab has non-Sorry content AND is NOT purely a LiveDL (i.e. `!isLiveDLSplit(recTab)` OR `recTab.querySelector('hr')` exists) |
+| `livedl` | `isLiveDLSplit(recTab)` is true |
+| `news` | News/Memorabilia (or News) tab has non-Sorry content |
+| `memorabilia` | Combined `News/Memorabilia` tab has non-Sorry content (not just plain `News`) |
+| `ticket` | News/Memorabilia tab has images with `ticket` in src |
+| `setlist` | News/Memorabilia tab has images with `setlist` in src (excl. `ticket`) |
+| `handwritten` | Setlist images with `handwritten` in src |
+| `printed` | Setlist images with `printed` in src |
+| `soundcheck` | `#page-content` text matches `/\bsoundcheck\s*:/i` |
+| `storyteller` | Storyteller tab has non-Sorry content |
+
+### Bidirectional checking
+
+**Missing** (expected but absent): tag rendered in bold red in the Tags panel; `bb-tag-missing` span appended inside `.page-tags` on DETAIL.
+
+**Spurious** (present but condition NOT met): orange ⚠️ appended after the tag link; tooltip from `spuriousTagMsg`. Only checked for `isManagedTag` tags — unmanaged tags (venue names, song abbreviations, tour codes, etc.) are never flagged.
+
+### YEAR page Tags button
+
+`addTagsButton` is called from `wireIconHandlers` (after `addExtraTabButtons`). It:
+1. Reads `.page-tags a[href]` from the fetched DETAIL `doc`.
+2. Computes expected tags and compares against actual (using `isTagPresent`).
+3. Merges existing links + missing placeholders into one sorted list; renders in the `buildIconPanel` infrastructure.
+4. Button label: `"Tags"` when clean; `"Tags ⚠️ (N missing, M spurious)"` with color red (if any missing) or dark-orange (if only spurious).
+
+### DETAIL page annotation
+
+`annotateDetailPageTags(tabMap, eventDate, eventType)` is called from `runDetailPage` right after `addDetailTitleAnnotation`. It builds `detailTabMap = buildTabMap(document)` from the current page (not the fetched YEAR page).
