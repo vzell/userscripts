@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.90
+// @version      1.91
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -961,6 +961,7 @@
     const div = document.createElement('div');
     div.className = 'bb-section-list';
     div.style.display = 'none';
+    div.appendChild(document.createElement('br'));
 
     for (const el of setlistEls) {
       let labelHtml = '';

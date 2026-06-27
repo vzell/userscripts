@@ -1,5 +1,17 @@
 [
     {
+        "version": "1.91",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "List view (☰ List button): a blank line is now rendered before the song list content."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.90",
         "date": "2026-06-27",
         "sections": [
