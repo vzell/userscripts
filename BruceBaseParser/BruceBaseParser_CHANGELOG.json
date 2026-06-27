@@ -1,5 +1,26 @@
 [
     {
+        "version": "1.84",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR pages: event-name tooltip now shows 'Event anchor: #XXXXXX' immediately after 'Event type:' so the anchor can be inspected without leaving the page.",
+                    "YEAR pages: checkYearAnchorConsistency now also runs a DateToAnchor check (DDMMYY derived from the event date) against the YEAR page anchor, and a year check (4-digit year in the DETAIL 'Info & Setlist' href vs the event date year). All issues are reported in the existing ⚠️ anchor-warn span on the YEAR page.",
+                    "DETAIL pages: the 'Info & Setlist' / 'Info' anchor check now also compares the DateToAnchor value and the 4-digit year in the href path against the event date. Issues are reported in the existing ⚠️ anchor-warn span appended after the link.",
+                    "LIST/YEAR OVERVIEW pages: processOneListEvent now detects (a) year mismatch (4-digit year in href path ≠ 4-digit year in event date) and (b) date-derived anchor mismatch (DateToAnchor of event date ≠ anchor in href). Cross-year hrefs (href year ≠ list-page year) receive an immediate ⚠️ warning. Same-year hrefs with date/anchor issues get a ⚠️ span appended after the existing ✅/❌ glyph. extractListPageEvents no longer filters out cross-year hrefs and now exposes hrefYear in each event record."
+                ]
+            },
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "findInfoSetlistLink already matched links with text 'Info' (not just 'Info & Setlist') via /info/i — confirmed no change needed."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.83",
         "date": "2026-06-27",
         "sections": [

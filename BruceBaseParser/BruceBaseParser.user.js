@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.83
+// @version      1.84
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -490,7 +490,7 @@
 
     const anchorMap = buildAnchorToNameMap(yearDoc);
     log(`  ${year}-list: anchor map has ${anchorMap.size} entries`);
-    listEvents.forEach(ev => processOneListEvent(ev, anchorMap));
+    listEvents.forEach(ev => processOneListEvent(ev, anchorMap, year));
   }
 
   /**
@@ -1342,8 +1342,11 @@
       log(`  DETAIL : "${normalizedDetailName}"`);
       log(`  Result : ${nameMatch ? 'MATCH ✅' : isEarlyLate ? 'EARLY/LATE ⚠️' : 'MISMATCH ❌'}`);
 
+      const eventDateM = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
+      const eventDate  = eventDateM ? eventDateM[1].toLowerCase() : null;
+
       const eventAlias = extractEventAlias(doc);
-      addYearGlyph(element, nameMatch, isEarlyLate, yearNameUpper, normalizedDetailName, rawDetailName, eventType, eventAlias);
+      addYearGlyph(element, nameMatch, isEarlyLate, yearNameUpper, normalizedDetailName, rawDetailName, eventType, eventAlias, anchorName);
 
       // ── Timing blocks ────────────────────────────────────────────────────
       const timingBlocks = extractTimingBlocks(doc);
@@ -1402,7 +1405,7 @@
 
       // ── Anchor consistency check ─────────────────────────────────────────
       if (anchorEl && anchorName) {
-        checkYearAnchorConsistency(doc, anchorName, anchorEl);
+        checkYearAnchorConsistency(doc, anchorName, anchorEl, eventDate);
       }
     } catch (e) {
       logErr(`  Failed to process "${yearName}":`, e.message);
@@ -1615,11 +1618,36 @@
         const m = href.match(INFO_SETLIST_HREF_RE);
         const detailAnchorRef = m ? m[1] : null;
         log(`  DETAIL "Info & Setlist" refs: ${detailAnchorRef ? `"#${detailAnchorRef}"` : 'no fragment'}`);
-        if (detailAnchorRef && detailAnchorRef !== yearAnchorName) {
-          logWarn(`  Anchor MISMATCH: YEAR="#${yearAnchorName}", DETAIL links "#${detailAnchorRef}"`);
-          addAnchorWarnDetail(infoLink, yearAnchorName, detailAnchorRef);
-        } else if (detailAnchorRef) {
-          log(`  Anchor MATCH ✅`);
+
+        if (detailAnchorRef) {
+          const detailIssues = [];
+
+          if (detailAnchorRef !== yearAnchorName) {
+            detailIssues.push(`Anchor mismatch: "Info & Setlist" refs "#${detailAnchorRef}" but YEAR page anchor for this event is "#${yearAnchorName}"`);
+          }
+
+          const eventDateForDetail = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
+          if (eventDateForDetail) {
+            const theoretical = dateToAnchor(eventDateForDetail[1]);
+            if (theoretical && !detailAnchorRef.startsWith(theoretical)) {
+              detailIssues.push(`Date-derived anchor: expected "#${theoretical}" (from ${eventDateForDetail[1]}) but "Info & Setlist" refs "#${detailAnchorRef}"`);
+            }
+            const hrefPathM = href.match(/^\/([^#]+)#/);
+            if (hrefPathM) {
+              const hrefYear = hrefPathM[1];
+              const dateYear = eventDateForDetail[1].slice(0, 4);
+              if (hrefYear !== dateYear) {
+                detailIssues.push(`Year mismatch: event date year "${dateYear}" ≠ href year "${hrefYear}"`);
+              }
+            }
+          }
+
+          if (detailIssues.length > 0) {
+            logWarn(`  Anchor/year issue(s): ${detailIssues.join('; ')}`);
+            addAnchorWarnDetail(infoLink, yearAnchorName, detailAnchorRef, detailIssues);
+          } else {
+            log(`  Anchor MATCH ✅`);
+          }
         }
       } else {
         log(`  Anchor check: no "Info & Setlist" link found on this detail page`);
@@ -2110,7 +2138,7 @@
     const anchorMap = buildAnchorToNameMap(yearDoc);
     log(`Anchor map built: ${anchorMap.size} entries`);
     anchorMap.forEach((name, anchor) => log(`  #${anchor} → "${name}"`));
-    listEvents.forEach(ev => processOneListEvent(ev, anchorMap));
+    listEvents.forEach(ev => processOneListEvent(ev, anchorMap, year));
 
     clearInterval(timerId);
     timerSpan.textContent = fmtElapsed(Date.now() - startTime);
@@ -2149,16 +2177,31 @@
 
     allLinks.forEach(el => {
       const m = el.href.match(LIST_LINK_RE);
-      if (!m || m[1] !== year) return;
+      if (!m) return;
 
+      const hrefYear = m[1];
       const anchor   = m[2];
       const rawName  = getLinkLineText(el);
       const stripped = stripListSuffix(rawName);
 
-      log(`[#${anchor}] raw="${rawName}"${rawName !== stripped ? ` stripped="${stripped}"` : ''}`);
-      results.push({ element: el, rawName, strippedName: stripped, anchor });
+      log(`[#${anchor}] hrefYear="${hrefYear}" raw="${rawName}"${rawName !== stripped ? ` stripped="${stripped}"` : ''}`);
+      results.push({ element: el, rawName, strippedName: stripped, anchor, hrefYear });
     });
     return results;
+  }
+
+  /**
+   * Derives the theoretical 6-digit Brucebase anchor from a YYYY-MM-DD date.
+   * Format: DDMMYY — last two digits of year, so "2026-01-17" → "170126".
+   * Returns null if the date string does not match the expected format.
+   * @param {string} dateStr - "YYYY-MM-DD"
+   * @returns {string|null}
+   */
+  function dateToAnchor(dateStr) {
+    const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    const [, year, month, day] = m;
+    return day + month + year.slice(2);
   }
 
   function buildAnchorToNameMap(yearDoc) {
@@ -2184,13 +2227,40 @@
     return map;
   }
 
-  function processOneListEvent({ element, rawName, strippedName, anchor }, anchorMap) {
-    log(`Processing list event [#${anchor}] "${rawName}"`);
+  function processOneListEvent({ element, rawName, strippedName, anchor, hrefYear }, anchorMap, pageYear) {
+    log(`Processing list event [#${anchor}] hrefYear="${hrefYear}" "${rawName}"`);
 
+    // ── Year / date-anchor pre-checks (no YEAR page fetch needed) ─────────────
+    const dateM     = rawName.match(/^(\d{4}-\d{2}-\d{2})/);
+    const eventDate = dateM ? dateM[1] : null;
+    const dateYear  = eventDate ? eventDate.slice(0, 4) : null;
+
+    const preIssues = [];
+    if (dateYear && hrefYear && dateYear !== hrefYear) {
+      preIssues.push(`Year mismatch: event date year "${dateYear}" ≠ href year "${hrefYear}"`);
+    }
+    if (eventDate && anchor) {
+      const theoretical = dateToAnchor(eventDate);
+      if (theoretical && !anchor.startsWith(theoretical)) {
+        preIssues.push(`Date-derived anchor: expected "#${theoretical}" (from ${eventDate}) but href has "#${anchor}"`);
+      }
+    }
+
+    // Cross-year href: anchor map is built for pageYear, not hrefYear — skip name comparison.
+    if (hrefYear && pageYear && hrefYear !== pageYear) {
+      logWarn(`  Cross-year href: hrefYear="${hrefYear}" ≠ pageYear="${pageYear}"`);
+      addWarningGlyph(element, preIssues.length > 0
+        ? preIssues.join('\n')
+        : `Cross-year href: event is on ${pageYear}-list but href points to /${hrefYear}`);
+      return;
+    }
+
+    // ── Name comparison (normal case: hrefYear === pageYear) ───────────────────
     const yearName = anchorMap.get(anchor);
     if (yearName === undefined) {
       logWarn(`  Anchor #${anchor} not found in YEAR page anchor map`);
-      addWarningGlyph(element, `Anchor #${anchor} not found on YEAR page`);
+      const msg = [`Anchor #${anchor} not found on YEAR page`, ...preIssues].join('\n');
+      addWarningGlyph(element, msg);
       return;
     }
 
@@ -2203,6 +2273,18 @@
     log(`  Result          : ${match ? 'MATCH ✅' : 'MISMATCH ❌'}`);
 
     addListGlyph(element, match, strippedName, rawName, yearName, anchor);
+
+    // Append pre-checks warning after the glyph if there are issues.
+    if (preIssues.length > 0) {
+      const sib = element.nextElementSibling;
+      const warnSpan = document.createElement('span');
+      warnSpan.className = 'bb-anchor-warn';
+      warnSpan.textContent = ' ⚠️';
+      const msg = preIssues.join('\n');
+      warnSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+      warnSpan.addEventListener('mouseleave', hideTooltip);
+      (sib && sib.classList.contains('bb-glyph') ? sib : element).after(warnSpan);
+    }
   }
 
   function getLinkLineText(el) {
@@ -2387,13 +2469,13 @@
 
   // ── DOM mutation ──────────────────────────────────────────────────────────
 
-  function addYearGlyph(element, match, isEarlyLate, yearName, normalizedDetailName, rawDetailName, eventType, alias) {
+  function addYearGlyph(element, match, isEarlyLate, yearName, normalizedDetailName, rawDetailName, eventType, alias, anchorName = null) {
     const glyph     = match ? '✅' : isEarlyLate ? '⚠️' : '❌';
     const typeSpan  = makeEventTypeSpan(eventType);
     const glyphSpan = makeGlyphSpan(glyph);
     const nodes     = alias ? [typeSpan, glyphSpan, makeAliasSpan(alias)] : [typeSpan, glyphSpan];
     element.after(...nodes);
-    const enter = e => showYearTooltip(e, yearName, normalizedDetailName, rawDetailName, eventType, match, isEarlyLate);
+    const enter = e => showYearTooltip(e, yearName, normalizedDetailName, rawDetailName, eventType, match, isEarlyLate, anchorName);
     [element, typeSpan, glyphSpan].forEach(n => {
       n.addEventListener('mouseenter', enter);
       n.addEventListener('mouseleave', hideTooltip);
@@ -3035,8 +3117,9 @@
   }
 
   // Compares the YEAR page anchor name with the fragment on the detail page's
-  // "Info & Setlist" back-link. Annotates anchorEl with a warning if they differ.
-  function checkYearAnchorConsistency(detailDoc, yearAnchorName, anchorEl) {
+  // "Info & Setlist" back-link, plus DateToAnchor and href-year checks.
+  // Annotates anchorEl with a warning span if any issue is found.
+  function checkYearAnchorConsistency(detailDoc, yearAnchorName, anchorEl, eventDate = null) {
     const infoLink = findInfoSetlistLink(detailDoc);
     if (!infoLink) {
       log(`  Anchor check: no "Info & Setlist" link found on detail page`);
@@ -3048,21 +3131,45 @@
     if (!detailAnchorRef) return;
 
     log(`  Anchor check: YEAR="#${yearAnchorName}", DETAIL refs="#${detailAnchorRef}"`);
+
+    const issues = [];
+
     if (yearAnchorName !== detailAnchorRef) {
-      logWarn(`  Anchor MISMATCH: YEAR="#${yearAnchorName}", DETAIL links "#${detailAnchorRef}"`);
-      addAnchorWarnYear(anchorEl, yearAnchorName, detailAnchorRef, href);
+      issues.push(`Anchor mismatch: YEAR page anchor "#${yearAnchorName}" ≠ DETAIL "Info & Setlist" refs "#${detailAnchorRef}"`);
+    }
+
+    if (eventDate) {
+      const theoretical = dateToAnchor(eventDate);
+      if (theoretical && !yearAnchorName.startsWith(theoretical)) {
+        issues.push(`Date-derived anchor: expected "#${theoretical}" (from ${eventDate}) but YEAR page has "#${yearAnchorName}"`);
+      }
+      const hrefPathM = href.match(/^\/([^#]+)#/);
+      if (hrefPathM) {
+        const hrefYear = hrefPathM[1];
+        const dateYear = eventDate.slice(0, 4);
+        if (hrefYear !== dateYear) {
+          issues.push(`Year mismatch: event date year "${dateYear}" ≠ DETAIL href year "${hrefYear}"`);
+        }
+      }
+    }
+
+    if (issues.length > 0) {
+      logWarn(`  Anchor/year issue(s):\n  ${issues.join('\n  ')}`);
+      addAnchorWarnYear(anchorEl, yearAnchorName, detailAnchorRef, href, issues);
     } else {
       log(`  Anchor MATCH ✅`);
     }
   }
 
   // Inserts a warning span immediately after the <a name="..."> anchor element
-  // on the YEAR page when the detail page's "Info & Setlist" fragment differs.
-  function addAnchorWarnYear(anchorEl, yearAnchorName, detailAnchorRef, detailHref) {
+  // on the YEAR page when anchor, DateToAnchor, or year consistency checks fail.
+  function addAnchorWarnYear(anchorEl, yearAnchorName, detailAnchorRef, detailHref, issues = []) {
     const span = document.createElement('span');
     span.className = 'bb-anchor-warn';
     span.textContent = '⚠️';
-    const msg = `Anchor mismatch: YEAR page anchor is "#${yearAnchorName}" but DETAIL page "Info & Setlist" links to "#${detailAnchorRef}" (href="${detailHref}")`;
+    const msg = issues.length > 0
+      ? issues.join('\n')
+      : `Anchor mismatch: YEAR page anchor is "#${yearAnchorName}" but DETAIL page "Info & Setlist" links to "#${detailAnchorRef}" (href="${detailHref}")`;
     span.dataset.msg = msg;
     span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
     span.addEventListener('mouseleave', hideTooltip);
@@ -3070,12 +3177,14 @@
   }
 
   // Appends a warning span immediately after the "Info & Setlist" link on the
-  // DETAIL page when its fragment does not match the actual YEAR page anchor.
-  function addAnchorWarnDetail(linkEl, yearAnchorName, detailAnchorRef) {
+  // DETAIL page when anchor, DateToAnchor, or year consistency checks fail.
+  function addAnchorWarnDetail(linkEl, yearAnchorName, detailAnchorRef, issues = []) {
     const span = document.createElement('span');
     span.className = 'bb-anchor-warn';
     span.textContent = ' ⚠️';
-    const msg = `Anchor mismatch: "Info & Setlist" links to "#${detailAnchorRef}" but actual YEAR page anchor for this event is "#${yearAnchorName}"`;
+    const msg = issues.length > 0
+      ? issues.join('\n')
+      : `Anchor mismatch: "Info & Setlist" links to "#${detailAnchorRef}" but actual YEAR page anchor for this event is "#${yearAnchorName}"`;
     span.dataset.msg = msg;
     span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
     span.addEventListener('mouseleave', hideTooltip);
@@ -3099,7 +3208,7 @@
   // Annotates #page-title on the current DETAIL page with the event type tag
   // and a name-comparison glyph.  Must be called AFTER extractDetailEventName()
   // so the snapshot is taken before any DOM changes.
-  function addDetailTitleAnnotation(eventType, yearNameUpper, normalizedDetailName, rawDetailName, nameMatch, isEarlyLate) {
+  function addDetailTitleAnnotation(eventType, yearNameUpper, normalizedDetailName, rawDetailName, nameMatch, isEarlyLate, anchorName = null) {
     const pageTitle = document.getElementById('page-title');
     if (!pageTitle) return;
     const h1 = pageTitle.querySelector('h1') || pageTitle;
@@ -3113,7 +3222,7 @@
     const glyphSpan = makeGlyphSpan(glyph);
     h1.appendChild(glyphSpan);
 
-    const enter = e => showYearTooltip(e, yearNameUpper, normalizedDetailName, rawDetailName, eventType, nameMatch, isEarlyLate);
+    const enter = e => showYearTooltip(e, yearNameUpper, normalizedDetailName, rawDetailName, eventType, nameMatch, isEarlyLate, anchorName);
     [typeSpan, glyphSpan].forEach(n => {
       n.addEventListener('mouseenter', enter);
       n.addEventListener('mouseleave', hideTooltip);
@@ -3122,7 +3231,7 @@
 
   // ── Tooltip ───────────────────────────────────────────────────────────────
 
-  function showYearTooltip(evt, yearName, normalizedDetailName, rawDetailName, eventType, match, isEarlyLate = false) {
+  function showYearTooltip(evt, yearName, normalizedDetailName, rawDetailName, eventType, match, isEarlyLate = false, anchorName = null) {
     const tip = document.getElementById('bb-tooltip');
     if (!tip) return;
     const detailHtml = match ? esc(normalizedDetailName) : buildDiffHtml(yearName, normalizedDetailName);
@@ -3134,6 +3243,7 @@
     tip.innerHTML = `
       <table class="bb-tip-table">
         <tr><th>Event type:</th><td>${esc(eventType)}</td></tr>
+        ${anchorName ? `<tr><th>Event anchor:</th><td>#${esc(anchorName)}</td></tr>` : ''}
         <tr><th>YEAR page:</th><td>${esc(yearName)}</td></tr>
         <tr><th>DETAIL page (raw):</th><td>${esc(rawDetailName)}</td></tr>
         <tr><th>DETAIL page (normalized):</th><td>${detailHtml}</td></tr>
