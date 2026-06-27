@@ -385,7 +385,6 @@ Now the console says: "[BruceBase]   Diff: match(WALKING THE DOG)" but the song 
 
 Flag these kind of songs which have an unusual structure with a yellow  warning symbol, on both the YEAR and the DETAIL pages
 
-
 ** new button
 
 On each YEAR page include another toggle button after
@@ -1119,14 +1118,456 @@ the full-size image should be shown in a popup. Also under each image there shou
 
 ** do not close the popup window when clicked on an iconin in event 1 and later another click is done on event 2  
 
-** additionally also parse the YEAR page http://brucebase.wikidot.com/2026 and e.g 
+do not close the popup window when clicked on an icon in event 1 and later another click is done on event 2
+
+** bootlegs
+
+Right now when clicking the 
+
+- 'title="Bootleg", bootleg information will be found under the "Recording" tab 
+- 'title="LiveDL", information about an Official concert recording available will be found under the "Recording" tab, together with a front cover image of the nugs.net release
+
+both icons show the complete information from the "Recording" tab
+
+#+begin_example
+<div class="bb-icon-panel" style=""><div class="bb-icon-panel-header"><span>Recording</span><button class="bb-icon-panel-close">✕</button></div><div class="bb-icon-panel-body"><div class="list-pages-box">    <div class="list-pages-item">
+<div class="image-container floatright"><a href="javascript:;"><img src="http://brucebase.wdfiles.com/local--files/files:artwork-livedl/bs260420.jpg" title="Land Of Hope &amp; Dreams - No Kings Tour" height="75" alt="bs260420.jpg" class="image"></a></div>
+<p>Official concert recording available for purchase in multiple formats, including CD and high definition audio, from Springsteen's official live download site at <a target="_blank" href="https://nugs.net/bruce">nugs.net/bruce</a> (previously live.brucespringsteen.net).<br></p>
+<ul>
+<li>Running Time: 2:54:55</li>
+</ul>
+<hr>
+<p>A complete video-recording circulates <sup>(Chad Sclove)</sup>, and is available on <a target="_blank" href="https://www.youtube.com/watch?v=5yGO5hEzy24">YouTube</a>.</p>
+<br>
+<br>
+</div>
+</div></div></div>
+#+end_example
+
+1.)
+
+The 'title="LiveDL" should ONLY show the "Official concert recording..." plus the reference image
+
+2.)
+
+The 'title="Bootleg" should only show what comes after the "<hr>" when a LiveDL is also present
+
+** more
+
+If on the DETAIL page "Recording" tab there is NO '"Official concert recording..." plus referenced images' present but still multiple "<br>" separated blocks e.g.
+
+#+begin_example
+<div class="list-pages-item">
+<p>The ceremony is available to the public for free via livestreams on <a target="_blank" href="https://obama.org/visit/grand-opening/">www.obama.org</a>, the <a target="_blank" href="https://www.youtube.com/c/ObamaFoundation">Obama Foundation's YouTube</a> and social media accounts.</p>
+<hr>
+<p>Recording of the complete livestream circulates.</p>
+<br>
+<br>
+</div>
+#+end_example
+
+render them all when the 'title="Bootleg"' is clicked
+
+** artificial
+
+1.)
+
+There are artificial line breaks after each hyperlink when the "Recording" DETAIL tab is rendered on the YEAR page, e.g. 
+
+#+begin_example
+<p>The ceremony is available to the public for free via livestreams on <a target="_blank" href="https://obama.org/visit/grand-opening/">www.obama.org</a>, the <a target="_blank" href="https://www.youtube.com/c/ObamaFoundation">Obama Foundation's YouTube</a> and social media accounts.</p>
+#+end_example
+
+please remove
+
+2.)
+
+When "Video" is rendered on the YEAR page and if multiple videos are rendered inline, right now they are put below each
+other. Please render them side by side and let the browser break when they don't fit inside a browser window on one line
+
+** render performances
+
+When a DETAIL event has tabs with other event links like e.g http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n
+#+begin_example
+  <li>
+    <a href="javascript:;">
+      <em>Light Of Day
+      </em>
+    </a>
+  </li>
+  <li>
+    <a href="javascript:;">
+      <em>Performances
+      </em>
+    </a>
+  </li>
+  <li>
+    <a href="javascript:;">
+      <em>Appearances
+      </em>
+    </a>
+  </li>
+  <li>
+    <a href="javascript:;">
+      <em>Cancelled
+      </em>
+    </a>
+  </li>
+  <li>
+    <a href="javascript:;">
+      <em>Performances (w/o Bruce)
+      </em>
+    </a>
+  </li>
+#+end_example
+
+render an additional same named button right after the icons on each event in the YEAR page. When clicked the event list
+from the corresponding tab in the DETAIL page should be rendered like when clicking an icon
+
+** tickets - http://brucebase.wikidot.com/gig:2026-04-18-pollak-theatre-west-long-branch-nj
+
+1.)
+
+bug with clicking the "Ticket" icon
+
+- 'title="Ticket"', there will be ticket images under the "News/Memorabilia" tab, the images have "Ticket" in it's filename, e.g.
+  <img src="http://brucebase.wdfiles.com/local--resized-images/files:ticket-2026/20260418_Ticket_01.jpg/thumbnail.jpg" alt="" class="gallery-image-size-thumbnail">
+
+They will NOT be found under "Setlist" tab
+
+2.)
+
+DETAIL pages mostly have as the first tab a tab with "relation" links to other artists, often named "On Stage" e.g.
+http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n
+
+Render an additional same named button right after the icons and before the performance button on each event in the YEAR page. When clicked the relation list
+from the corresponding tab in the DETAIL page should be rendered like when clicking an icon
+
+** http://brucebase.wikidot.com/gig:1977-02-07-palace-theatre-albany-ny
+
+http://brucebase.wikidot.com/1977#070277
+
+mismatch betwwen images
+
+** http://brucebase.wikidot.com/1977#070277
+
+On the YEAR page http://brucebase.wikidot.com/1977#070277 when clicking the "News" icon only "nugs.net" as a hyperling
+is getting renderd, although the DETAIL page http://brucebase.wikidot.com/gig:1977-02-07-palace-theatre-albany-ny under the "News/Memorabilia" tab has much more info
+
+parse the URLs and fix
+
+** news
+
+1.)
+
+- The button text "Mismatches Only" should be renamed to just "Mismatches"
+- The button text "Show tanle" should be renamed to "Table View"
+
+2.)
+
+when clicking the "News" icon the whole image section inclusive the following container should NOT be rendered
+
+#+begin_example
+<p><sup><em><span style="white-space: pre-wrap;">©</span> All credits to the <a href="/stats:reference#photo">original photographer</a>. We do not <span style="text-decoration: underline;">monetize</span> a photo in any way, but if you want your photo to be removed, <a href="mailto:brucebase.wiki@gmail.com">let us know</a>, and we will remove it.</em></sup></p>
+#+end_example
+
+as they get rendered already via the "Ticket", "Setlist" and "Memorabilia" icon
+
+3.)
+
+The icon for the 'title="LiveDL' currently is hyperlinked to "/stats:Official%20Live%20Downloads"
+
+#+begin_example
+<a href="/stats:Official%20Live%20Downloads"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Recording-32.png" title="LiveDL — click to expand" alt="00Recording-32.png" class="image" style="cursor: pointer;"></a>
+#+end_example
+
+On the final rendered YEAR page this "a href" needs to be removed otherwise the click moves to that URL instead of showing the DETAIL tab information 
+
+** empty icon
+
+When an icon is present on the YEAR page but it's tab pendant on the DETAIL page has just a text which starts with "Sorry, no" e.g.
+
+#+begin_example
+<div id="wiki-tab-0-3" style="display: block;">
+<p><sup><em>Sorry, no Photos available.</em></sup></p>
+</div>
+#+end_example
+
+the icon should be flagged with the warning glyph and tooltip
+
+** tooltip
+
+1.)
+
+The tooltip text renders "&amp;#x201c;Gallery&amp;#x201d;" instead of just "Gallery"
+
+#+begin_example
+<span class="bb-glyph bb-icon-sorry" data-msg="Photo icon on YEAR page but DETAIL page tab &amp;#x201c;Gallery&amp;#x201d; reports no content available.">⚠️</span>
+#+end_example
+
+2.)
+
+on some older DETAIL pages the tab text for missing entries instead of beginning with "Sorry, no" sometimes reads as "Sorry no" without a comma
+
+3.)
+
+also e.g for the YEAR entry http://brucebase.wikidot.com/1977#220177
+why is the '<button class="bb-extra-tab-btn">News</button>' present
+
+#+begin_example
+<div class="bb-extra-tab-row"><button class="bb-extra-tab-btn">On Stage</button><button class="bb-extra-tab-btn">Performances</button><button class="bb-extra-tab-btn">News</button></div>
+#+end_example
+
+although only the other two, "On stage" and "Performances" should be there
+
+** missing soundcheck
+
+The YEAR event entry http://brucebase.wikidot.com/1981#110481 has both a "Soundcheck:" and a normal "Show:" section which actually never gets that label which is OK.  
+The DETAIL "Setlist" tab in such a case should look like the DETAIL page of event http://brucebase.wikidot.com/gig:1981-04-14-festhalle-frankfurt-germany
+which has both, "Soundcheck" and "Show" rendered in a "<strong>" container before the actual setlist
+
+Both <strong> entries are missing on the DETAIL page http://brucebase.wikidot.com/gig:1981-04-11-hallenstadion-zurich-switzerland
+
+In such a case the following should happen:
+
+- on the YEAR page event the tooltip on the "Soundcheck:" label should read "Section label &quot;Soundcheck&quot;, missing from DETAIL page"
+- on the YEAR page event the tooltip in front of the "Show" section should read "Section &quot;show&quot; exists on YEAR page but DETAIL page has no corresponding section label"
+
+- on the DETAIL page event tab both "<strong>" entries should still be rendered but flagged with a warning icon that shows they are actually missing on the DETAIL page
 
 ** no "Scheduled"
+
+On the YEAR event entry http://brucebase.wikidot.com/2022#090322 the following block from the DETAIL page http://brucebase.wikidot.com/interview:2022-03-09-siriusxm-studio-new-york-city-ny
 
 #+begin_example
 <div class="code">
 <pre><code>Local Start Time ??:?? / End Time ??:??</code></pre></div>
 #+end_example
+
+is not rendered below the YEAR event title, because we probably currently only look for "<code>" sectiosn which start with "Scheduled:" 
+
+** hyperlink
+
+hyperlink the "setlist/recording session" song entries for each event entry on the YEAR page after it's confirmed
+(rendered in "green") with the corresponding entry on the "Setlist" tab from the DETAIL page with the "a href" from the DETAIL song entry
+
+So a song named "NIGHT" on the YEAR page shoud get the hyperlink from the DETAIL page entry
+
+#+begin_example
+<li><a href="/song:night" class="bb-song-match">NIGHT</a></li>
+#+end_example
+
+** bug
+
+read @debug/URLIFY.html
+
+For the YEAR event entry http://brucebase.wikidot.com/2026#170126 why are the artists after the songs "JOLÉ BLON" and "THIS LITTLE GIRL"
+rendered inside '<span class="bb-song-match">'. THis should NOT be. Also the songs itself do not get the hyperlinks.
+On the DETAIL page http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n the hyperlinks ARE present
+
+** event alias
+
+When the first tab of a DETAIL page
+e.g. http://brucebase.wikidot.com/recording:2026-01-27-stone-hill-studio-colts-neck-nj starts with an event alias name
+e.g. "Streets Of Minneapolis Recording Session" in a "<strong>" container before the "<hr>"
+
+#+begin_example
+<p><strong>Streets Of Minneapolis Recording Session</strong></p>
+<hr>
+#+end_example
+
+render this event alias name on the YEAR page after the event type in "bold italic" preceded with a long unicode dash symbol, so
+
+#+begin_example
+2026-01-27 - STONE HILL STUDIO, COLTS NECK, NJ (recording)
+#+end_example
+
+would become
+
+#+begin_example
+2026-01-27 - STONE HILL STUDIO, COLTS NECK, NJ (recording) <long unicode dash> Streets Of Minneapolis Recording Session
+#+end_example
+
+** bug
+
+Actually "Willie Nile Set" should not be rendered here (at http://brucebase.wikidot.com/2026#170126)
+
+#+begin_example
+<strong><a href="/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n">2026-01-17 - HACKENSACK MERIDIAN HEALTH THEATRE, RED BANK, NJ</a><span class="bb-event-type"> (gig)</span><span class="bb-glyph"> ✅</span><span class="bb-event-alias"> — Willie Nile Set</span></strong></p>
+#+end_example
+
+because on the DETAIL page http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n
+
+#+begin_example
+<p><strong>Willie Nile Set</strong></p>
+#+end_example
+
+is NOT followed by a "<hr>"
+
+** songlist non-flat
+
+add a new toggle button right after the following one
+
+#+begin_example
+<button class="bb-toggle-btn bb-section-toggle">⇄ Original</button>
+#+end_example
+
+which when clicked renders the current flat "setlist/recording session" where the separator between songs is " / " into a non-flat ordered list structure.
+
+If the songlist is prepended with a label identifier like e.g. "with Willie Nile:" or "Soundcheck:" or more generally
+"<label text>:" the ordered list should be rendered below the identifier
+
+When clicked again, the flat structure should be rendered again. Provide the right toggle button text
+
+Both buttons should be rendered inside a new parent "<div>" container
+
+** bug
+
+Bugs when switching to "List" view. The following are NOT rendered anymore:
+
+Anything before and after the flat song list for each event
+
+1.) the event title line
+2.) the following line if present
+
+
+#+begin_example
+<div class="bb-scheduled">Scheduled: 18:15 | Local Start Time 22:50 (with Willie Nile: 21:10) / End Time 00:26 (with Willie Nile: 21:19)</div>
+#+end_example
+
+3.)
+
+The descriptive event text after the songlist plus all the icons and buttons at the end of the event
+
+So basically ONLY the raw flat setlist itself should be replaced by the list-view
+
+** main page
+
+1.)
+
+On the main BruceBase page http://brucebase.wikidot.com all YEAR pages are rendered one at a time and appended. which
+leads to repeated noise which we do not want to see here.
+
+The following container 
+
+#+begin_example
+<p>&lt; Previous | <a href="/1949-64-list">Listing</a> | <a href="/1965">Next &gt;</a></p>
+#+end_example
+
+and everything else up to and inclusive the following container
+
+#+begin_example
+<div style="text-align: center;"><a href="https://www.facebook.com/brucebase" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_facebook.png" title="Follow us on Facebook" alt="icon_facebook.png" class="image"></a> <a href="http://www.twitter.com/brucebasewiki" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_twitterx.png" title="Follow us on Twitter" alt="icon_twitterx.png" class="image"></a> <a href="https://www.instagram.com/brucebasewiki" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_instagram.png" title="Follow us on Instagram" alt="icon_instagram.png" class="image"></a> <a href="http://www.youtube.com/brucebasewiki" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_youtube.png" title="Check us out on Youtube" alt="icon_youtube.png" class="image"></a></div>
+#+end_example
+
+should NOT be rendered on the final rendered page.
+
+The same is true for everything starting from each year header e.g. "1965"
+
+#+begin_example
+<h3 class="bb-year-header"><a href="/1965" target="_blank">1965</a></h3>
+#+end_example
+
+up to the first "<hr>" (exclusive)
+
+2.)
+
+Replace the '<div id="page-title">Home</div>' with the same buttons as on a typical YEAR page and make it sticky like in the case of YEAR pages
+
+** button
+
+1.)
+
+Make the h3 headers e.g.
+
+#+begin_example
+<h3 class="bb-year-header"><a href="/1949-64" target="_blank">1949-64</a></h3>
+#+end_example
+
+collapsable with a proper glyph at the beginning and a tooltip. When clicking one time, collapse the events for this year, clicking the second time uncollapses again.
+When Ctrl-clicking an h3 header all h3 sections should collapse/uncollapse together
+
+2.)
+
+Add an additional button with text "Stop fetching" next to the current buttons which when clicked stops the fetching and proccccessing of YEAR pages
+
+** gig-list
+
+1.)
+
+the h3 tooltip text should honour the current collapse/uncollapse state
+
+2.)
+
+add a new button right from the "Fetch All Gig Pages" with text "Fetch All Gig-Overview Pages". When clicked do the same
+as for the "Fetch All Gig Pages" button, but append "-list" to the URL for fetching the YEAR OVERVIEW pages
+
+So instead of fetching e.g http://brucebase.wikidot.com/1965 it would be http://brucebase.wikidot.com/1965-list
+
+3.)
+
+the "Stop fetching" button should also work for the new button
+
+** bug
+
+It actually renders only
+
+#+begin_example
+<div class="bb-year-wrapper" data-year="1949-64-list"><hr><div class="bb-section-processed">
+<p>Earlier &lt; Current &gt; <a href="/1965-list">Next</a></p>
+</div><hr><div class="bb-section-processed">
+</div></div>
+#+end_example
+
+after each h3 header line for a specific YEAR OVERVIEW
+
+When calling the YEAR OVERVIEW pages by itself it works
+
+** // @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64|start)?$/
+
+1.)
+
+in
+
+#+begin_example
+// @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64|start)?$/
+#+end_example
+
+also support the "1949-64-list" overview page
+
+2.)
+
+the match/mismatch glyphs after the event titles are not there when the individuel YEAR-OVERVIEW pages are fetched and processed.
+Calling a YEAR OVERVIEW page by it's own URL it works
+
+3.)
+
+Add a "Table View" button to the main BruceBase page for rendering all accumulated YEAR pages in a table view, like what we do on a normal YEAR page
+
+** on a YEAR OVERVIEW page e.g http://brucebase.wikidot.com/1966-list
+
+on a YEAR OVERVIEW page e.g http://brucebase.wikidot.com/1966-list also add buttons for "Original", "Mismatch" and "Table View" and render them like for YEAR pages
+instead of e.g.
+
+#+begin_example
+<div id="page-title">1966 List</div>
+#+end_example
+
+The "Table View" button when clicked should render the event-date and the rest of the event-name in a two column table equivalent what the YEAR pages do
+
+** smart table
+
+the "Table View" button should also use the smarttable library
+
+#+begin_example
+// @require      file:///V:/home/vzell/git/springsteen-site-parser/dist/smarttable.js
+#+end_example
+
+for rendering the table when on YEAR OVERVIEW pages
+
+** bug
+
+now the "Original" and "Mismatches" buttons on YEAR OVERVIEW pages are always greyed out, you can't click them. Also the "Table View" button is missing
 
 * question
 ** initial
