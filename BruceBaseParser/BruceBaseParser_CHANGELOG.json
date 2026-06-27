@@ -1,5 +1,96 @@
 [
     {
+        "version": "1.79",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR OVERVIEW pages: runListPage now builds a sticky control bar (same #bb-sticky-bar / #bb-controls / #bb-btn-container structure as YEAR pages) that replaces and hides the page-title div. The bar contains three buttons: '⇄ Original Page', '⚡ Mismatches (N)', '⊞ Table View', plus the timer/progress indicator.",
+                    "YEAR OVERVIEW pages: '⇄ Original Page' and '⊞ Table View' share a tri-state view (list/original/table) via setListView(v) so switching views never leaves content in an inconsistent hidden state. Note: setupStickyBar is intentionally NOT used here because on list pages events may sit before the first <hr>, so moving pre-<hr> content would swallow event rows.",
+                    "YEAR OVERVIEW pages: '⚡ Mismatches' filter (setupListMismatchFilter) hides matching events (✅ glyph) and shows only mismatches; counts are embedded in the label. Hides the closest li/tr ancestor or parentNode of each event link.",
+                    "YEAR OVERVIEW pages: '⊞ Table View' builds a two-column Date / Event table via buildListPageTable — splits event link text on leading YYYY-MM-DD, clones the glyph span into the Event cell, and opens links in a new tab."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.78",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "@include: add (-list)? to 1949-64 pattern so the 1949-64-list overview page is matched. isListPage regex updated to /^(\\d{4}|1949-64)-list$/ and LIST_LINK_RE updated to /\\/((?:\\d{4}|1949-64))#.../ to handle 1949-64 anchors.",
+                    "HOME / Gig-Overview fetch: fetched list pages now receive match/mismatch glyphs. fetchAndProcessYear branches on slug.endsWith('-list') — list pages call fetchAndProcessListPage(year, container, onProgress) which runs wrapYearSections then the extractListPageEvents → buildAnchorToNameMap → processOneListEvent pipeline (same as direct runListPage). extractListPageEvents gains an optional container param (defaults to #page-content for direct-page use)."
+                ]
+            },
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "HOME page: added '⊞ Table View' button. After fetching, clicking it builds an aggregated <table> (Year / Date / Status / Event columns) from all loaded bb-year-wrapper divs — supports both full year and list-page wrappers. The button toggles between the table and the normal event list; the table is rebuilt from scratch on each new fetch run."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.77",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "HOME page / Gig-Overview fetch: stripYearWrapperNoise now takes isListPage flag. For -list pages the bulk pre-<hr> sweep is skipped (events on overview pages live before or between <hr> elements and were being wiped). Only the .list-pages-box is removed instead. Nav-paragraph regex extended to /Previous|Earlier/ and the break removed so both the top and bottom 'Earlier < Current > Next' paragraphs are stripped."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.76",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "HOME page: added 'Fetch All Gig-Overview Pages' button (right of 'Fetch All Gig Pages') that fetches /YYYY-list URLs instead of /YYYY — uses the same fetchAndProcessYear pipeline with slug transformed to slug+'-list'.",
+                    "HOME page: both fetch buttons and 'Stop fetching' share a single runFetch(activeBtn, slugTransform) function; 'Stop fetching' now interrupts either fetch action."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "HOME page: bb-year-header tooltip now reflects current collapse state — 'Click to collapse · Ctrl+click to collapse all' when expanded, 'Click to expand · Ctrl+click to expand all' when collapsed. Ctrl+click updates all headers' tooltips immediately."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.75",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "HOME page: year section headers (bb-year-header) are now collapsible — a ▼/▶ glyph is prepended; single-click on the header (outside the year link) toggles that year's content; Ctrl+click collapses all open sections (or expands all if all are closed). A tooltip on the header explains the shortcuts.",
+                    "HOME page: added a 'Stop fetching' button next to 'Fetch All Gig Pages'. Clicking it sets a stopRequested flag that interrupts the fetch loop after the current year page finishes. The progress message reports how many pages were processed before stopping."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.74",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "HOME page: repeated year-page noise is now stripped before each bb-year-wrapper is injected — stripYearWrapperNoise() removes (1) all direct children before the first <hr> (year heading, icon legend, jump-to-recent box), (2) the '< Previous | Listing | Next >' navigation paragraph, and (3) the social-media icon div.",
+                    "HOME page: buttons and progress indicator now use the same #bb-sticky-bar / #bb-controls / #bb-btn-container / #bb-year-progress / #bb-year-timer structure as YEAR pages and are rendered in a sticky bar below the site header. The page-title 'Home' heading is hidden. Old #bb-fetch-progress and #bb-fetch-timer elements and their CSS are removed."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.73",
         "date": "2026-06-27",
         "sections": [

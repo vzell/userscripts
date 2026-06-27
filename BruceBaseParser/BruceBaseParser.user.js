@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.73
+// @version      1.79
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -11,7 +11,7 @@
 // @updateURL    https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser.user.js
 // @require      file:///V:/home/vzell/git/springsteen-site-parser/dist/smarttable.js
 // @require      file:///V:/home/vzell/git/springsteen-site-parser/adapters/brucebase.js
-// @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64|start)?$/
+// @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64(-list)?|start)?$/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
@@ -27,7 +27,7 @@
   ]);
 
   const EVENT_URL_RE  = /\/([a-z]+):\d{4}-\d{2}-\d{2}/;
-  const LIST_LINK_RE  = /\/(\d{4})#([a-zA-Z0-9]+)$/;
+  const LIST_LINK_RE  = /\/((?:\d{4}|1949-64))#([a-zA-Z0-9]+)$/;
   const DETAIL_TYPE_RE = /^(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/;
   // Matches "Info & Setlist" back-links on detail pages: /YEAR#ANCHOR or /1949-64#ANCHOR
   const INFO_SETLIST_HREF_RE = /^\/[\d][\w-]*#([a-zA-Z0-9]+)$/;
@@ -78,7 +78,7 @@
 
   const path        = location.pathname.replace(/^\//, '');
   const isHomePage   = path === '' || path === 'start';
-  const isListPage   = /^\d{4}-list$/.test(path);
+  const isListPage   = /^(\d{4}|1949-64)-list$/.test(path);
   const isYearPage   = /^\d{4}$/.test(path) || path === '1949-64';
   const isDetailPage = DETAIL_TYPE_RE.test(path);
 
@@ -110,67 +110,161 @@
     if (slugs.length === 0) { logWarn('HOME: no gig-page links found'); return; }
     log(`HOME: found ${slugs.length} year page slug(s)`);
 
-    // ── Buttons ─────────────────────────────────────────────────────────────
+    // ── Button container (same IDs / classes as YEAR page) ──────────────────
     const fetchBtn = document.createElement('button');
     fetchBtn.id = 'bb-fetch-all-btn';
     fetchBtn.className = 'bb-toggle-btn';
     fetchBtn.textContent = 'Fetch All Gig Pages';
 
+    const overviewBtn = document.createElement('button');
+    overviewBtn.id = 'bb-fetch-overview-btn';
+    overviewBtn.className = 'bb-toggle-btn';
+    overviewBtn.textContent = 'Fetch All Gig-Overview Pages';
+
+    const stopBtn = document.createElement('button');
+    stopBtn.id = 'bb-stop-btn';
+    stopBtn.className = 'bb-toggle-btn';
+    stopBtn.textContent = 'Stop fetching';
+    stopBtn.disabled = true;
+
+    const tableBtn = document.createElement('button');
+    tableBtn.id = 'bb-table-view-btn';
+    tableBtn.className = 'bb-toggle-btn';
+    tableBtn.textContent = '⊞ Table View';
+    tableBtn.disabled = true;
+
     const filterBtn = document.createElement('button');
-    filterBtn.id = 'bb-home-mismatch-toggle';
+    filterBtn.id = 'bb-mismatch-toggle';
     filterBtn.className = 'bb-toggle-btn';
     filterBtn.textContent = '⚡ Mismatches';
     filterBtn.disabled = true;
 
-    // Inserting after pageTitle in reverse order places fetchBtn left, filterBtn right
-    pageTitle.after(filterBtn);
-    pageTitle.after(fetchBtn);
+    const btnContainer = document.createElement('div');
+    btnContainer.id = 'bb-btn-container';
+    btnContainer.append(fetchBtn, overviewBtn, stopBtn, tableBtn, filterBtn);
 
-    // ── Progress, timer, and results container ──────────────────────────────
+    // ── Progress indicator (same structure as YEAR page) ─────────────────────
+    const timerSpan = document.createElement('span');
+    timerSpan.id = 'bb-year-timer';
+    timerSpan.textContent = '00:00';
+
     const progressEl = document.createElement('p');
-    progressEl.id = 'bb-fetch-progress';
+    progressEl.id = 'bb-year-progress';
+    progressEl.append(timerSpan);
 
-    const timerEl = document.createElement('p');
-    timerEl.id = 'bb-fetch-timer';
+    // ── Sticky bar (same structure as YEAR page) ─────────────────────────────
+    const controlsEl = document.createElement('div');
+    controlsEl.id = 'bb-controls';
+    controlsEl.append(btnContainer, progressEl);
 
+    const stickyBar = document.createElement('div');
+    stickyBar.id = 'bb-sticky-bar';
+    stickyBar.appendChild(controlsEl);
+
+    pageTitle.parentNode.insertBefore(stickyBar, pageTitle);
+    pageTitle.style.display = 'none';
+
+    // ── Results container ─────────────────────────────────────────────────────
     const resultsEl = document.createElement('div');
     resultsEl.id = 'bb-home-results';
+    stickyBar.after(resultsEl);
 
-    filterBtn.after(progressEl);
-    progressEl.after(timerEl);
-    timerEl.after(resultsEl);
+    // Measure heights for sticky positioning (mirrors setupStickyBar logic).
+    const bbHeader = document.getElementById('header');
+    document.documentElement.style.setProperty('--bb-header-h', `${bbHeader ? bbHeader.offsetHeight : 0}px`);
+    requestAnimationFrame(() => {
+      document.documentElement.style.setProperty('--bb-sticky-bar-h', `${stickyBar.offsetHeight}px`);
+    });
 
-    // ── Fetch handler ────────────────────────────────────────────────────────
+    // ── Table View state ──────────────────────────────────────────────────────
+    let tableEl     = null;
+    let tableActive = false;
+
+    tableBtn.addEventListener('click', () => {
+      tableActive = !tableActive;
+      if (tableActive) {
+        if (!tableEl) {
+          tableEl = buildHomePageTable(resultsEl);
+          resultsEl.after(tableEl);
+        } else {
+          tableEl.style.display = '';
+        }
+        resultsEl.style.display = 'none';
+        tableBtn.textContent = '⊞ Event List';
+      } else {
+        if (tableEl) tableEl.style.display = 'none';
+        resultsEl.style.display = '';
+        tableBtn.textContent = '⊞ Table View';
+      }
+    });
+
+    // ── Shared fetch logic ────────────────────────────────────────────────────
     let fetching = false;
-    fetchBtn.addEventListener('click', async () => {
+    let stopRequested = false;
+    const fetchBtns = [fetchBtn, overviewBtn];
+
+    stopBtn.addEventListener('click', () => {
+      stopRequested = true;
+      stopBtn.disabled = true;
+      stopBtn.textContent = 'Stopping…';
+    });
+
+    /**
+     * Fetches and processes all year slugs, transforming each via slugTransform.
+     * activeBtn is the button that triggered the fetch (its label is reset on finish).
+     * @param {HTMLButtonElement} activeBtn
+     * @param {function(string): string} slugTransform
+     */
+    async function runFetch(activeBtn, slugTransform) {
       if (fetching) return;
       fetching = true;
-      fetchBtn.disabled = true;
-      fetchBtn.textContent = 'Fetching…';
+      stopRequested = false;
+      const origLabel = activeBtn.textContent;
+      // Invalidate any existing table — it belongs to the previous run.
+      tableActive = false;
+      if (tableEl) { tableEl.remove(); tableEl = null; }
+      tableBtn.textContent = '⊞ Table View';
+      tableBtn.disabled = true;
+      fetchBtns.forEach(b => { b.disabled = true; });
+      activeBtn.textContent = 'Fetching…';
+      stopBtn.disabled = false;
+      stopBtn.textContent = 'Stop fetching';
       filterBtn.disabled = true;
       resultsEl.innerHTML = '';
 
       const startTime = Date.now();
-      timerEl.textContent = 'Elapsed: 0:00';
+      timerSpan.textContent = '00:00';
       const timerId = setInterval(() => {
-        timerEl.textContent = `Elapsed: ${fmtElapsed(Date.now() - startTime)}`;
+        timerSpan.textContent = fmtElapsed(Date.now() - startTime);
       }, 1000);
 
+      let processed = 0;
       for (let i = 0; i < slugs.length; i++) {
-        progressEl.textContent = `${slugs[i]}  (${i + 1} / ${slugs.length})`;
-        await fetchAndProcessYear(slugs[i], resultsEl,
-          msg => { progressEl.textContent = msg; });
+        if (stopRequested) break;
+        const fetchSlug = slugTransform(slugs[i]);
+        const setMsg = msg => progressEl.replaceChildren(timerSpan, ` ... ${msg}`);
+        setMsg(`Fetching ${fetchSlug} (${i + 1} / ${slugs.length})`);
+        await fetchAndProcessYear(fetchSlug, resultsEl, setMsg);
+        processed++;
       }
 
       clearInterval(timerId);
-      const totalMs = Date.now() - startTime;
-      progressEl.textContent = `Done — ${slugs.length} year pages processed.`;
-      timerEl.textContent = `Total time: ${fmtElapsed(totalMs)}`;
-      fetchBtn.textContent = 'Fetch All Gig Pages';
-      fetchBtn.disabled = false;
-      filterBtn.disabled = false;
+      timerSpan.textContent = fmtElapsed(Date.now() - startTime);
+      const doneMsg = stopRequested
+        ? `Stopped after ${processed} / ${slugs.length} year pages.`
+        : `Done — ${slugs.length} year pages processed.`;
+      progressEl.replaceChildren(timerSpan, ` ... ${doneMsg}`);
+      activeBtn.textContent = origLabel;
+      fetchBtns.forEach(b => { b.disabled = false; });
+      stopBtn.disabled = true;
+      stopBtn.textContent = 'Stop fetching';
+      filterBtn.disabled = processed === 0;
+      tableBtn.disabled  = processed === 0;
       fetching = false;
-    });
+    }
+
+    fetchBtn.addEventListener('click',    () => runFetch(fetchBtn,    s => s));
+    overviewBtn.addEventListener('click', () => runFetch(overviewBtn, s => `${s}-list`));
 
     // ── Cross-year mismatch filter ───────────────────────────────────────────
     let filterActive = false;
@@ -228,10 +322,18 @@
       return;
     }
 
-    // Year header with link to the live year page
+    // Year header: glyph (outside the link so clicks on the link navigate; clicks
+    // elsewhere on the h3 collapse/expand) + link to the live year page.
     const header = document.createElement('h3');
     header.className = 'bb-year-header';
-    header.innerHTML = `<a href="/${slug}" target="_blank">${esc(slug)}</a>`;
+    const toggleGlyph = document.createElement('span');
+    toggleGlyph.className = 'bb-year-toggle-glyph';
+    toggleGlyph.textContent = '▼ ';
+    const yearLink = document.createElement('a');
+    yearLink.href = `/${slug}`;
+    yearLink.target = '_blank';
+    yearLink.textContent = slug;
+    header.append(toggleGlyph, yearLink);
     resultsEl.appendChild(header);
 
     // Inject year-page markup into the live home-page DOM so that all
@@ -241,17 +343,254 @@
     wrapper.className = 'bb-year-wrapper';
     wrapper.dataset.year = slug;
     wrapper.innerHTML = yearContent.innerHTML;
+
+    // Remove per-year noise before injecting into the live DOM so it never
+    // appears in the rendered output.
+    stripYearWrapperNoise(wrapper, slug.endsWith('-list'));
+
     resultsEl.appendChild(wrapper);
+
+    // Wire up collapse/expand behaviour now that both header and wrapper exist.
+    setupYearHeaderToggle(header, toggleGlyph, wrapper, resultsEl);
 
     onProgress(`Processing ${slug}…`);
 
-    const sections = wrapYearSections(wrapper);
-    const events   = extractYearPageEvents(wrapper);
-    log(`  ${slug}: ${events.length} event(s)`);
+    if (slug.endsWith('-list')) {
+      await fetchAndProcessListPage(slug.replace(/-list$/, ''), wrapper, onProgress);
+    } else {
+      const sections = wrapYearSections(wrapper);
+      const events   = extractYearPageEvents(wrapper);
+      log(`  ${slug}: ${events.length} event(s)`);
+      if (events.length === 0) return;
+      await processYearEvents(events, sections);
+    }
+  }
 
-    if (events.length === 0) return;
+  /**
+   * Runs the list-page glyph pipeline on an already-injected wrapper div.
+   * Mirrors runListPage() but operates on a given container element instead
+   * of document, so it works when the list page is fetched by the HOME page.
+   * @param {string}      year      - Bare year slug (e.g. "1965" or "1949-64")
+   * @param {HTMLElement} container - The bb-year-wrapper div containing the injected HTML
+   * @param {function}    onProgress
+   */
+  async function fetchAndProcessListPage(year, container, onProgress) {
+    wrapYearSections(container);
 
-    await processYearEvents(events, sections);
+    const listEvents = extractListPageEvents(year, container);
+    log(`  ${year}-list: ${listEvents.length} event link(s) in container`);
+    if (listEvents.length === 0) return;
+
+    onProgress(`Fetching YEAR page for ${year}…`);
+    const yearPageUrl = `${location.protocol}//${location.host}/${year}`;
+    let yearDoc;
+    try {
+      yearDoc = await fetchPage(yearPageUrl);
+    } catch (e) {
+      logErr(`Failed to fetch YEAR page for ${year}:`, e.message);
+      listEvents.forEach(({ element }) =>
+        addWarningGlyph(element, 'Could not fetch YEAR page: ' + e.message));
+      return;
+    }
+
+    const anchorMap = buildAnchorToNameMap(yearDoc);
+    log(`  ${year}-list: anchor map has ${anchorMap.size} entries`);
+    listEvents.forEach(ev => processOneListEvent(ev, anchorMap));
+  }
+
+  /**
+   * Makes a bb-year-header collapsible.
+   * Single click on the h3 (outside the year link) toggles that year's wrapper.
+   * Ctrl+click toggles ALL year wrappers together (collapse if any is open, expand if all closed).
+   * @param {HTMLElement} headerEl   - The <h3> element
+   * @param {HTMLElement} glyphEl    - The glyph <span> inside the header
+   * @param {HTMLElement} wrapperEl  - The bb-year-wrapper to show/hide
+   * @param {HTMLElement} resultsEl  - The container holding all year sections
+   */
+  function setupYearHeaderToggle(headerEl, glyphEl, wrapperEl, resultsEl) {
+    /** Sync the header's tooltip to the wrapper's current visibility. */
+    function syncTooltip(h, w) {
+      const open = w.style.display !== 'none';
+      h.title = open
+        ? 'Click to collapse · Ctrl+click to collapse all'
+        : 'Click to expand · Ctrl+click to expand all';
+    }
+
+    syncTooltip(headerEl, wrapperEl);
+
+    headerEl.addEventListener('click', e => {
+      // Let clicks on the year link navigate normally.
+      if (e.target.closest('a')) return;
+      e.preventDefault();
+
+      if (e.ctrlKey) {
+        // Collapse all if any wrapper is visible; otherwise expand all.
+        const anyOpen = [...resultsEl.querySelectorAll('.bb-year-wrapper')]
+          .some(w => w.style.display !== 'none');
+        for (const h of resultsEl.querySelectorAll('h3.bb-year-header')) {
+          const w = h.nextElementSibling;
+          if (!w || !w.classList.contains('bb-year-wrapper')) continue;
+          const g = h.querySelector('.bb-year-toggle-glyph');
+          w.style.display  = anyOpen ? 'none' : '';
+          if (g) g.textContent = anyOpen ? '▶ ' : '▼ ';
+          syncTooltip(h, w);
+        }
+      } else {
+        const collapsed         = wrapperEl.style.display === 'none';
+        wrapperEl.style.display = collapsed ? '' : 'none';
+        glyphEl.textContent     = collapsed ? '▼ ' : '▶ ';
+        syncTooltip(headerEl, wrapperEl);
+      }
+    });
+  }
+
+  // Removes repeated per-year noise from a freshly-injected bb-year-wrapper.
+  // isListPage=true  → /YYYY-list (overview) pages: events sit before or between
+  //                    <hr> elements, so pre-<hr> content must NOT be bulk-removed;
+  //                    only the jump-to-recent box is stripped instead.
+  // isListPage=false → full year pages: everything before the first <hr> is noise
+  //                    (year heading, icon legend, jump-to-recent box).
+  // Both variants strip all nav paragraphs and the social-media icon div.
+  function stripYearWrapperNoise(container, isListPage = false) {
+    if (isListPage) {
+      // Only remove the "Jump to most recent" paginator box.
+      for (const el of [...container.querySelectorAll('.list-pages-box')]) {
+        el.remove();
+      }
+    } else {
+      // Remove all direct children before the first <hr>.
+      const firstHr = container.querySelector(':scope > hr');
+      if (firstHr) {
+        let node = container.firstChild;
+        while (node && node !== firstHr) {
+          const next = node.nextSibling;
+          container.removeChild(node);
+          node = next;
+        }
+      }
+    }
+    // Remove nav paragraphs: "< Previous | Listing | Next >" (year pages) and
+    // "Earlier < Current > Next" (list pages, appear at both top and bottom).
+    for (const el of [...container.querySelectorAll('p')]) {
+      if (/Previous|Earlier/.test(el.textContent)) el.remove();
+    }
+    // Remove the social-media icon div.
+    for (const el of [...container.querySelectorAll('div')]) {
+      if (el.querySelector('a[href*="facebook"]')) { el.remove(); break; }
+    }
+  }
+
+  /**
+   * Builds a sortable summary table of all events from all loaded bb-year-wrapper
+   * divs.  Works for both full year wrappers (EVENT_URL_RE links) and list-page
+   * wrappers (LIST_LINK_RE links).
+   * @param {HTMLElement} resultsEl - The #bb-home-results container
+   * @returns {HTMLElement} - A div#bb-home-table containing the <table>
+   */
+  function buildHomePageTable(resultsEl) {
+    const container = document.createElement('div');
+    container.id = 'bb-home-table';
+
+    const table = document.createElement('table');
+    table.className = 'bb-event-table';
+
+    const thead = table.createTHead();
+    const hrow  = thead.insertRow();
+    for (const col of ['Year', 'Date', 'Status', 'Event']) {
+      const th = document.createElement('th');
+      th.textContent = col;
+      hrow.appendChild(th);
+    }
+
+    const tbody = table.createTBody();
+
+    for (const wrapper of resultsEl.querySelectorAll('.bb-year-wrapper')) {
+      const slug    = wrapper.dataset.year || '';
+      const year    = slug.replace(/-list$/, '');
+      const isListW = slug.endsWith('-list');
+      const linkRe  = isListW ? LIST_LINK_RE : EVENT_URL_RE;
+
+      for (const a of wrapper.querySelectorAll('a[href]')) {
+        if (!linkRe.test(a.getAttribute('href') || '')) continue;
+
+        // Glyph may be at +1 (list page) or +2 after a bb-event-type span (year page).
+        let sib = a.nextElementSibling;
+        if (sib && sib.classList.contains('bb-event-type')) sib = sib.nextElementSibling;
+        const glyph = (sib && sib.classList.contains('bb-glyph')) ? sib.textContent.trim() : '';
+
+        // Date: from href (year pages) or from leading YYYY-MM-DD in link text (list pages).
+        const hrefDate = (a.getAttribute('href') || '').match(/(\d{4}-\d{2}-\d{2})/);
+        const textDate = a.textContent.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+        const date = hrefDate ? hrefDate[1] : (textDate ? textDate[1] : '');
+
+        const row = tbody.insertRow();
+        row.insertCell().textContent = year;
+        row.insertCell().textContent = date;
+        row.insertCell().textContent = glyph;
+        const nameCell = row.insertCell();
+        const link = document.createElement('a');
+        link.href = a.href;
+        link.target = '_blank';
+        link.textContent = a.textContent.trim();
+        nameCell.appendChild(link);
+      }
+    }
+
+    container.appendChild(table);
+    return container;
+  }
+
+  /**
+   * Builds a two-column table (Date | Event) for YEAR OVERVIEW (list) pages.
+   * The event link text typically starts with "YYYY-MM-DD - " which is split
+   * into the Date column; the remainder becomes the Event column.
+   * The original glyph (✅ / ❌ / ⚠️ / ❓) is cloned into the Event column.
+   * @param {Array<{element: HTMLElement, rawName: string}>} listEvents
+   * @returns {HTMLElement} - A div#bb-list-table containing the <table>
+   */
+  function buildListPageTable(listEvents) {
+    const container = document.createElement('div');
+    container.id = 'bb-list-table';
+
+    const table = document.createElement('table');
+    table.className = 'bb-event-table';
+
+    const thead = table.createTHead();
+    const hrow  = thead.insertRow();
+    for (const col of ['Date', 'Event']) {
+      const th = document.createElement('th');
+      th.textContent = col;
+      hrow.appendChild(th);
+    }
+
+    const tbody = table.createTBody();
+
+    for (const { element } of listEvents) {
+      const name = element.textContent.trim();
+      // Split "YYYY-MM-DD - rest" (or "YYYY-MM-DD rest") into date and event name.
+      const m = name.match(/^(\d{4}-\d{2}-\d{2})\s*[-–]?\s*(.*)/s);
+      const date      = m ? m[1]          : '';
+      const eventName = m ? m[2].trim()   : name;
+
+      const row = tbody.insertRow();
+      row.insertCell().textContent = date;
+
+      const nameCell  = row.insertCell();
+      const linkClone = element.cloneNode(true);
+      if (m) linkClone.textContent = eventName; // strip date prefix from link text
+      linkClone.target = '_blank';
+      nameCell.appendChild(linkClone);
+
+      // Clone the glyph span (directly after the link on list pages).
+      const glyph = element.nextElementSibling;
+      if (glyph && glyph.classList.contains('bb-glyph')) {
+        nameCell.appendChild(document.createTextNode(' '));
+        nameCell.appendChild(glyph.cloneNode(true));
+      }
+    }
+
+    container.appendChild(table);
+    return container;
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -638,6 +977,32 @@
         ? `⚡ All Events (${totalEvents})`
         : `⚡ Mismatches (${mismatchCount})`;
       applyMismatchFilter(filterActive);
+    });
+  }
+
+  // Mismatch filter for YEAR OVERVIEW (list) pages.
+  // Events are plain links in the page rather than .bb-section-processed divs,
+  // so we hide/show the nearest block ancestor (li, tr, or parentNode).
+  function setupListMismatchFilter(btn, listEvents) {
+    const mismatchCount = listEvents.filter(({ element }) => {
+      const sib = element.nextElementSibling;
+      return !sib || !sib.classList.contains('bb-glyph') || !sib.textContent.includes('✅');
+    }).length;
+
+    btn.textContent = `⚡ Mismatches (${mismatchCount})`;
+
+    let filterActive = false;
+    btn.addEventListener('click', () => {
+      filterActive = !filterActive;
+      btn.textContent = filterActive
+        ? `⚡ All Events (${listEvents.length})`
+        : `⚡ Mismatches (${mismatchCount})`;
+      for (const { element } of listEvents) {
+        const sib     = element.nextElementSibling;
+        const isMatch = sib && sib.classList.contains('bb-glyph') && sib.textContent.includes('✅');
+        const row     = element.closest('li, tr') || element.parentNode;
+        if (row) row.style.display = filterActive && isMatch ? 'none' : '';
+      }
     });
   }
 
@@ -1611,12 +1976,81 @@
   // ════════════════════════════════════════════════════════════════════════════
 
   async function runListPage(year) {
+    const content   = document.querySelector('#page-content') || document.body;
+    const pageTitle = document.getElementById('page-title');
+
+    // Save original HTML before any DOM mutations (used by Original Page toggle).
+    const originalHtml = content.innerHTML;
+
     const listEvents = extractListPageEvents(year);
     log(`Found ${listEvents.length} event link(s) on list page`);
     if (listEvents.length === 0) {
       logWarn('No list-page event links found — check selector / page structure');
       return;
     }
+
+    // ── Button container ──────────────────────────────────────────────────────
+    const btnContainer = document.createElement('div');
+    btnContainer.id = 'bb-btn-container';
+
+    const globalBtn = document.createElement('button');
+    globalBtn.id = 'bb-global-toggle';
+    globalBtn.className = 'bb-toggle-btn';
+    globalBtn.textContent = '⇄ Original Page';
+    globalBtn.disabled = true;
+
+    const mismatchBtn = document.createElement('button');
+    mismatchBtn.id = 'bb-mismatch-toggle';
+    mismatchBtn.className = 'bb-toggle-btn';
+    mismatchBtn.textContent = '⚡ Mismatches';
+    mismatchBtn.disabled = true;
+
+    const tableBtn = document.createElement('button');
+    tableBtn.id = 'bb-list-table-btn';
+    tableBtn.className = 'bb-toggle-btn';
+    tableBtn.textContent = '⊞ Table View';
+    tableBtn.disabled = true;
+
+    btnContainer.append(globalBtn, mismatchBtn, tableBtn);
+
+    // ── Progress ─────────────────────────────────────────────────────────────
+    const progressEl = document.createElement('p');
+    progressEl.id = 'bb-year-progress';
+    const timerSpan = document.createElement('span');
+    timerSpan.id = 'bb-year-timer';
+    timerSpan.textContent = '00:00';
+    progressEl.append(timerSpan, ' ... Fetching…');
+
+    // ── Sticky bar ────────────────────────────────────────────────────────────
+    // Do NOT use setupStickyBar() here — on list pages events may live before the
+    // first <hr>, so moving pre-<hr> content to the bar would swallow event rows.
+    // Instead build the bar manually, mirroring runHomePage's approach.
+    const controlsEl = document.createElement('div');
+    controlsEl.id = 'bb-controls';
+    controlsEl.append(btnContainer, progressEl);
+
+    const stickyBar = document.createElement('div');
+    stickyBar.id = 'bb-sticky-bar';
+    stickyBar.appendChild(controlsEl);
+
+    if (pageTitle && pageTitle.parentNode) {
+      pageTitle.parentNode.insertBefore(stickyBar, pageTitle);
+      pageTitle.style.display = 'none';
+    }
+
+    const headerEl = document.getElementById('header');
+    if (headerEl) {
+      document.documentElement.style.setProperty(
+        '--bb-header-h', `${Math.round(headerEl.getBoundingClientRect().height)}px`
+      );
+    }
+    document.documentElement.style.setProperty('--bb-sticky-bar-h', `${stickyBar.offsetHeight}px`);
+
+    // ── Fetch and process ─────────────────────────────────────────────────────
+    const startTime = Date.now();
+    const timerId = setInterval(() => {
+      timerSpan.textContent = fmtElapsed(Date.now() - startTime);
+    }, 1000);
 
     const yearPageUrl = `${location.protocol}//${location.host}/${year}`;
     log(`Fetching YEAR page (shared): ${yearPageUrl}`);
@@ -1625,20 +2059,69 @@
       yearDoc = await fetchPage(yearPageUrl);
     } catch (e) {
       logErr('Failed to fetch YEAR page:', e.message);
-      listEvents.forEach(({ element }) => addWarningGlyph(element, 'Could not fetch YEAR page: ' + e.message));
+      listEvents.forEach(({ element }) =>
+        addWarningGlyph(element, 'Could not fetch YEAR page: ' + e.message));
+      clearInterval(timerId);
       return;
     }
 
     const anchorMap = buildAnchorToNameMap(yearDoc);
     log(`Anchor map built: ${anchorMap.size} entries`);
     anchorMap.forEach((name, anchor) => log(`  #${anchor} → "${name}"`));
-
     listEvents.forEach(ev => processOneListEvent(ev, anchorMap));
+
+    clearInterval(timerId);
+    timerSpan.textContent = fmtElapsed(Date.now() - startTime);
+    progressEl.replaceChildren(timerSpan, ` ... Done — ${listEvents.length} events processed`);
+
+    // ── Three-view toggle (list / original / table) ───────────────────────────
+    // All three buttons share this single view-state so switching one view never
+    // leaves content in an inconsistent hidden state.
+    const originalEl = document.createElement('div');
+    originalEl.id = 'bb-page-original';
+    originalEl.innerHTML = originalHtml;
+    originalEl.style.display = 'none';
+    content.parentNode.insertBefore(originalEl, content.nextSibling);
+
+    let listTableEl = null;
+    let viewState   = 'list';
+
+    function setListView(v) {
+      viewState = v;
+      content.style.display    = v === 'list'     ? '' : 'none';
+      originalEl.style.display = v === 'original' ? '' : 'none';
+      if (listTableEl) listTableEl.style.display  = v === 'table'    ? '' : 'none';
+      globalBtn.textContent = v === 'original' ? '⇄ Processed Page' : '⇄ Original Page';
+      tableBtn.textContent  = v === 'table'    ? '⊞ Event List'     : '⊞ Table View';
+    }
+
+    globalBtn.addEventListener('click', () =>
+      setListView(viewState === 'original' ? 'list' : 'original'));
+
+    tableBtn.addEventListener('click', () => {
+      if (viewState === 'table') {
+        setListView('list');
+      } else {
+        if (!listTableEl) {
+          listTableEl = buildListPageTable(listEvents);
+          content.after(listTableEl);
+        }
+        listTableEl.style.display = '';
+        setListView('table');
+      }
+    });
+
+    setupListMismatchFilter(mismatchBtn, listEvents);
+
+    globalBtn.disabled  = false;
+    mismatchBtn.disabled = false;
+    tableBtn.disabled   = false;
+
     log('All list events processed');
   }
 
-  function extractListPageEvents(year) {
-    const content  = document.querySelector('#page-content') || document.body;
+  function extractListPageEvents(year, container = null) {
+    const content  = container || document.querySelector('#page-content') || document.body;
     const allLinks = content.querySelectorAll('a[href]');
     const results  = [];
 
@@ -2852,7 +3335,7 @@
         margin-bottom: 6px;
       }
 
-      /* Home page: year section headers and fetch progress */
+      /* Home page: year section headers */
       .bb-year-header {
         font-size: 1.1em;
         font-weight: bold;
@@ -2860,11 +3343,23 @@
         padding: 3px 8px;
         background: #e8f0fb;
         border-left: 4px solid #4a90d9;
+        cursor: pointer;
+        user-select: none;
       }
-      .bb-year-header a { color: inherit; text-decoration: none; }
+      .bb-year-header a { color: inherit; text-decoration: none; cursor: pointer; }
       .bb-year-header a:hover { text-decoration: underline; }
-      #bb-fetch-progress { color: #666; font-style: italic; margin: 4px 0; }
-      #bb-fetch-timer    { color: #888; font-style: italic; margin: 0; font-size: 0.9em; }
+      .bb-year-toggle-glyph { font-style: normal; }
+
+      /* Home page: aggregated event table */
+      #bb-home-table { margin-top: 8px; }
+      .bb-event-table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+      .bb-event-table th,
+      .bb-event-table td { border: 1px solid #ccc; padding: 3px 8px; text-align: left; white-space: nowrap; }
+      .bb-event-table td:last-child { white-space: normal; }
+      .bb-event-table th { background: #e8f0fb; position: sticky;
+                           top: calc(var(--bb-header-h, 0px) + var(--bb-sticky-bar-h, 0px)); }
+      .bb-event-table a { color: inherit; }
+      .bb-event-table tr:hover { background: #f4f8ff; }
 
       /* Setlist song states */
       .bb-song-match       { color: #2a2; }
