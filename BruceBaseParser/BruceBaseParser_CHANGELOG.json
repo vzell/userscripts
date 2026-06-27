@@ -1,5 +1,22 @@
 [
     {
+        "version": "1.88",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Tags panel: added 'setlist' expected tag (any setlist image in News/Memorabilia tab); 'handwritten' and 'printed' are now detected from image filenames (/handwritten/i and /printed/i) instead of treating all setlist images as handwritten.",
+                    "Tags panel: added 'soundcheck' expected tag when the detail page content contains a 'Soundcheck:' section label.",
+                    "Tags panel: added 'livedl' expected tag when the Recording tab contains an official live download entry (detected via isLiveDLSplit). 'bootleg' is now only expected when Recording content is NOT purely a LiveDL (or when both sections exist separated by an hr).",
+                    "Tags panel: added 'storyteller' expected tag when the Storyteller tab has non-Sorry content.",
+                    "Tags panel: spurious tag detection — if a managed tag (date-based, event-type, or content-based) exists on the page but its expected condition is NOT met, the tag link is annotated with an orange ⚠️ tooltip in the YEAR page panel and a hover-tooltip span on the DETAIL page. Button label turns dark-orange when only spurious issues are present (red if any missing tags).",
+                    "New isManagedTag() and spuriousTagMsg() helpers; MANAGED_CONTENT_TAGS and SPURIOUS_TAG_REASONS constants added."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.87",
         "date": "2026-06-27",
         "sections": [

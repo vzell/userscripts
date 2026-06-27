@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.87
+// @version      1.88
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -62,6 +62,30 @@
 
   /** Lowercase English weekday names indexed 0 (Sun) – 6 (Sat). */
   const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+
+  /**
+   * Content-based tags whose presence can be verified against DETAIL page data.
+   * Tags not in this set (venue names, song abbreviations, etc.) are left unchecked.
+   */
+  const MANAGED_CONTENT_TAGS = new Set([
+    'gig', 'interview', 'nogig', 'offstage', 'onstage', 'recording', 'rehearsal', 'soundcheck',
+    'bootleg', 'livedl', 'news', 'memorabilia', 'ticket',
+    'setlist', 'handwritten', 'printed', 'storyteller',
+  ]);
+
+  /** Human-readable reasons why each managed tag might be present but spurious. */
+  const SPURIOUS_TAG_REASONS = {
+    bootleg:     'Recording tab has no bootleg content',
+    livedl:      'Recording tab has no official live download content',
+    news:        'News/Memorabilia tab is empty or unavailable',
+    memorabilia: 'News/Memorabilia tab is empty or unavailable',
+    ticket:      'No ticket images found in News/Memorabilia tab',
+    setlist:     'No setlist images found in News/Memorabilia tab',
+    handwritten: 'No handwritten setlist images found in News/Memorabilia tab',
+    printed:     'No printed setlist images found in News/Memorabilia tab',
+    soundcheck:  'No "Soundcheck:" section label found in event content',
+    storyteller: 'Storyteller tab is empty or unavailable',
+  };
 
   /** SmartTable column definitions for YEAR OVERVIEW (list) pages. */
   const LIST_SMARTTABLE_COLUMNS = [
@@ -3110,6 +3134,51 @@
     return false;
   }
 
+  /**
+   * Returns true when a tag string is one whose presence can be verified
+   * against DETAIL page data (content-based, date-based, or event-type tags).
+   * Tags outside this set (venue names, song abbreviations, etc.) are ignored.
+   * @param {string} tag
+   * @returns {boolean}
+   */
+  function isManagedTag(tag) {
+    if (MANAGED_CONTENT_TAGS.has(tag)) return true;
+    if (MONTH_NAMES.includes(tag) || DAY_NAMES.includes(tag)) return true;
+    if (/^\d{4}$/.test(tag)) return true;
+    if (/^\d{1,2}$/.test(tag) && parseInt(tag, 10) >= 1 && parseInt(tag, 10) <= 31) return true;
+    return false;
+  }
+
+  /**
+   * Builds a human-readable tooltip message for a tag that is present on the
+   * page but whose expected condition is NOT met (a "spurious" tag).
+   * @param {string}      tag
+   * @param {Set<string>} expectedTags - Result of computeExpectedTags().
+   * @returns {string}
+   */
+  function spuriousTagMsg(tag, expectedTags) {
+    if (SPURIOUS_TAG_REASONS[tag]) return `Tag "${tag}" is present but: ${SPURIOUS_TAG_REASONS[tag]}`;
+    if (/^\d{4}$/.test(tag)) {
+      const exp = [...expectedTags].find(t => /^\d{4}$/.test(t)) || '?';
+      return `Year tag "${tag}" present but event year is "${exp}"`;
+    }
+    if (MONTH_NAMES.includes(tag)) {
+      const exp = [...expectedTags].find(t => MONTH_NAMES.includes(t)) || '?';
+      return `Month tag "${tag}" present but event month is "${exp}"`;
+    }
+    if (DAY_NAMES.includes(tag)) {
+      const exp = [...expectedTags].find(t => DAY_NAMES.includes(t)) || '?';
+      return `Weekday tag "${tag}" present but event weekday is "${exp}"`;
+    }
+    if (/^\d{1,2}$/.test(tag) && parseInt(tag, 10) <= 31) {
+      const exp = [...expectedTags].find(t => /^\d+$/.test(t) && !/^\d{4}$/.test(t)) || '?';
+      return `Day tag "${tag}" present but event day is "${exp}"`;
+    }
+    const expType = [...expectedTags].find(t => KNOWN_EVENT_TYPES.has(t));
+    if (expType) return `Event-type tag "${tag}" present but event type is "${expType}"`;
+    return `Tag "${tag}" is present but its expected condition was not detected`;
+  }
+
   function computeExpectedTags(doc, tabMap, eventDate, eventType) {
     const expected = new Set();
 
@@ -3128,17 +3197,37 @@
 
     if (eventType) expected.add(eventType.toLowerCase());
 
+    // Recording tab: distinguish bootleg from LiveDL.
     const recTab = getTabEl(doc, tabMap, 'Recording');
-    if (recTab && !SORRY_RE.test(recTab.textContent.trim())) expected.add('bootleg');
+    if (recTab && !SORRY_RE.test(recTab.textContent.trim())) {
+      const liveDL = isLiveDLSplit(recTab);
+      const hasHr  = !!recTab.querySelector('hr');
+      if (liveDL)           expected.add('livedl');
+      if (!liveDL || hasHr) expected.add('bootleg');  // not purely LiveDL
+    }
 
+    // News/Memorabilia tab: news, memorabilia, ticket, setlist subtypes.
     const newsMemTab = getNewsMemTab(doc, tabMap);
     if (newsMemTab && !SORRY_RE.test(newsMemTab.textContent.trim())) {
       expected.add('news');
       if (tabMap.has('News/Memorabilia')) expected.add('memorabilia');
       const imgs = [...newsMemTab.querySelectorAll('img')];
       if (imgs.some(img => /ticket/i.test(img.src))) expected.add('ticket');
-      if (imgs.some(img => /setlist/i.test(img.src) && !/ticket/i.test(img.src))) expected.add('handwritten');
+      const setlistImgs = imgs.filter(img => /setlist/i.test(img.src) && !/ticket/i.test(img.src));
+      if (setlistImgs.length > 0) {
+        expected.add('setlist');
+        if (setlistImgs.some(img => /handwritten/i.test(img.src))) expected.add('handwritten');
+        if (setlistImgs.some(img => /printed/i.test(img.src)))     expected.add('printed');
+      }
     }
+
+    // Soundcheck section label in page content.
+    const pageContent = doc.querySelector('#page-content') || doc.body;
+    if (/\bsoundcheck\s*:/i.test(pageContent.textContent)) expected.add('soundcheck');
+
+    // Storyteller tab.
+    const storytellerTab = getTabEl(doc, tabMap, 'Storyteller');
+    if (storytellerTab && !SORRY_RE.test(storytellerTab.textContent.trim())) expected.add('storyteller');
 
     return expected;
   }
@@ -3169,12 +3258,19 @@
     const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
 
-    // Merge existing tag links with missing placeholders into one sorted list.
-    const existingItems = tagLinks.map(a => ({
-      tag: a.textContent.trim().toLowerCase(), html: a.outerHTML, missing: false,
-    }));
-    const missingItems = missingTags.map(tag => ({ tag, html: null, missing: true }));
+    // Merge existing tag links (with spurious flag) + missing placeholders → sorted.
+    const existingItems = tagLinks.map(a => {
+      const tag      = a.textContent.trim().toLowerCase();
+      const spurious = isManagedTag(tag) && !isTagPresent(tag, expectedTags);
+      return { tag, html: a.outerHTML, missing: false, spurious, tooltip: spurious ? spuriousTagMsg(tag, expectedTags) : '' };
+    });
+    const missingItems = missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' }));
     const allItems = [...existingItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
+
+    const spuriousCount = existingItems.filter(i => i.spurious).length;
+    const issueParts = [];
+    if (missingTags.length > 0)  issueParts.push(`${missingTags.length} missing`);
+    if (spuriousCount > 0)       issueParts.push(`${spuriousCount} spurious`);
 
     let html = '';
     if (missingTags.length > 0) {
@@ -3182,9 +3278,13 @@
     }
     html += '<ol class="bb-tags-list" style="margin:4px 0; padding-left:18px;">';
     for (const item of allItems) {
-      html += item.missing
-        ? `<li style="color:red; font-weight:bold">⚠️ ${esc(item.tag)}</li>`
-        : `<li>${item.html}</li>`;
+      if (item.missing) {
+        html += `<li style="color:red; font-weight:bold">⚠️ ${esc(item.tag)}</li>`;
+      } else if (item.spurious) {
+        html += `<li>${item.html} <span style="color:darkorange; font-weight:bold; cursor:help" title="${esc(item.tooltip)}">⚠️</span></li>`;
+      } else {
+        html += `<li>${item.html}</li>`;
+      }
     }
     html += '</ol>';
 
@@ -3198,8 +3298,9 @@
 
     const btn = document.createElement('button');
     btn.className = 'bb-extra-tab-btn';
-    btn.textContent = missingTags.length > 0 ? `Tags ⚠️ (${missingTags.length})` : 'Tags';
-    if (missingTags.length > 0) btn.style.color = 'red';
+    btn.textContent = issueParts.length > 0 ? `Tags ⚠️ (${issueParts.join(', ')})` : 'Tags';
+    if (missingTags.length > 0)      btn.style.color = 'red';
+    else if (spuriousCount > 0)      btn.style.color = 'darkorange';
 
     btn.addEventListener('click', () => {
       if (!btn._bbPanel) {
@@ -3227,12 +3328,16 @@
     const tagsContainer = document.querySelector('.page-tags');
     if (!tagsContainer) return;
 
-    const tagLinks    = [...tagsContainer.querySelectorAll('a[href]')];
-    const actualTags  = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const tagLinks     = [...tagsContainer.querySelectorAll('a[href]')];
+    const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
     const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
+    const spuriousLinks = tagLinks.filter(a => {
+      const tag = a.textContent.trim().toLowerCase();
+      return isManagedTag(tag) && !isTagPresent(tag, expectedTags);
+    });
 
-    if (missingTags.length === 0) return;
+    if (missingTags.length === 0 && spuriousLinks.length === 0) return;
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
@@ -3240,6 +3345,21 @@
     tagsContainer.parentNode.insertBefore(wrapper, tagsContainer);
     wrapper.appendChild(tagsContainer);
 
+    // Flag spurious tags with an orange ⚠️ icon next to the tag link.
+    for (const a of spuriousLinks) {
+      const tag     = a.textContent.trim().toLowerCase();
+      const msg     = spuriousTagMsg(tag, expectedTags);
+      const warnSpan = document.createElement('span');
+      warnSpan.className = 'bb-tag-spurious';
+      warnSpan.style.cssText = 'color:darkorange; font-weight:bold; cursor:help; margin:0 2px;';
+      warnSpan.textContent = '⚠️';
+      warnSpan.title = msg;
+      warnSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+      warnSpan.addEventListener('mouseleave', hideTooltip);
+      a.after(warnSpan);
+    }
+
+    // Append missing tags in bold red inside the tag span.
     const span = tagsContainer.querySelector('span') || tagsContainer;
     for (const tag of missingTags) {
       const missingSpan = document.createElement('span');
