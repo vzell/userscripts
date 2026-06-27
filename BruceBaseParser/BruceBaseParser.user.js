@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.91
+// @version      1.92
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -983,12 +983,14 @@
         }
       }
 
+      const labelP = document.createElement('p');
+      labelP.className = 'bb-list-label';
       if (labelHtml) {
-        const labelP = document.createElement('p');
-        labelP.className = 'bb-list-label';
         labelP.innerHTML = labelHtml;
-        div.appendChild(labelP);
+      } else {
+        labelP.textContent = el.tagName === 'BLOCKQUOTE' ? 'Recording:' : 'Show:';
       }
+      div.appendChild(labelP);
 
       const validGroups = groups.filter(g => g.join('').trim());
       if (validGroups.length > 0) {
@@ -1405,7 +1407,8 @@
             const detailVenuePart = rawVenuePartM ? rawVenuePartM[1].trim() : '';
             const match           = !!detailVenuePart && venueName === detailVenuePart;
             const anchorEl        = element.closest('p') || element.parentNode;
-            renderVenueInfo(lastScheduledDiv || anchorEl, venueHref, venueName, match, detailVenuePart);
+            const venuePrefix = eventType === 'recording' ? 'Recording session' : '';
+            renderVenueInfo(lastScheduledDiv || anchorEl, venueHref, venueName, match, detailVenuePart, venuePrefix);
           }
         } catch (e) {
           logWarn(`  Venue page fetch failed: ${e.message}`);
@@ -2674,7 +2677,7 @@
    * @param {boolean}     match          True when venueName matches DETAIL event-name venue part
    * @param {string}      detailVenuePart Uppercase venue part from normalizedDetailName
    */
-  function renderVenueInfo(afterEl, venueHref, venueName, match, detailVenuePart) {
+  function renderVenueInfo(afterEl, venueHref, venueName, match, detailVenuePart, prefix = '') {
     const isScheduled = afterEl.classList && afterEl.classList.contains('bb-scheduled');
     let container;
     if (isScheduled) {
@@ -2682,6 +2685,7 @@
     } else {
       container = document.createElement('div');
       container.className = 'bb-scheduled';
+      if (prefix) container.appendChild(document.createTextNode(prefix));
       afterEl.after(container);
     }
 

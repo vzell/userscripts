@@ -1,5 +1,18 @@
 [
     {
+        "version": "1.92",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page: recording-type events now show 'Recording session at Venue Name' in the venue info block instead of just 'at Venue Name'.",
+                    "List view (☰ List): unlabeled setlist sections now always show an explicit 'Show:' label; blockquote-based recording sections show 'Recording:'."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.91",
         "date": "2026-06-27",
         "sections": [
