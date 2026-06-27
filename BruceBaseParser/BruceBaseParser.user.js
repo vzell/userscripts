@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.85
+// @version      1.86
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -53,6 +53,15 @@
 
   /** Tab labels that carry no standalone content worth showing on the YEAR page. */
   const SKIP_TABS = new Set([]);
+
+  /** Matches the "Sorry, no …" placeholder text used in empty DETAIL page tabs. */
+  const SORRY_RE = /^Sorry,? no /i;
+
+  /** Lowercase English month names indexed 0 (Jan) – 11 (Dec). */
+  const MONTH_NAMES = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+
+  /** Lowercase English weekday names indexed 0 (Sun) – 6 (Sat). */
+  const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
 
   /** SmartTable column definitions for YEAR OVERVIEW (list) pages. */
   const LIST_SMARTTABLE_COLUMNS = [
@@ -1595,6 +1604,12 @@
     log(`  Result : ${nameMatch ? 'MATCH ✅' : isEarlyLate ? 'EARLY/LATE ⚠️' : 'MISMATCH ❌'}`);
     addDetailTitleAnnotation(detailEventType, yearNameUpper, normalizedDetailName, rawDetailName, nameMatch, isEarlyLate);
 
+    const detailTabMap = buildTabMap(document);
+    const detailDateM  = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (detailDateM) {
+      annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType);
+    }
+
     const allYearNamedAnchors = [...yearContent.querySelectorAll('a[name]')];
     const nextAnchor = allYearNamedAnchors
       .find(a => eventLink.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -3068,6 +3083,149 @@
     if (row.children.length > 0) section.appendChild(row);
   }
 
+  /**
+   * Returns the set of lowercase tag strings expected for a Brucebase event
+   * based on its date, event type, and DETAIL page tab content.
+   * @param {Document}           doc       - DETAIL page document.
+   * @param {Map<string,number>} tabMap
+   * @param {string|null}        eventDate - "YYYY-MM-DD", or null if unknown.
+   * @param {string}             eventType - "gig" | "recording" | etc.
+   * @returns {Set<string>}
+   */
+  function computeExpectedTags(doc, tabMap, eventDate, eventType) {
+    const expected = new Set();
+
+    const dm = (eventDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dm) {
+      const [, yr, mo, dd] = dm;
+      expected.add(yr);
+      expected.add(MONTH_NAMES[parseInt(mo, 10) - 1]);
+      expected.add(String(parseInt(dd, 10)));
+      const dayNum = parseInt(dd, 10);
+      if (dayNum > 0) {
+        const d = new Date(parseInt(yr, 10), parseInt(mo, 10) - 1, dayNum);
+        if (!isNaN(d.getTime())) expected.add(DAY_NAMES[d.getDay()]);
+      }
+    }
+
+    if (eventType) expected.add(eventType.toLowerCase());
+
+    const recTab = getTabEl(doc, tabMap, 'Recording');
+    if (recTab && !SORRY_RE.test(recTab.textContent.trim())) expected.add('bootleg');
+
+    const newsMemTab = getNewsMemTab(doc, tabMap);
+    if (newsMemTab && !SORRY_RE.test(newsMemTab.textContent.trim())) {
+      expected.add('news');
+      if (tabMap.has('News/Memorabilia')) expected.add('memorabilia');
+      const imgs = [...newsMemTab.querySelectorAll('img')];
+      if (imgs.some(img => /ticket/i.test(img.src))) expected.add('ticket');
+      if (imgs.some(img => /setlist/i.test(img.src) && !/ticket/i.test(img.src))) expected.add('handwritten');
+    }
+
+    return expected;
+  }
+
+  /**
+   * Appends a "Tags" button to the event's .bb-extra-tab-row on the YEAR page.
+   * The panel lists all DETAIL page tags as hyperlinks; expected-but-missing
+   * tags are shown in bold red with a ⚠️ indicator. The button label also turns
+   * red and shows the missing count when issues are found.
+   * @param {Document}           doc
+   * @param {Map<string,number>} tabMap
+   * @param {HTMLElement}        section   - .bb-section-processed element.
+   * @param {HTMLElement}        eventLink - The event <a> element on the YEAR page.
+   */
+  function addTagsButton(doc, tabMap, section, eventLink) {
+    const tagsEl = doc.querySelector('.page-tags');
+    if (!tagsEl) return;
+    const tagLinks = [...tagsEl.querySelectorAll('a[href]')];
+    if (tagLinks.length === 0) return;
+
+    const href      = eventLink.getAttribute('href') || '';
+    const typeM     = href.match(/^\/([a-z]+):/);
+    const eventType = typeM ? typeM[1] : '';
+    const dateM     = eventLink.textContent.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+    const eventDate = dateM ? dateM[1] : null;
+
+    const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType);
+    const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+
+    let html = '<ol class="bb-tags-list" style="margin:4px 0; padding-left:18px;">';
+    for (const a of tagLinks) {
+      html += `<li>${a.outerHTML}</li>`;
+    }
+    if (missingTags.length > 0) {
+      html += '<li style="margin-top:8px; list-style:none; color:red; font-weight:bold">⚠️ Missing expected tags:</li>';
+      for (const tag of missingTags) {
+        html += `<li style="color:red; font-weight:bold">⚠️ ${esc(tag)}</li>`;
+      }
+    }
+    html += '</ol>';
+
+    const content = { type: 'html', caption: 'Tags', html };
+    let row = section.querySelector('.bb-extra-tab-row');
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'bb-extra-tab-row';
+      section.appendChild(row);
+    }
+
+    const btn = document.createElement('button');
+    btn.className = 'bb-extra-tab-btn';
+    btn.textContent = missingTags.length > 0 ? `Tags ⚠️ (${missingTags.length})` : 'Tags';
+    if (missingTags.length > 0) btn.style.color = 'red';
+
+    btn.addEventListener('click', () => {
+      if (!btn._bbPanel) {
+        btn._bbPanel = buildIconPanel(content);
+        btn._bbPanel._bbIcon = btn;
+        section.appendChild(btn._bbPanel);
+      }
+      const open = btn._bbPanel.style.display !== 'none';
+      btn._bbPanel.style.display = open ? 'none' : '';
+      btn.classList.toggle('bb-icon-active', !open);
+    });
+
+    row.appendChild(btn);
+  }
+
+  /**
+   * On DETAIL pages: wraps .page-tags in a yellow warning box and appends
+   * expected-but-missing tags as bold-red spans inside the tag container.
+   * No-op when all expected tags are present.
+   * @param {Map<string,number>} tabMap
+   * @param {string}             eventDate  - "YYYY-MM-DD"
+   * @param {string}             eventType  - "gig" | "recording" | etc.
+   */
+  function annotateDetailPageTags(tabMap, eventDate, eventType) {
+    const tagsContainer = document.querySelector('.page-tags');
+    if (!tagsContainer) return;
+
+    const tagLinks    = [...tagsContainer.querySelectorAll('a[href]')];
+    const actualTags  = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType);
+    const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+
+    if (missingTags.length === 0) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bb-tags-warn-box';
+    wrapper.style.cssText = 'border:3px solid gold; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
+    tagsContainer.parentNode.insertBefore(wrapper, tagsContainer);
+    wrapper.appendChild(tagsContainer);
+
+    const span = tagsContainer.querySelector('span') || tagsContainer;
+    for (const tag of missingTags) {
+      const missingSpan = document.createElement('span');
+      missingSpan.className = 'bb-tag-missing';
+      missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
+      missingSpan.title = `Tag "${tag}" expected based on event data but not present`;
+      missingSpan.textContent = ` ⚠️${tag}`;
+      span.appendChild(missingSpan);
+    }
+  }
+
   function wireIconHandlers(eventLink, doc) {
     const section = eventLink.closest('.bb-section-processed');
     if (!section) return;
@@ -3115,6 +3273,7 @@
       }
     }
     addExtraTabButtons(doc, tabMap, section);
+    addTagsButton(doc, tabMap, section, eventLink);
   }
 
   // Returns the first <a href> on doc whose href matches INFO_SETLIST_HREF_RE

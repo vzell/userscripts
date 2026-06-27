@@ -1,5 +1,19 @@
 [
     {
+        "version": "1.86",
+        "date": "2026-06-27",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR pages: each processed event entry now has a 'Tags' button (last in the bb-extra-tab-row) that opens a panel showing all DETAIL page tags as hyperlinks. If expected tags are missing, the button label turns red with a count (e.g. 'Tags ⚠️ (2)') and missing tags appear in bold red inside the panel.",
+                    "DETAIL pages: after processing, the page-tags container is inspected for expected tags derived from the event date (year, month name, day, weekday), event type (gig/recording/etc.), and tab content (bootleg if Recording tab has content; news/memorabilia if News or News/Memorabilia tab has content; ticket if ticket images present; handwritten if setlist images present). Missing tags are highlighted in bold red text added to the tag container, which is also surrounded by a bold yellow warning box.",
+                    "New computeExpectedTags() helper centralises the expected-tag logic and is shared by both YEAR and DETAIL page annotation paths."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.85",
         "date": "2026-06-27",
         "sections": [
