@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.08
+// @version      2.09
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -219,6 +219,9 @@
     stickyBar.id = 'bb-sticky-bar';
     stickyBar.appendChild(controlsEl);
 
+    const homeFilterBar = createFilterBar('home');
+    stickyBar.appendChild(homeFilterBar.el);
+
     pageTitle.parentNode.insertBefore(stickyBar, pageTitle);
     pageTitle.style.display = 'none';
 
@@ -234,16 +237,29 @@
       document.documentElement.style.setProperty('--bb-sticky-bar-h', `${stickyBar.offsetHeight}px`);
     });
 
-    // ── SmartTable + mismatch-filter state (rebuilt after each fetch) ────────
-    let stHostEl         = null; // SmartTable host div, placed before resultsEl
-    let stBtnEl          = null; // SmartTable trigger button, moved into btnContainer
-    let currentMismatchFn = null; // set after each fetch; null while fetching
+    // ── SmartTable + filter state (rebuilt after each fetch) ─────────────────
+    let stHostEl = null; // SmartTable host div, placed before resultsEl
+    let stBtnEl  = null; // SmartTable trigger button, moved into btnContainer
 
-    let filterActive = false;
+    const homeFilterState = {
+      mismatchActive: false,
+      textMatcher:    null,
+      filterQuery:    '',
+      filterOptions:  { caseSensitive: false, useRegex: false, exclude: false, fullText: false },
+      applyFn:        null,
+    };
+
+    homeFilterBar.setOnChange((query, options) => {
+      homeFilterState.filterQuery   = query;
+      homeFilterState.filterOptions = options;
+      homeFilterState.textMatcher   = buildFilterMatcher(query, options);
+      if (homeFilterState.applyFn) homeFilterState.applyFn();
+    });
+
     filterBtn.addEventListener('click', () => {
-      if (!currentMismatchFn) return;
-      filterActive = !filterActive;
-      currentMismatchFn(filterActive);
+      if (!homeFilterState.applyFn) return;
+      homeFilterState.mismatchActive = !homeFilterState.mismatchActive;
+      homeFilterState.applyFn();
     });
 
     // ── Shared fetch logic ────────────────────────────────────────────────────
@@ -266,8 +282,10 @@
       // Tear down any SmartTable and mismatch state from the previous run.
       if (stBtnEl)  { stBtnEl.remove();  stBtnEl  = null; }
       if (stHostEl) { stHostEl.remove(); stHostEl = null; }
-      filterActive = false;
-      currentMismatchFn = null;
+      homeFilterState.mismatchActive = false;
+      homeFilterState.applyFn = null;
+      homeFilterBar.setCount(0);
+      homeFilterBar.setTotal(0);
       filterBtn.textContent = '⚡ Mismatches';
       // Disable the other fetch button while this one is running.
       fetchBtns.forEach(b => { if (b !== activeBtn) b.disabled = true; });
@@ -324,82 +342,30 @@
         if (stBtnEl) filterBtn.before(stBtnEl);
       }
 
-      // ── Mismatch filter ─────────────────────────────────────────────────────
-      if (activeBtn === overviewBtn) {
-        // List overview pages: events are <li> items with a bb-glyph next sibling.
-        const allLinks = [...resultsEl.querySelectorAll('.bb-year-wrapper a[href]')]
-          .filter(a => LIST_LINK_RE.test(a.getAttribute('href') || ''));
-        const total = allLinks.length;
-        const mismatchCount = allLinks.filter(a => {
-          const sib = a.nextElementSibling;
-          return !sib || !sib.classList.contains('bb-glyph') || !sib.textContent.includes('✅');
-        }).length;
-        filterBtn.textContent = `⚡ Mismatches (${mismatchCount})`;
-        currentMismatchFn = active => {
-          for (const wrapper of resultsEl.querySelectorAll('.bb-year-wrapper')) {
-            const header     = wrapper.previousElementSibling;
-            const hasHeader  = header && header.classList.contains('bb-year-header');
-            const secLinks   = [...wrapper.querySelectorAll('a[href]')]
-              .filter(a => LIST_LINK_RE.test(a.getAttribute('href') || ''));
-            const hasMismatch = secLinks.some(a => {
-              const sib = a.nextElementSibling;
-              return !sib || !sib.classList.contains('bb-glyph') || !sib.textContent.includes('✅');
-            });
+      // ── Mismatch + text filter ────────────────────────────────────────────────
+      const mode = activeBtn === overviewBtn ? 'list' : 'year';
+      const isMismatchFn = mode === 'list'
+        ? a => isListMismatch(a)
+        : div => isYearMismatch(div);
 
-            if (active && !hasMismatch) {
-              // Entire year section is all-green — hide h3 + wrapper.
-              if (hasHeader) header.style.display = 'none';
-              wrapper.style.display = 'none';
-            } else {
-              if (hasHeader) header.style.display = '';
-              wrapper.style.display = '';
-              // Hide individual ✅ rows within the visible section.
-              for (const a of secLinks) {
-                const sib     = a.nextElementSibling;
-                const isMatch = sib && sib.classList.contains('bb-glyph') && sib.textContent.includes('✅');
-                const row     = a.closest('li') || a.parentNode;
-                if (row) row.style.display = active && isMatch ? 'none' : '';
-              }
-            }
-          }
-          filterBtn.textContent = active
-            ? `⚡ All Events (${total})`
-            : `⚡ Mismatches (${mismatchCount})`;
-        };
-      } else {
-        // Full year pages: events are wrapped in .bb-section-processed divs.
-        const allSections    = [...resultsEl.querySelectorAll('.bb-section-processed')];
-        const mismatchCount  = allSections.filter(p =>
-          [...p.querySelectorAll('.bb-glyph')].some(g =>
-            ['❌', '⚠️', '❓'].some(ch => g.textContent.includes(ch))) ||
-          !!p.querySelector('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn, .bb-anchor-warn')
-        ).length;
-        const total = allSections.length;
-        filterBtn.textContent = `⚡ Mismatches (${mismatchCount})`;
-        currentMismatchFn = active => {
-          applyMismatchFilter(active);
-          // Also hide entire year sections that contain no mismatches.
-          for (const wrapper of resultsEl.querySelectorAll('.bb-year-wrapper')) {
-            const header    = wrapper.previousElementSibling;
-            const hasHeader = header && header.classList.contains('bb-year-header');
-            const hasMismatch = [...wrapper.querySelectorAll('.bb-section-processed')].some(p =>
-              [...p.querySelectorAll('.bb-glyph')].some(g =>
-                ['❌', '⚠️', '❓'].some(ch => g.textContent.includes(ch))) ||
-              !!p.querySelector('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn, .bb-anchor-warn')
-            );
-            if (active && !hasMismatch) {
-              if (hasHeader) header.style.display = 'none';
-              wrapper.style.display = 'none';
-            } else {
-              if (hasHeader) header.style.display = '';
-              wrapper.style.display = '';
-            }
-          }
-          filterBtn.textContent = active
-            ? `⚡ All Events (${total})`
-            : `⚡ Mismatches (${mismatchCount})`;
-        };
-      }
+      const allUnits = mode === 'list'
+        ? [...resultsEl.querySelectorAll('.bb-year-wrapper a[href]')]
+            .filter(a => LIST_LINK_RE.test(a.getAttribute('href') || ''))
+        : [...resultsEl.querySelectorAll('.bb-section-processed')];
+      const total        = allUnits.length;
+      const mismatchCount = allUnits.filter(isMismatchFn).length;
+
+      filterBtn.textContent = `⚡ Mismatches (${mismatchCount})`;
+      homeFilterBar.setTotal(total);
+
+      homeFilterState.applyFn = () => {
+        const count = applyHomeFilters(homeFilterState, resultsEl, isMismatchFn, mode);
+        homeFilterBar.setCount(count);
+        filterBtn.textContent = homeFilterState.mismatchActive
+          ? `⚡ All Events (${total})`
+          : `⚡ Mismatches (${mismatchCount})`;
+      };
+      homeFilterState.applyFn();
       homeSaveBtn.disabled = false;
     }
 
@@ -775,11 +741,23 @@
     controlsEl.id = 'bb-controls';
     controlsEl.append(btnContainer, progressEl);
 
-    setupStickyBar(content, pageTitle, controlsEl);
+    const stickyBar   = setupStickyBar(content, pageTitle, controlsEl);
+    const yearFilterBar = createFilterBar('year');
+    const preEventsEl = stickyBar.querySelector('#bb-pre-events');
+    if (preEventsEl) stickyBar.insertBefore(yearFilterBar.el, preEventsEl);
+    else stickyBar.appendChild(yearFilterBar.el);
+    document.documentElement.style.setProperty('--bb-sticky-bar-h', `${stickyBar.offsetHeight}px`);
 
     // ── Start/Stop toggle ────────────────────────────────────────────────────
     let _yearProcessing = false;
     let _yearStopRequested = false;
+
+    let yearFilterState = {
+      mismatchActive: false,
+      textMatcher:    null,
+      filterQuery:    '',
+      filterOptions:  { caseSensitive: false, useRegex: false, exclude: false, fullText: false },
+    };
 
     yearStartBtn.addEventListener('click', async () => {
       if (_yearProcessing) {
@@ -795,6 +773,8 @@
 
       // ── Restore DOM before each run to prevent duplicate annotations ───────
       // Remove artifacts inserted by the previous run.
+      clearAllHighlights(content);
+      yearFilterState.mismatchActive = false;
       document.getElementById('bb-page-original')?.remove();
       content.querySelectorAll('.bb-section-controls, .bb-section-original').forEach(el => el.remove());
       for (const sec of sections) {
@@ -849,7 +829,11 @@
         : ` ... Done — ${currentEvents.length} events processed`);
 
       setupGlobalToggle(globalBtn, content, originalHtml);
-      setupMismatchFilter(mismatchBtn, currentEvents.length);
+      yearFilterBar.setTotal(currentEvents.length);
+      const yearApplyFn = () => yearFilterBar.setCount(applyYearFilters(yearFilterState, currentEvents));
+      setupMismatchFilter(mismatchBtn, currentEvents.length, yearFilterState, yearApplyFn);
+      setupYearTextFilter(yearFilterBar, yearFilterState, yearApplyFn);
+      yearApplyFn();
       globalBtn.disabled = false;
       mismatchBtn.disabled = false;
       yearSaveBtn.disabled = false;
@@ -921,6 +905,7 @@
       document.documentElement.style.setProperty('--bb-header-h', `${h}px`);
     }
     document.documentElement.style.setProperty('--bb-sticky-bar-h', `${stickyBar.offsetHeight}px`);
+    return stickyBar;
   }
 
   // Wraps the content that follows each <hr> (up to the next <hr>) inside a
@@ -1474,13 +1459,10 @@
   // eventCount must be passed as events.length — sections.length overcounts because
   // trailing non-event sections (page navigation, footer) are also wrapped as
   // .bb-section-processed by wrapYearSections.
-  function setupMismatchFilter(btn, eventCount) {
+  function setupMismatchFilter(btn, eventCount, state = null, applyFn = null) {
     const sections = [...document.querySelectorAll('.bb-section-processed')];
     const totalEvents = eventCount;
-    const mismatchCount = sections.filter(div =>
-      [...div.querySelectorAll('.bb-glyph')].some(g => ['❌', '⚠️', '❓'].some(ch => g.textContent.includes(ch))) ||
-      !!div.querySelector('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn, .bb-anchor-warn')
-    ).length;
+    const mismatchCount = sections.filter(div => isYearMismatch(div)).length;
 
     btn.textContent = `⚡ Mismatches (${mismatchCount})`;
 
@@ -1490,18 +1472,16 @@
       btn.textContent = filterActive
         ? `⚡ All Events (${totalEvents})`
         : `⚡ Mismatches (${mismatchCount})`;
-      applyMismatchFilter(filterActive);
+      if (state) state.mismatchActive = filterActive;
+      if (applyFn) applyFn(); else applyMismatchFilter(filterActive);
     });
   }
 
   // Mismatch filter for YEAR OVERVIEW (list) pages.
   // Events are plain links in the page rather than .bb-section-processed divs,
   // so we hide/show the nearest block ancestor (li, tr, or parentNode).
-  function setupListMismatchFilter(btn, listEvents) {
-    const mismatchCount = listEvents.filter(({ element }) => {
-      const sib = element.nextElementSibling;
-      return !sib || !sib.classList.contains('bb-glyph') || !sib.textContent.includes('✅');
-    }).length;
+  function setupListMismatchFilter(btn, listEvents, state = null, applyFn = null) {
+    const mismatchCount = listEvents.filter(({ element }) => isListMismatch(element)).length;
 
     btn.textContent = `⚡ Mismatches (${mismatchCount})`;
 
@@ -1511,11 +1491,16 @@
       btn.textContent = filterActive
         ? `⚡ All Events (${listEvents.length})`
         : `⚡ Mismatches (${mismatchCount})`;
-      for (const { element } of listEvents) {
-        const sib     = element.nextElementSibling;
-        const isMatch = sib && sib.classList.contains('bb-glyph') && sib.textContent.includes('✅');
-        const row     = element.closest('li, tr') || element.parentNode;
-        if (row) row.style.display = filterActive && isMatch ? 'none' : '';
+      if (state) state.mismatchActive = filterActive;
+      if (applyFn) {
+        applyFn();
+      } else {
+        for (const { element } of listEvents) {
+          const sib     = element.nextElementSibling;
+          const isMatch = sib && sib.classList.contains('bb-glyph') && sib.textContent.includes('✅');
+          const row     = element.closest('li, tr') || element.parentNode;
+          if (row) row.style.display = filterActive && isMatch ? 'none' : '';
+        }
       }
     });
   }
@@ -1529,13 +1514,7 @@
   //   - a .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, or .bb-para-warn span
   function applyMismatchFilter(active) {
     for (const processedDiv of document.querySelectorAll('.bb-section-processed')) {
-      const hasMismatch =
-        [...processedDiv.querySelectorAll('.bb-glyph')]
-          .some(g => ['❌', '⚠️', '❓'].some(ch => g.textContent.includes(ch))) ||
-        !!processedDiv.querySelector(
-          '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn, .bb-anchor-warn'
-        );
-
+      const hasMismatch = isYearMismatch(processedDiv);
       const hide = active && !hasMismatch;
       processedDiv.style.display = hide ? 'none' : '';
 
@@ -1547,6 +1526,524 @@
       if (el && el.classList.contains('bb-section-controls')) { el.style.display = hide ? 'none' : ''; el = el.previousElementSibling; }
       if (el && el.tagName === 'HR')                          { el.style.display = hide ? 'none' : ''; }
     }
+  }
+
+  // ── Event text filter ─────────────────────────────────────────────────────
+
+  /**
+   * Returns true when a .bb-section-processed div contains any mismatch indicators.
+   * @param {HTMLElement} processedDiv
+   * @returns {boolean}
+   */
+  function isYearMismatch(processedDiv) {
+    return (
+      [...processedDiv.querySelectorAll('.bb-glyph')]
+        .some(g => ['❌', '⚠️', '❓'].some(ch => g.textContent.includes(ch))) ||
+      !!processedDiv.querySelector(
+        '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-para-warn, .bb-anchor-warn'
+      )
+    );
+  }
+
+  /**
+   * Returns true when a list-page event link has no ✅ glyph sibling.
+   * @param {HTMLElement} linkEl
+   * @returns {boolean}
+   */
+  function isListMismatch(linkEl) {
+    const sib = linkEl.nextElementSibling;
+    return !sib || !sib.classList.contains('bb-glyph') || !sib.textContent.includes('✅');
+  }
+
+  /**
+   * Compiles a text-test function from query and options.
+   * Returns null when query is empty (no filter active).
+   * @param {string} query
+   * @param {{ caseSensitive: boolean, useRegex: boolean, exclude: boolean }} options
+   * @returns {function(string): boolean | null}
+   */
+  function buildFilterMatcher(query, options) {
+    if (!query.trim()) return null;
+    let testFn;
+    if (options.useRegex) {
+      let re;
+      try {
+        re = new RegExp(query, options.caseSensitive ? '' : 'i');
+      } catch {
+        return () => false;
+      }
+      testFn = text => re.test(text);
+    } else {
+      const q = options.caseSensitive ? query : query.toLowerCase();
+      testFn = text => (options.caseSensitive ? text : text.toLowerCase()).includes(q);
+    }
+    return options.exclude ? text => !testFn(text) : testFn;
+  }
+
+  /**
+   * Builds a global RegExp for text-node walking (exec loop).
+   * Returns null for empty query or invalid regex.
+   * @param {string} query
+   * @param {{ caseSensitive: boolean, useRegex: boolean }} options
+   * @returns {RegExp | null}
+   */
+  function buildHighlightRegex(query, options) {
+    if (!query.trim()) return null;
+    try {
+      const flags = 'g' + (options.caseSensitive ? '' : 'i');
+      if (options.useRegex) return new RegExp(query, flags);
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(escaped, flags);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Highlights all occurrences of query in every text node within container.
+   * Used in Ev mode to highlight across the full .bb-section-processed div.
+   * Skips SCRIPT, STYLE, and MARK parent elements. Replaces text nodes with
+   * DocumentFragments containing <mark> elements — no innerHTML manipulation,
+   * so event listeners on other elements are fully preserved.
+   * @param {HTMLElement} container
+   * @param {string} query
+   * @param {{ caseSensitive: boolean, useRegex: boolean, exclude: boolean }} options
+   */
+  function highlightSectionContent(container, query, options) {
+    if (!query || options.exclude) return;
+    const re = buildHighlightRegex(query, options);
+    if (!re) return;
+
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const p = node.parentElement;
+        if (!p) return NodeFilter.FILTER_REJECT;
+        const tag = p.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'MARK') return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+
+    for (const textNode of nodes) {
+      const text = textNode.textContent;
+      re.lastIndex = 0;
+      if (!re.test(text)) continue;
+      re.lastIndex = 0;
+
+      const frag = document.createDocumentFragment();
+      let lastIdx = 0;
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        if (m.index > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+        const mark = document.createElement('mark');
+        mark.className = 'bb-filter-match';
+        mark.textContent = m[0];
+        frag.appendChild(mark);
+        lastIdx = re.lastIndex;
+        if (m[0].length === 0) re.lastIndex++;
+      }
+      if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+      textNode.parentNode.replaceChild(frag, textNode);
+    }
+  }
+
+  /**
+   * Removes all <mark class="bb-filter-match"> elements from container,
+   * replacing each with its text content, then normalizes adjacent text nodes.
+   * @param {HTMLElement} container
+   */
+  function clearSectionHighlights(container) {
+    for (const mark of [...container.querySelectorAll('mark.bb-filter-match')]) {
+      mark.replaceWith(mark.textContent);
+    }
+    container.normalize();
+  }
+
+  /**
+   * Highlights occurrences of query in an event link's text content only.
+   * Used in default (non-Ev) mode. Stores original innerHTML in data-bb-filter-original
+   * before the first modification; subsequent calls do not overwrite the stored original.
+   * @param {HTMLElement} linkEl
+   * @param {string} query
+   * @param {{ caseSensitive: boolean, useRegex: boolean, exclude: boolean }} options
+   */
+  function highlightEventName(linkEl, query, options) {
+    if (!query || options.exclude) return;
+    if (linkEl.dataset.bbFilterOriginal === undefined) {
+      linkEl.dataset.bbFilterOriginal = linkEl.innerHTML;
+    }
+    const re = buildHighlightRegex(query, options);
+    if (!re) return;
+
+    const text = linkEl.textContent;
+    let result = '';
+    let lastIdx = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      result += esc(text.slice(lastIdx, m.index));
+      result += `<mark class="bb-filter-match">${esc(m[0])}</mark>`;
+      lastIdx = re.lastIndex;
+      if (m[0].length === 0) re.lastIndex++;
+    }
+    result += esc(text.slice(lastIdx));
+    linkEl.innerHTML = result;
+  }
+
+  /**
+   * Restores a previously highlighted event link to its original innerHTML.
+   * @param {HTMLElement} linkEl
+   */
+  function clearEventNameHighlight(linkEl) {
+    if (linkEl.dataset.bbFilterOriginal !== undefined) {
+      linkEl.innerHTML = linkEl.dataset.bbFilterOriginal;
+      delete linkEl.dataset.bbFilterOriginal;
+    }
+  }
+
+  /**
+   * Restores all highlighted event links and clears all section text-node highlights
+   * within scope. Handles both data-attribute (non-Ev) and <mark> (Ev) modes.
+   * @param {HTMLElement} scope
+   */
+  function clearAllHighlights(scope) {
+    for (const el of [...scope.querySelectorAll('[data-bb-filter-original]')]) {
+      clearEventNameHighlight(el);
+    }
+    clearSectionHighlights(scope);
+  }
+
+  /**
+   * Applies combined mismatch + text filter to all YEAR page event sections.
+   * A section is hidden when it fails any active filter. In Ev mode, highlights
+   * all text occurrences across the full section; otherwise highlights only the
+   * event name link.
+   * @param {{ mismatchActive: boolean, textMatcher: function|null,
+   *           filterQuery: string, filterOptions: object }} state
+   * @param {Array} events - from extractYearPageEvents()
+   * @returns {number} count of visible events
+   */
+  function applyYearFilters(state, events) {
+    let visibleCount = 0;
+    for (const ev of events) {
+      const processedDiv = ev.element.closest('.bb-section-processed');
+      if (!processedDiv) continue;
+
+      // Locate type/alias siblings first so we can clear their stale highlights.
+      // Non-Ev: include event-type and alias spans adjacent to the name link.
+      // Ev: use full section text (covers everything, including type/alias/setlist).
+      const typeSpan  = ev.element.parentElement?.querySelector('.bb-event-type');
+      const aliasSpan = ev.element.parentElement?.querySelector('.bb-event-alias');
+
+      // Clear any previous highlights before re-evaluating.
+      clearEventNameHighlight(ev.element);
+      if (typeSpan)  clearEventNameHighlight(typeSpan);
+      if (aliasSpan) clearEventNameHighlight(aliasSpan);
+      clearSectionHighlights(processedDiv);
+
+      const hasMismatch  = isYearMismatch(processedDiv);
+      const eventRowText = ev.yearName
+        + (typeSpan  ? typeSpan.textContent  : '')
+        + (aliasSpan ? aliasSpan.textContent : '');
+      const textToTest   = state.filterOptions.fullText
+        ? processedDiv.textContent
+        : eventRowText;
+      const matchesText  = !state.textMatcher || state.textMatcher(textToTest);
+      const hide = (state.mismatchActive && !hasMismatch) || (state.textMatcher && !matchesText);
+
+      processedDiv.style.display = hide ? 'none' : '';
+
+      // Walk backward: [<hr>] [.bb-section-controls] [.bb-section-original] [processedDiv]
+      let el = processedDiv.previousElementSibling;
+      if (el && el.classList.contains('bb-section-original')) el = el.previousElementSibling;
+      if (el && el.classList.contains('bb-section-controls')) {
+        el.style.display = hide ? 'none' : '';
+        el = el.previousElementSibling;
+      }
+      if (el && el.tagName === 'HR') el.style.display = hide ? 'none' : '';
+
+      if (!hide && state.filterQuery && !state.filterOptions.exclude) {
+        if (state.filterOptions.fullText) {
+          highlightSectionContent(processedDiv, state.filterQuery, state.filterOptions);
+        } else {
+          highlightEventName(ev.element, state.filterQuery, state.filterOptions);
+          if (typeSpan)  highlightEventName(typeSpan,  state.filterQuery, state.filterOptions);
+          if (aliasSpan) highlightEventName(aliasSpan, state.filterQuery, state.filterOptions);
+        }
+      }
+
+      if (!hide) visibleCount++;
+    }
+    return visibleCount;
+  }
+
+  /**
+   * Wires the filter bar onChange to update the shared filter state and call applyFn.
+   * Called after processing completes, each time ▶ Start runs.
+   * @param {{ setOnChange: function }} filterBar
+   * @param {object} state
+   * @param {function(): void} applyFn
+   */
+  function setupYearTextFilter(filterBar, state, applyFn) {
+    filterBar.setOnChange((query, options) => {
+      state.filterQuery   = query;
+      state.filterOptions = options;
+      state.textMatcher   = buildFilterMatcher(query, options);
+      applyFn();
+    });
+  }
+
+  /**
+   * Applies combined mismatch + text filter to LIST page event links.
+   * Shows/hides the nearest block ancestor (li, tr, or parentNode) of each link.
+   * @param {{ mismatchActive: boolean, textMatcher: function|null,
+   *           filterQuery: string, filterOptions: object }} state
+   * @param {Array} listEvents - from extractListPageEvents()
+   * @returns {number} count of visible events
+   */
+  function applyListFilters(state, listEvents) {
+    let visibleCount = 0;
+    for (const ev of listEvents) {
+      // Locate <em> suffix first so we can clear its stale highlight.
+      const row      = ev.element.closest('li, tr') || ev.element.parentNode;
+      const listEmEl = row?.querySelector('em');
+
+      clearEventNameHighlight(ev.element);
+      if (listEmEl) clearEventNameHighlight(listEmEl);
+
+      const hasMismatch = isListMismatch(ev.element);
+      // Always include <em> text (event-type suffix), e.g. "(Rehearsal)".
+      const emText   = listEmEl ? (' ' + listEmEl.textContent) : '';
+      const textToTest  = (state.filterOptions.fullText ? ev.rawName : ev.strippedName) + emText;
+      const matchesText = !state.textMatcher || state.textMatcher(textToTest);
+      const show = (!state.mismatchActive || hasMismatch) && matchesText;
+
+      if (row) row.style.display = show ? '' : 'none';
+
+      if (show && state.filterQuery && !state.filterOptions.exclude) {
+        highlightEventName(ev.element, state.filterQuery, state.filterOptions);
+        if (listEmEl) highlightEventName(listEmEl, state.filterQuery, state.filterOptions);
+      }
+
+      if (show) visibleCount++;
+    }
+    return visibleCount;
+  }
+
+  /**
+   * Wires the filter bar onChange to update the shared list filter state and call applyFn.
+   * @param {{ setOnChange: function }} filterBar
+   * @param {object} state
+   * @param {function(): void} applyFn
+   */
+  function setupListTextFilter(filterBar, state, applyFn) {
+    filterBar.setOnChange((query, options) => {
+      state.filterQuery   = query;
+      state.filterOptions = options;
+      state.textMatcher   = buildFilterMatcher(query, options);
+      applyFn();
+    });
+  }
+
+  /**
+   * Applies combined mismatch + text filter to HOME page results.
+   * Handles both 'year' mode (.bb-section-processed divs) and 'list' mode (anchor links).
+   * Hides .bb-year-header and .bb-year-wrapper entirely when all their events are hidden.
+   * In Ev mode for year sections, highlights all text within each visible section.
+   * @param {{ mismatchActive: boolean, textMatcher: function|null,
+   *           filterQuery: string, filterOptions: object }} state
+   * @param {HTMLElement} resultsEl
+   * @param {function(HTMLElement): boolean} isMismatchFn
+   * @param {'year'|'list'} mode
+   * @returns {number} total visible event count
+   */
+  function applyHomeFilters(state, resultsEl, isMismatchFn, mode) {
+    let totalVisible = 0;
+    for (const wrapper of resultsEl.querySelectorAll('.bb-year-wrapper')) {
+      const header    = wrapper.previousElementSibling;
+      const hasHeader = header && header.classList.contains('bb-year-header');
+      let wrapperVisible = 0;
+
+      if (mode === 'list') {
+        const secLinks = [...wrapper.querySelectorAll('a[href]')]
+          .filter(a => LIST_LINK_RE.test(a.getAttribute('href') || ''));
+        for (const a of secLinks) {
+          const homeListRow = a.closest('li') || a.parentNode;
+          const homeEmEl    = homeListRow?.querySelector('em');
+
+          clearEventNameHighlight(a);
+          if (homeEmEl) clearEventNameHighlight(homeEmEl);
+
+          const hasMismatch = isMismatchFn(a);
+          const homeEmText  = homeEmEl ? (' ' + homeEmEl.textContent) : '';
+          const textToTest  = state.filterOptions.fullText
+            ? ((homeListRow || a).textContent)
+            : (a.textContent + homeEmText);
+          const matchesText = !state.textMatcher || state.textMatcher(textToTest);
+          const show = (!state.mismatchActive || hasMismatch) && matchesText;
+          if (homeListRow) homeListRow.style.display = show ? '' : 'none';
+          if (show && state.filterQuery && !state.filterOptions.exclude) {
+            highlightEventName(a, state.filterQuery, state.filterOptions);
+            if (homeEmEl) highlightEventName(homeEmEl, state.filterQuery, state.filterOptions);
+          }
+          if (show) wrapperVisible++;
+        }
+      } else {
+        const secs = [...wrapper.querySelectorAll('.bb-section-processed')];
+        for (const sec of secs) {
+          clearSectionHighlights(sec);
+          const hasMismatch = isMismatchFn(sec);
+          const textToTest  = state.filterOptions.fullText
+            ? sec.textContent
+            : (() => {
+                const link      = sec.querySelector('a[href*=":"]');
+                if (!link) return sec.textContent;
+                const parent    = link.parentElement;
+                const typeSpan  = parent?.querySelector('.bb-event-type');
+                const aliasSpan = parent?.querySelector('.bb-event-alias');
+                return link.textContent
+                  + (typeSpan  ? typeSpan.textContent  : '')
+                  + (aliasSpan ? aliasSpan.textContent : '');
+              })();
+          const matchesText = !state.textMatcher || state.textMatcher(textToTest);
+          const hide = (state.mismatchActive && !hasMismatch) || (state.textMatcher && !matchesText);
+
+          sec.style.display = hide ? 'none' : '';
+          let el = sec.previousElementSibling;
+          if (el && el.classList.contains('bb-section-original')) el = el.previousElementSibling;
+          if (el && el.classList.contains('bb-section-controls')) {
+            el.style.display = hide ? 'none' : '';
+            el = el.previousElementSibling;
+          }
+          if (el && el.tagName === 'HR') el.style.display = hide ? 'none' : '';
+
+          if (!hide && state.filterQuery && !state.filterOptions.exclude) {
+            highlightSectionContent(sec, state.filterQuery, state.filterOptions);
+          }
+          if (!hide) wrapperVisible++;
+        }
+      }
+
+      const wrapperHide = wrapperVisible === 0;
+      if (hasHeader) header.style.display = wrapperHide ? 'none' : '';
+      wrapper.style.display = wrapperHide ? 'none' : '';
+      totalVisible += wrapperVisible;
+    }
+    return totalVisible;
+  }
+
+  /**
+   * Builds and returns the filter bar element and its controller.
+   * Layout: [count] [input][×] [Cc] [Rx] [Ex] | [Ev]
+   * The bar is inserted inside #bb-sticky-bar after #bb-controls.
+   * @param {'year'|'list'|'home'} pageType
+   * @returns {{ el: HTMLElement, setTotal: function(number): void,
+   *             setCount: function(number): void,
+   *             setOnChange: function(function): void }}
+   */
+  function createFilterBar(pageType) {
+    let _total = 0;
+    let _onChangeFn = null;
+
+    const bar = document.createElement('div');
+    bar.id = 'bb-filter-bar';
+
+    const countEl = document.createElement('span');
+    countEl.id    = 'bb-filter-count';
+    countEl.title = 'Visible events / total events on this page';
+    countEl.textContent = '0 / 0 events';
+
+    const inputWrap = document.createElement('div');
+    inputWrap.id = 'bb-filter-input-wrap';
+
+    const filterInput = document.createElement('input');
+    filterInput.id          = 'bb-filter-input';
+    filterInput.type        = 'text';
+    filterInput.placeholder = 'Filter events…';
+
+    const clearBtn = document.createElement('button');
+    clearBtn.id          = 'bb-filter-clear';
+    clearBtn.type        = 'button';
+    clearBtn.title       = 'Clear filter';
+    clearBtn.textContent = '×';
+    inputWrap.append(filterInput, clearBtn);
+
+    const makeCheckbox = (id, label, title) => {
+      const lbl = document.createElement('label');
+      lbl.className = 'bb-filter-cb-label';
+      lbl.title     = title;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.id   = id;
+      lbl.append(cb, ' ' + label);
+      return { lbl, cb };
+    };
+
+    const { lbl: ccLbl, cb: ccCb } = makeCheckbox('bb-filter-cc', 'Cc', 'Case-sensitive matching');
+    const { lbl: rxLbl, cb: rxCb } = makeCheckbox('bb-filter-rx', 'Rx', 'Treat filter input as a regular expression');
+    const { lbl: exLbl, cb: exCb } = makeCheckbox('bb-filter-ex', 'Ex', 'Exclude matching events (show non-matches); highlighting is disabled in this mode');
+    const { lbl: evLbl, cb: evCb } = makeCheckbox('bb-filter-ev', 'Ev', 'Match against full event content (name + setlist + button titles) and highlight all occurrences');
+
+    const sep = document.createElement('span');
+    sep.className   = 'bb-filter-sep';
+    sep.textContent = '|';
+    sep.setAttribute('aria-hidden', 'true');
+
+    bar.append(countEl, inputWrap, ccLbl, rxLbl, exLbl, sep, evLbl);
+
+    const getOptions = () => ({
+      caseSensitive: ccCb.checked,
+      useRegex:      rxCb.checked,
+      exclude:       exCb.checked,
+      fullText:      evCb.checked,
+    });
+
+    const fireChange = () => {
+      if (_onChangeFn) _onChangeFn(filterInput.value, getOptions());
+    };
+
+    filterInput.addEventListener('input', () => {
+      clearBtn.classList.toggle('visible', filterInput.value !== '');
+      fireChange();
+    });
+
+    filterInput.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (filterInput.value !== '') {
+        filterInput.value = '';
+        clearBtn.classList.remove('visible');
+        fireChange();
+      } else {
+        filterInput.blur();
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      filterInput.value = '';
+      clearBtn.classList.remove('visible');
+      fireChange();
+    });
+
+    [ccCb, rxCb, exCb, evCb].forEach(cb => cb.addEventListener('change', fireChange));
+
+    return {
+      el: bar,
+      setTotal(n) {
+        _total = n;
+        countEl.textContent = `${n} / ${n} events`;
+      },
+      setCount(n) {
+        countEl.textContent = `${n} / ${_total} events`;
+      },
+      setOnChange(fn) {
+        _onChangeFn = fn;
+      },
+    };
   }
 
   // Wraps the processed td children and an original snapshot in show/hide divs,
@@ -2720,6 +3217,9 @@
     stickyBar.id = 'bb-sticky-bar';
     stickyBar.appendChild(controlsEl);
 
+    const listFilterBar = createFilterBar('list');
+    stickyBar.appendChild(listFilterBar.el);
+
     if (pageTitle && pageTitle.parentNode) {
       pageTitle.parentNode.insertBefore(stickyBar, pageTitle);
       pageTitle.style.display = 'none';
@@ -2779,7 +3279,18 @@
 
     // ── Wire up buttons ───────────────────────────────────────────────────────
     setupGlobalToggle(globalBtn, content, originalHtml);
-    setupListMismatchFilter(mismatchBtn, listEvents);
+
+    const listFilterState = {
+      mismatchActive: false,
+      textMatcher:    null,
+      filterQuery:    '',
+      filterOptions:  { caseSensitive: false, useRegex: false, exclude: false, fullText: false },
+    };
+    const listApplyFn = () => listFilterBar.setCount(applyListFilters(listFilterState, listEvents));
+    setupListMismatchFilter(mismatchBtn, listEvents, listFilterState, listApplyFn);
+    setupListTextFilter(listFilterBar, listFilterState, listApplyFn);
+    listFilterBar.setTotal(listEvents.length);
+    listApplyFn();
 
     globalBtn.disabled   = false;
     mismatchBtn.disabled = false;
@@ -5097,6 +5608,18 @@
       #bb-lightbox-viewer { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.96); display: flex; align-items: center; justify-content: center; }
       #bb-lightbox-viewer img { max-width: 96vw; max-height: 96vh; object-fit: contain; }
       #bb-lightbox-viewer-close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: #eee; font-size: 1.6em; cursor: pointer; z-index: 1; }
+
+      /* ── Filter bar ────────────────────────────────────────────────────────── */
+      #bb-filter-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 3px 0 2px; font-size: 0.88em; border-top: 1px solid #e0e0e0; margin-top: 3px; }
+      #bb-filter-count { font-family: monospace; font-size: 1.05em; font-weight: bold; color: #444; white-space: nowrap; min-width: 7em; cursor: default; }
+      #bb-filter-input-wrap { display: inline-flex; align-items: center; border: 1px solid #bbb; border-radius: 4px; background: #fff; padding: 3px 7px; }
+      #bb-filter-input { border: none; outline: none; font-size: 1em; font-family: monospace; width: 22em; padding: 1px 2px; background: transparent; }
+      #bb-filter-clear { background: none; border: none; cursor: pointer; font-size: 1em; color: #999; padding: 0 2px; line-height: 1; display: none; }
+      #bb-filter-clear.visible { display: inline; }
+      .bb-filter-cb-label { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; font-size: 0.88em; color: #333; user-select: none; }
+      .bb-filter-cb-label input[type="checkbox"] { margin: 0; cursor: pointer; }
+      .bb-filter-sep { color: #bbb; font-size: 1.1em; padding: 0 2px; user-select: none; }
+      mark.bb-filter-match { background: #ffe066; color: inherit; border-radius: 2px; padding: 0 1px; }
     `);
   }
 

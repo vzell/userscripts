@@ -1,5 +1,31 @@
 [
     {
+        "version": "2.09",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Add event text filter bar on YEAR, LIST, and HOME pages (rendered below #bb-controls in the sticky bar).",
+                    "Filter bar layout: [count] [input field ×] [Cc] [Rx] [Ex] | [Ev] — all checkboxes have tooltips.",
+                    "Cc: case-sensitive matching; Rx: RegExp mode (invalid regex silently matches nothing); Ex: exclude mode (show non-matches, highlighting disabled); Ev: full-event-content search.",
+                    "Escape key in focused input: first press clears query, second press blurs the field.",
+                    "In Ev mode, all occurrences across the full .bb-section-processed div are highlighted (event name, setlist, button labels) using text-node walking — no innerHTML manipulation, event listeners preserved.",
+                    "In default mode only the event name link is highlighted; additionally highlights .bb-event-type and .bb-event-alias sibling spans when matched.",
+                    "On LIST pages the <em> event-type suffix (e.g. '(Rehearsal)') is included in filter matching and highlighted when matched.",
+                    "Text filter and mismatch toggle are fully composable — single DOM pass, event visible only when it passes both filters.",
+                    "Text filter query and options are preserved across YEAR page re-runs (▶ Start); mismatch toggle state resets on each run.",
+                    "Text filter query is preserved across HOME page re-fetches; mismatch state resets on each fetch.",
+                    "Non-Ev filter matching on YEAR/HOME pages includes .bb-event-type and .bb-event-alias sibling spans (searching 'rehearsal' or an alias name works without Ev mode); Ev mode uses full processedDiv.textContent.",
+                    "Filter count display: larger bold font, tooltip 'Visible events / total events on this page'; filter input wrap enlarged (padding 3px 7px, width 22em).",
+                    "Extracted shared predicates isYearMismatch() and isListMismatch(); setupMismatchFilter() and setupListMismatchFilter() accept optional state/applyFn params for composable filtering.",
+                    "setupStickyBar() now returns the stickyBar element.",
+                    "Added doc/FILTERING.md architecture reference; added entry to CLAUDE.md quick reference table."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.08",
         "date": "2026-06-29",
         "sections": [

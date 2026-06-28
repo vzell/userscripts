@@ -30,6 +30,7 @@ should be noted:
 | Save / Load cache system | [CACHE.md](CACHE.md) |
 | SmartTable integration | [SMARTTABLE.md](SMARTTABLE.md) |
 | Shared utilities and CSS | [UTILITIES.md](UTILITIES.md) |
+| Event text filter bar | [FILTERING.md](FILTERING.md) |
 
 ---
 
