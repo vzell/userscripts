@@ -1,0 +1,161 @@
+# SETLIST.md — Setlist Parsing, Diff, and Rendering
+
+## Data types
+
+```
+Section = {
+  label:           string,        // 'show' | 'recording' | 'Soundcheck' | custom
+  songs:           string[],      // cleaned song names (compareKeys)
+  rawSongs:        string[],      // original text before cleanSongName
+  sourceEl:        Element,       // <p> or <blockquote> on YEAR page
+  songUrls?:       (string|null)[], // /song:… href per song (detail only)
+  paragraphBased?: boolean,       // true when songs came from bare <p> (old pages)
+  hasExplicitLabel?: boolean,     // true when label set by <p><strong>…</strong></p>
+  detailLabel?:    string | null | false  // sentinel for label mismatch rendering
+}
+
+DiffItem = {
+  type:         'match' | 'year-only' | 'detail-only' | 'char-diff',
+  yearSong?:    string,   // cleaned YEAR song name
+  detailSong?:  string,   // cleaned DETAIL song name
+  rawYearSong?: string,   // original YEAR page text (before cleanSongName)
+  paragraphBased?: boolean,
+  detailSongUrl?:  string | null  // /song:… href from DETAIL page
+}
+```
+
+---
+
+## `parseYearSetlist(setlistEls)` — YEAR page setlist
+
+Iterates `setlistEls` (`<p>` and `<blockquote>` elements):
+
+- `<blockquote>` → `label = 'recording'`; reads inner `<p>` text.
+- `<p>` starting with `Label:` → `label = m[1].trim()` (original case preserved);
+  label must not end with a digit (to avoid `"3:07"` being parsed as a label).
+- Plain `<p>` → `label = 'show'`.
+- `<sup><em>` footnote nodes are excluded via `textWithoutSup`.
+- Songs are split on ` / `, then filtered through `songCompareKey`:
+  - `cleanSongName(raw)` strips any `(…)` with a lowercase letter.
+  - If the clean result still has lowercase (e.g. `, and/or`), the alternative
+    form `"SONG A, SONG B, and/or SONG C"` is normalised to `"SONG A - SONG B - SONG C"`.
+  - Entries whose compareKey contains a run of 2+ lowercase chars are rejected
+    (prose lines) — isolated `"c"` in names like `"McGRATH"` is acceptable.
+
+---
+
+## `parseDetailSetlist(doc)` — DETAIL page setlist
+
+Reads `getSetlistContainer(doc)` (three-level fallback: `#wiki-tab-0-1 td` →
+`#wiki-tab-0-1` → `#page-content`).
+
+**Three layouts handled:**
+
+**(a) Standard** — `<p><strong>Label</strong></p>` sets section label;
+`<ol>`/`<ul>` produce songs from `<a href="/song:…">` text. Medleys (multiple
+links in one `<li>`) are joined with ` - ` and get `url = null`.
+
+**(b) Extended label** — `<p>` with `<strong>` and additional `<span>` children
+(e.g. `"Pre-show (solo acoustic)"`) — full text used as label.
+
+**(c) Paragraph-based** (old pages, e.g. 1974) — songs in bare
+`<p><a href="/song:…">NAME</a></p>` elements, accumulated via `flushPending()`.
+Sections carry `paragraphBased: true`.
+
+**(d) Nested fallback** — if no songs from direct children, widens to
+`td.querySelectorAll('ol, ul')`.
+
+Each section carries `hasExplicitLabel: boolean` (reset to `false` after each
+push so a header does not propagate to the next list) and
+`songUrls: (string|null)[]`.
+
+---
+
+## `cleanSongName(text)`
+
+Strips any `(…)` parenthetical whose content contains at least one lowercase
+letter:
+- `(with James Maddock)`, `(x3)`, `(parts)`, `(acoustic)` → stripped
+- `(41 SHOTS)`, `(COME OUT TONIGHT)`, `(BADLANDS)` → preserved (all-caps)
+
+Qualifiers stripped by `cleanSongName` are not lost: `rawSongs` in each
+`Section` carries the original text. When rendering a `match`, the portion
+after the clean name (e.g. ` (parts)`, ` (with Willie Nile)`) is appended
+as plain unstyled text outside the coloured span.
+
+---
+
+## `lcsDiff(yearSongs, detailSongs)`
+
+Standard O(mn) LCS producing `match` / `year-only` / `detail-only` items.
+
+## `mergeCharDiffs(items)`
+
+Adjacent `year-only` + `detail-only` pairs are merged into `char-diff` when
+the Levenshtein distance is small relative to length (roughly ≤ 30% edit
+distance). Uses `editDistance(a, b)` (standard O(mn) Levenshtein).
+
+---
+
+## Section label sentinel values (`detailLabel`)
+
+Set on each `yearSection` before rendering:
+
+| Value | Meaning |
+|---|---|
+| `string` | Positionally-matched DETAIL section label (original case) |
+| `null` | YEAR section has no counterpart in the DETAIL sections array |
+| `false` | DETAIL exists but ALL sections have `hasExplicitLabel: false` AND YEAR has at least one non-show/non-recording section |
+
+---
+
+## Setlist colour coding
+
+### On the YEAR page (`renderYearSetlist` / `renderSetlistElement`)
+
+| CSS class | Meaning | Visual |
+|---|---|---|
+| `.bb-song-match` | Same in both — on `<a>` if DETAIL has `/song:` URL, else `<span>` | Green text; link underline on hover |
+| `.bb-song-year-only` | In YEAR, not DETAIL | Light-blue background |
+| `.bb-song-detail-only` | In DETAIL, not YEAR (inserted) | Yellow background |
+| `.bb-song-char-diff` | Similar but slightly different | Char-level red/green |
+| `.bb-char-match` | Matching char within char-diff | Green |
+| `.bb-char-diff` | Differing char | Red bold |
+| `.bb-para-warn` | Song in `<p>` format (old page) or section label issue | ⚠️ cursor:help |
+| `.bb-section-label` | Non-show, non-recording section label prefix | Spans inserted by `renderSetlistElement` |
+| `.bb-section-label-warn` | Section label with mismatch warning | Combined with `.bb-para-warn` |
+| `.bb-anchor-warn` | Anchor/date/year mismatch | ⚠️ cursor:help |
+| `.bb-sep` | Song separator rendered as ` / ` | `.bb-sep` class; used by list-view builder to split songs |
+
+### On the DETAIL page
+
+Same colour classes applied to `<li>` / `<p>` / `<a>` elements:
+- `match` → `.bb-song-match` on each `<a href="/song:">` (or the `<li>` itself).
+- `detail-only` → `.bb-song-detail-only` on the existing element.
+- `char-diff` → `.bb-song-char-diff` + `buildCharDiffHtml` replaces `<a>` innerHTML.
+- `year-only` → new `<li>` or `<p>` inserted with `.bb-song-year-only`.
+
+---
+
+## Song number rendering (flat view)
+
+`renderSetlistElement` prepends a song number before each song:
+- Clickable `<a href="/song:…" class="bb-song-num" data-sn="…">N.</a>` when a
+  song URL is known (from `item.detailSongUrl`).
+- Plain `<span class="bb-song-num-plain">N.</span>` when no song URL exists.
+
+Clicking a `bb-song-num` link calls
+`fetchAndToggleSongTabRow(songHref, songName, section, numLink)`:
+- Fetches the `/song:…` page.
+- Builds a `<div class="bb-song-tab-row">` with buttons for each non-empty tab
+  on the song page (using the same `buildIconPanel` infrastructure).
+- Toggles the row open/closed on repeated clicks; the `numLink` gains/loses
+  `.bb-icon-active`.
+
+---
+
+## Footnote preservation
+
+`<sup>` nodes (e.g. "Setlist incomplete.") are cloned out before any
+`innerHTML` replacement, then re-appended after a `<br>` at the end of the
+rendered element.

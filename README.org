@@ -1,3 +1,9 @@
+* npm
+
+#+begin_src bash
+cd ~/git/springsteen-site-parser ; npm run watch
+#+end_example
+
 * BruceBase parser
 ** plan
 
@@ -1969,7 +1975,7 @@ and make them toggle buttons prepended with the glyphs "▶ Start" and "⏹ Stop
 
 On YEAR pages the button order should be "Start", "Save", "Load", "Original Page", "Mismatches" and then "Table View" (which also needs a proper tooltip)
 
-** summary
+** TODO summary
 
 #+begin_example
  What works after Load
@@ -2012,9 +2018,176 @@ should succeed when the actual event date falls in the "1949-64" range
 
 ** TODO retail
 
-add retail support
+If there is a "Retail" icon
 
-http://brucebase.wikidot.com/gig:1973-05-01-ahmanson-theatre-los-angeles-ca
+#+begin_example
+<img src="http://brucebase.wdfiles.com/local--files/content:files/00Retail-32.png" title="Retail" alt="00Retail-32.png" class="image">
+#+end_example
+
+present on an event on a YEAR page e.g http://brucebase.wikidot.com/2008#200308
+make this icon also clickable, like the other ones in the event icon row.
+
+When clicked
+
+1.)
+
+parse the text content from the "Recording" tabe of the DETAIL page e.g http://brucebase.wikidot.com/gig:2008-03-20-conseco-fieldhouse-indianapolis-in and look for 
+a paragraph which has a retail reference '"<a href="/retail:"' in it, e.g.
+
+#+begin_example
+<p>On 15th July 2008 video and audio of "4th Of July, Asbury Park (Sandy)" is officially released on the <em><a href="/retail:magic-tour-highlights">Magic Tour Highlights</a></em> EP, available for download from iTunes and other online stores (proceeds from the sales supported the Danny Federici Melanoma Fund).</p>
+#+end_example
+
+2.)
+
+show the corresponding paragraph plus the content from the RETAIL page except th thwo containers '<ul class="yui-nav">' and '<div class="yui-content">' like the other clickable icons do
+
+3.)
+
+add a warning icon to the "Retail" icon if the retail reference doesn't exist
+
+** parse retail
+
+1.)
+
+load and parse http://brucebase.wikidot.com/retail:magic-tour-highlights
+
+currently the following @debug/RENDERED-RETAIL.html is rendered when clicking the "Retail" icon.
+
+The clickable tab structures below the h1 header "Release" and "Additional Information" from the RETAIL page
+are missing from the currentl rendered content
+
+2.)
+
+Remove the following part when rendering the content when clicking the "Retail" icon
+
+#+begin_example
+<div style="text-align: center;">
+<p><a href="/content:disclaimer">Disclaimer</a> | <span style="white-space: pre-wrap;">©</span> 1996 - 2026 | <a target="_blank" href="mailto:brucebase.wiki@gmail.com">Brucebase</a></p>
+<div style="text-align: center;"><a href="https://www.facebook.com/brucebase" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_facebook.png" title="Follow us on Facebook" alt="icon_facebook.png" class="image"></a> <a href="http://www.twitter.com/brucebasewiki" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_twitterx.png" title="Follow us on Twitter" alt="icon_twitterx.png" class="image"></a> <a href="https://www.instagram.com/brucebasewiki" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_instagram.png" title="Follow us on Instagram" alt="icon_instagram.png" class="image"></a> <a href="http://www.youtube.com/brucebasewiki" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_youtube.png" title="Check us out on Youtube" alt="icon_youtube.png" class="image"></a></div>
+</div>
+#+end_example
+
+** liveDL
+
+when clicking the "LiveDL" icon the rendered content should never show paragraphs which a have a reference to a RETAIL page '"<a href="/retail:"'
+as this info is now shown under the "Retail" icon
+
+** add place tabs
+
+1.)
+
+For each event on the YEAR page e.g http://brucebase.wikidot.com/2008 add a new button bar '<div class="bb-venue-tab-row">' after the current '<div class="bb-extra-tab-row">' one
+(maybe renaming the "bb-extra-tab-row" one to "bb-event-tab-row")
+
+Each button should render the corresponding tab content from the referenced VENUE page (like what the buttons in
+"bb-extra-tab-row" do for the EVENT DETAIL page
+e.g. http://brucebase.wikidot.com/gig:2008-03-06-blue-cross-arena-rochester-ny), by first following the EVENT DETAIL
+page and there via the "Venue" link the VENUE page, so e.g. the tabs for
+http://brucebase.wikidot.com/venue:blue-cross-arena-rochester-ny namely "Performances", "Cancelled", "Gallery" would get
+a corresponding button
+
+2.)
+
+Additionally add again a "Tags" button at the end of the new button row by rendering the '<div class="page-tags">'
+values (like in the case of the current '<div class="bb-extra-tab-row">') with consistency checks:
+
+The tag values should at least have an entry for
+
+- <lower case char> - a lower case char which maps to the first character of the place name, so "b" for the place "Blue Cross Arena At The War Memorial, Rochester, NY"
+- venue - because each VENUE page should be tagged as "venue"
+
+** prepend each button bar with a descriptive short text and align the start of the actual button in each line below each other
+
+Remove the "green-tinted" from the Venue tab row, instead prepend each button bar with a descriptive short text and align
+the start of the actual button in each line below each other
+
+** add song button bar
+
+when in the "List"-view by pressing the button '<button class="bb-toggle-btn bb-list-toggle"' for a specific event on the YEAR pages, implement the following:
+
+1.)
+
+make each number in the ordered list '<ol class="bb-list-view">' hyperlinked to the corresponding SONG page e.g.
+
+#+begin_example
+<li><a href="/song:night" class="bb-song-match">NIGHT</a></li>
+#+end_example
+
+but when clicking the number, instead of rendering the SONG page, follow to the SONG page and add a new button bar '<div class="bb-song-tab-row">' after the current '<div class="bb-venue-tab-row">'
+on the YEAR page of an event by again rendering each tab on the SONG page to a button and when clicked show the tab content
+
+2.)
+
+Additionally add again a "Tags" button at the end of the new button row by rendering the '<div class="page-tags">'
+values with consistency checks
+
+- <lower case char> - a lower case char which maps to the first character of the song name, so "n" for the song "Night"
+- lyricsheet - when lyricsheets images are found in the "Gallery" tab
+- song - because each SONG page should be tagged as "song"
+
+3.)
+
+when clicking a second/third/etc. song hyperlinked number add again an additional button bar per song, the descriptive text before each song button bar could be the song name
+
+** render the same small hyperlinked number also in the initial flat song view
+
+render the same small hyperlinked number also in the initial flat song view
+
+#+begin_example
+<span class="bb-song-num-plain">1.</span>
+#+end_example
+
+also in the initial flat " / " separated song view before each song name
+
+** fix small hyperlinked number
+
+after the change in v2.02, now when switching to the list view, I get two numbers rendered before each song
+
+#+begin_example
+<li><a href="/song:night" class="bb-song-num bb-song-loaded" title="1. — click to show/hide">1.</a><a href="/song:night" class="bb-song-num" data-sn="NIGHT">1.</a><a href="/song:night" class="bb-song-match">NIGHT</a></li>
+#+end_example
+
+
+** TODO fix button placement per event when there is additional info
+
+http://brucebase.wikidot.com/gig:2008-02-28-civic-center-hartford-ct
+
+#+begin_example
+<table style="width: 100%">
+<tbody><tr>
+<td style="border: 0px solid silver; background-color: #F0F0F5;">
+<div style="text-align: center;">
+<h2 id="toc0"><span><span style="color: #030390">Start of the 3rd leg of the "Magic" tour - U.S.</span></span></h2>
+</div>
+</td>
+</tr>
+</tbody></table>
+#+end_example
+
+** TODO DETAIL pages original view should reset all mismatch warning markers
+
+** TODO all pages, VENUE, RETAIL etc should get the "Tag"-value mismatch treating
+** TODO collapse section from tabs and remove retail banner icons
+
+** TODO empty "News" panel on
+
+http://brucebase.wikidot.com/2008#020308
+
+#+begin_example
+<div class="bb-icon-panel" style=""><div class="bb-icon-panel-header"><span>News</span><button class="bb-icon-panel-close">✕</button></div><div class="bb-icon-panel-body"><div class="list-pages-box">    
+</div></div></div>
+#+end_example
+
+http://brucebase.wikidot.com/gig:2008-03-02-bell-centre-montreal-qc
+
+** remove the '<div class="list-pages-box">' from the '<div id="bb-pre-events">' container
+
+remove the '<div class="list-pages-box">' from the '<div id="bb-pre-events">' container
+
+** plan: filter events
+
+Implement a complete event filtering architecture with a supporting filter container rendered below the '<div id="bb-controls">'
 
 
 * question
