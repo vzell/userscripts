@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.06
+// @version      2.07
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -869,7 +869,7 @@
   function hideJumpToRecentBox(content) {
     for (const box of content.querySelectorAll('.list-pages-box')) {
       if (box.textContent.includes('most recent')) {
-        box.style.display = 'none';
+        box.remove();
         break;
       }
     }
@@ -1579,6 +1579,9 @@
       processedDiv.style.display = showingOriginal ? 'none'  : 'block';
       originalDiv.style.display  = showingOriginal ? 'block' : 'none';
       btn.textContent = showingOriginal ? '⇄ Processed Page' : '⇄ Original Page';
+      // Hide all script-added annotation artefacts outside the setlist tab when
+      // showing original, restore them when switching back to processed view.
+      document.body.classList.toggle('bb-original-view', showingOriginal);
     });
 
     // Prepend to existing #bb-btn-container created in runDetailPage.
@@ -1598,11 +1601,13 @@
       '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-section-label-warn'
     );
     if (!nameMatch || hasSetlistMismatch) {
-      em.append(' ⚠️');
+      const warnSpan = document.createElement('span');
+      warnSpan.className = 'bb-setlist-tab-ann';
+      warnSpan.textContent = ' ⚠️';
+      em.appendChild(warnSpan);
     } else {
-      // Inline style overrides wikidot's tab CSS specificity.
-      em.style.color      = '#2a2';
-      em.style.fontWeight = 'bold';
+      // Class-based so the toggle can revert it without touching inline styles.
+      em.classList.add('bb-setlist-tab-match');
     }
   }
 
@@ -5024,6 +5029,21 @@
       .bb-section-label { color: #888; font-style: italic; }
       .bb-para-warn    { cursor: help; }
       .bb-anchor-warn  { cursor: help; }
+
+      /* Setlist tab label decoration (DETAIL page) */
+      .bb-setlist-tab-match { color: #2a2; font-weight: bold; }
+
+      /* "Original Page" mode on DETAIL pages — hide all script annotations */
+      .bb-original-view .bb-glyph,
+      .bb-original-view .bb-anchor-match,
+      .bb-original-view .bb-anchor-warn,
+      .bb-original-view .bb-venue-warn,
+      .bb-original-view .bb-tag-missing,
+      .bb-original-view .bb-tag-spurious,
+      .bb-original-view .bb-icon-sorry,
+      .bb-original-view .bb-setlist-tab-ann { display: none !important; }
+      .bb-original-view .bb-tags-warn-box   { border: none !important; background: none !important; padding: 0 !important; }
+      .bb-original-view .bb-setlist-tab-match { color: inherit !important; font-weight: inherit !important; }
 
       /* Year-only <li> rows inserted on detail pages */
       li.bb-song-year-only {

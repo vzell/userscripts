@@ -1,5 +1,18 @@
 [
     {
+        "version": "2.07",
+        "date": "2026-06-28",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: the 'Jump to most recent' .list-pages-box is now removed (not just hidden) from #page-content before it is moved into #bb-pre-events, so it no longer appears in the sticky header band.",
+                    "DETAIL page toggle: clicking '⇄ Original Page' now also hides all script-added annotation artefacts outside the setlist tab — .bb-glyph, .bb-anchor-match, .bb-anchor-warn, .bb-venue-warn, .bb-tag-missing, .bb-tag-spurious, .bb-icon-sorry, and the Setlist tab label decoration (.bb-setlist-tab-ann / .bb-setlist-tab-match). Implemented via a bb-original-view body class toggled in insertDetailToggle; annotateSetlistTab now uses a <span class=\"bb-setlist-tab-ann\"> wrapper for the warning glyph and bb-setlist-tab-match CSS class (instead of inline style) for the green match state so both can be cleanly reverted by CSS."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.06",
         "date": "2026-06-28",
         "sections": [
