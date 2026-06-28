@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.09
+// @version      2.10
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -776,7 +776,7 @@
       clearAllHighlights(content);
       yearFilterState.mismatchActive = false;
       document.getElementById('bb-page-original')?.remove();
-      content.querySelectorAll('.bb-section-controls, .bb-section-original').forEach(el => el.remove());
+      content.querySelectorAll('.bb-section-controls, .bb-section-original, .bb-section-header').forEach(el => el.remove());
       for (const sec of sections) {
         sec.processedDiv.innerHTML = sec.sectionOriginalHtml;
         sec.toggleInserted = false;
@@ -1293,6 +1293,21 @@
     originalDiv.style.display = 'none';
     processedDiv.parentNode.insertBefore(originalDiv, processedDiv);
 
+    // If the section opens with a banner/header table (e.g. tour-leg announcement),
+    // hoist it out of processedDiv and place it between <hr> and the toggle controls
+    // so the visual order is: hr → table → controls → content.  Strip the same table
+    // from the original-view snapshot to avoid rendering it twice when toggled.
+    let controlAnchor = hr;
+    if (processedDiv.firstElementChild?.tagName === 'TABLE') {
+      const headerTable = processedDiv.firstElementChild;
+      headerTable.classList.add('bb-section-header');
+      processedDiv.removeChild(headerTable);
+      hr.after(headerTable);
+      controlAnchor = headerTable;
+      const origLeading = originalDiv.firstElementChild;
+      if (origLeading?.tagName === 'TABLE') origLeading.remove();
+    }
+
     let listDiv    = null;   // built lazily inside processedDiv
     let setlistEls = null;   // the <p>/<blockquote> elements replaced in list mode
     let viewState  = 'flat';
@@ -1344,7 +1359,7 @@
     const controls = document.createElement('div');
     controls.className = 'bb-section-controls';
     controls.append(origBtn, listBtn);
-    hr.after(controls);
+    controlAnchor.after(controls);
   }
 
   // Builds an ordered-list view from an array of setlist <p>/<blockquote> elements.
@@ -1518,12 +1533,13 @@
       const hide = active && !hasMismatch;
       processedDiv.style.display = hide ? 'none' : '';
 
-      // Walk backward: [<hr>] [.bb-section-controls] [.bb-section-original] [processedDiv]
+      // Walk backward: [<hr>] [.bb-section-header?] [.bb-section-controls] [.bb-section-original] [processedDiv]
       // bb-section-original has its own independent display state — skip without toggling.
       // bb-section-list lives inside processedDiv and is hidden with it automatically.
       let el = processedDiv.previousElementSibling;
       if (el && el.classList.contains('bb-section-original')) el = el.previousElementSibling;
       if (el && el.classList.contains('bb-section-controls')) { el.style.display = hide ? 'none' : ''; el = el.previousElementSibling; }
+      if (el && el.classList.contains('bb-section-header'))   { el.style.display = hide ? 'none' : ''; el = el.previousElementSibling; }
       if (el && el.tagName === 'HR')                          { el.style.display = hide ? 'none' : ''; }
     }
   }
@@ -1756,13 +1772,11 @@
 
       processedDiv.style.display = hide ? 'none' : '';
 
-      // Walk backward: [<hr>] [.bb-section-controls] [.bb-section-original] [processedDiv]
+      // Walk backward: [<hr>] [.bb-section-header?] [.bb-section-controls] [.bb-section-original] [processedDiv]
       let el = processedDiv.previousElementSibling;
       if (el && el.classList.contains('bb-section-original')) el = el.previousElementSibling;
-      if (el && el.classList.contains('bb-section-controls')) {
-        el.style.display = hide ? 'none' : '';
-        el = el.previousElementSibling;
-      }
+      if (el && el.classList.contains('bb-section-controls')) { el.style.display = hide ? 'none' : ''; el = el.previousElementSibling; }
+      if (el && el.classList.contains('bb-section-header'))   { el.style.display = hide ? 'none' : ''; el = el.previousElementSibling; }
       if (el && el.tagName === 'HR') el.style.display = hide ? 'none' : '';
 
       if (!hide && state.filterQuery && !state.filterOptions.exclude) {
@@ -1914,10 +1928,8 @@
           sec.style.display = hide ? 'none' : '';
           let el = sec.previousElementSibling;
           if (el && el.classList.contains('bb-section-original')) el = el.previousElementSibling;
-          if (el && el.classList.contains('bb-section-controls')) {
-            el.style.display = hide ? 'none' : '';
-            el = el.previousElementSibling;
-          }
+          if (el && el.classList.contains('bb-section-controls')) { el.style.display = hide ? 'none' : ''; el = el.previousElementSibling; }
+          if (el && el.classList.contains('bb-section-header'))   { el.style.display = hide ? 'none' : ''; el = el.previousElementSibling; }
           if (el && el.tagName === 'HR') el.style.display = hide ? 'none' : '';
 
           if (!hide && state.filterQuery && !state.filterOptions.exclude) {

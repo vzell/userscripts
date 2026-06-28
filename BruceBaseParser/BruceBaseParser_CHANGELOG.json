@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.10",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: when a section's .bb-section-processed div opens with a banner/header <table> (e.g. a tour-leg announcement), that table is now hoisted to appear before the .bb-section-controls toggle buttons instead of after them. The table is also stripped from the original-view snapshot (.bb-section-original) to prevent it rendering twice. All filter/mismatch backward-walks and the restart cleanup updated accordingly."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.09",
         "date": "2026-06-29",
         "sections": [
