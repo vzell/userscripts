@@ -2181,13 +2181,38 @@ http://brucebase.wikidot.com/2008#020308
 
 http://brucebase.wikidot.com/gig:2008-03-02-bell-centre-montreal-qc
 
-** remove the '<div class="list-pages-box">' from the '<div id="bb-pre-events">' container
+** TODO remove the '<div class="list-pages-box">' from the '<div id="bb-pre-events">' container
 
-remove the '<div class="list-pages-box">' from the '<div id="bb-pre-events">' container
+1.)
+
+remove the '<div class="list-pages-box">' from the '<div id="bb-sticky-bar">' container on the final rendered page
+
+2.)
+
+when pressing the button
+
+#+begin_example
+<button id="bb-global-toggle" class="bb-toggle-btn" title="Toggle between the original unprocessed setlist and the annotated processed view">⇄ Original Page</button>
+#+end_example
+
+on an EVENT DETAIL page e.g. http://brucebase.wikidot.com/gig:2008-03-02-bell-centre-montreal-qc, not only show the
+initial state of the setlist under the "Setlist" tab, but also remove/hide all the match/mismatch artefacts like "bb-glyph", "bb-anchor-match", "bb-tags-warn-box" and "Setlist"-tab decoration 
+
+** what are the strange diff symbols in the tooltip
+
+#+begin_example
+<li><a href="/1973#160273">1973-02-16 - BOYLAN GYMNASIUM, MONMOUTH COLLEGE, WEST LONG BRANCH, NJ</a><span class="bb-glyph"> ❌</span></li>
+#+end_example
+
+** recent changes in table view
 
 ** plan: filter events
 
 Implement a complete event filtering architecture with a supporting filter container rendered below the '<div id="bb-controls">'
+
+#+begin_example
+
+#+end_example
 
 
 * question
