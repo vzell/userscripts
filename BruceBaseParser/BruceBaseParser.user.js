@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.05
+// @version      2.06
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1415,6 +1415,11 @@
           itemNum++;
           const li = document.createElement('li');
           li.innerHTML = group.join('');
+
+          // The flat-view renderer (renderSetlistElement) already injects bb-song-num
+          // elements into each processed <p>/<blockquote>. Strip them before we
+          // prepend the list-view's own number to avoid duplicates.
+          li.querySelectorAll('a.bb-song-num, span.bb-song-num-plain').forEach(el => el.remove());
 
           // Prepend clickable number if a /song: link exists, else plain number.
           const songAnchor = li.querySelector('a[href^="/song:"]');

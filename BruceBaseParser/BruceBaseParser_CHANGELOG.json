@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.06",
+        "date": "2026-06-28",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "List view: duplicate song numbers no longer appear. buildListDiv now strips any a.bb-song-num and span.bb-song-num-plain elements injected by renderSetlistElement (v2.02 flat-view numbers) from the li.innerHTML before prepending its own list-view number."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.05",
         "date": "2026-06-28",
         "sections": [
