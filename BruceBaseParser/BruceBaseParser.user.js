@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      1.98
+// @version      2.05
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -46,6 +46,7 @@
     'Eyewitness': 'Eyewitness', 'Eye': 'Eyewitness', 'Eyewitness Reports': 'Eyewitness',
     'Bootleg': 'Bootleg',   'Audio': 'Bootleg', 'Audio / Video Bootleg': 'Bootleg',
     'LiveDL': 'LiveDL',     'Official Live Download': 'LiveDL',
+    'Retail': 'Retail',
   };
 
   /** Tab labels already handled by icon images — not given extra buttons. */
@@ -1197,7 +1198,7 @@
             el.querySelector('.bb-sep, .bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff')
           );
           if (!setlistEls.length) return;
-          listDiv = buildListDiv(setlistEls);
+          listDiv = buildListDiv(setlistEls, processedDiv);
           setlistEls[0].parentNode.insertBefore(listDiv, setlistEls[0]);
         }
         showView('list');
@@ -1243,7 +1244,7 @@
     if (!eventLink) return;
 
     section.querySelectorAll('img.image').forEach(img => { img.style.opacity = '0.45'; });
-    section.querySelectorAll('.bb-extra-tab-btn').forEach(b => {
+    section.querySelectorAll('.bb-event-tab-btn').forEach(b => {
       b.style.opacity      = '0.45';
       b.style.pointerEvents = 'none';
     });
@@ -1263,7 +1264,7 @@
         const doc = await fetchPage(url);
 
         section.querySelectorAll('img.image').forEach(img => { img.style.opacity = ''; });
-        section.querySelector('.bb-extra-tab-row')?.remove();
+        section.querySelector('.bb-event-tab-row')?.remove();
         section.querySelectorAll('.bb-icon-sorry').forEach(s => s.remove());
 
         wireIconHandlers(eventLink, doc);
@@ -1275,7 +1276,7 @@
       }
     });
 
-    const tabRow    = section.querySelector('.bb-extra-tab-row');
+    const tabRow    = section.querySelector('.bb-event-tab-row');
     const firstIcon = section.querySelector('img.image');
     if (tabRow)          tabRow.prepend(retryBtn);
     else if (firstIcon)  firstIcon.before(retryBtn);
@@ -1345,7 +1346,7 @@
             el.querySelector('.bb-sep, .bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff')
           );
           if (setlistEls.length === 0) return;  // nothing to list-ify
-          listDiv = buildListDiv(setlistEls);
+          listDiv = buildListDiv(setlistEls, processedDiv);
           setlistEls[0].parentNode.insertBefore(listDiv, setlistEls[0]);
         }
         showView('list');
@@ -1365,7 +1366,9 @@
   //   - a label paragraph (from .bb-section-label/.bb-section-label-warn nodes)
   //   - an <ol> with one <li> per song (nodes split on .bb-sep spans)
   // Song colouring, <a href> links, and ⚠️ spans are preserved; tooltips re-wired.
-  function buildListDiv(setlistEls) {
+  // Numbers are custom <a>/<span> elements so the number itself can be a clickable
+  // link that fetches the song page and appends a bb-song-tab-row to section.
+  function buildListDiv(setlistEls, section) {
     const div = document.createElement('div');
     div.className = 'bb-section-list';
     div.style.display = 'none';
@@ -1407,9 +1410,35 @@
       if (validGroups.length > 0) {
         const ol = document.createElement('ol');
         ol.className = 'bb-list-view';
+        let itemNum = 0;
         for (const group of validGroups) {
+          itemNum++;
           const li = document.createElement('li');
           li.innerHTML = group.join('');
+
+          // Prepend clickable number if a /song: link exists, else plain number.
+          const songAnchor = li.querySelector('a[href^="/song:"]');
+          const songHref   = songAnchor?.getAttribute('href') ?? null;
+          const songName   = songAnchor?.textContent.trim() ?? '';
+
+          if (songHref && section) {
+            const numLink = document.createElement('a');
+            numLink.href      = songHref;
+            numLink.className = 'bb-song-num';
+            numLink.textContent = `${itemNum}.`;
+            numLink.title = `${songName} — click to load song page tabs`;
+            numLink.addEventListener('click', e => {
+              e.preventDefault();
+              fetchAndToggleSongTabRow(songHref, songName, section, numLink);
+            });
+            li.prepend(numLink);
+          } else {
+            const numSpan = document.createElement('span');
+            numSpan.className   = 'bb-song-num-plain';
+            numSpan.textContent = `${itemNum}.`;
+            li.prepend(numSpan);
+          }
+
           ol.appendChild(li);
         }
         div.appendChild(ol);
@@ -1808,6 +1837,9 @@
 
       // ── Venue info ────────────────────────────────────────────────────────
       const venueLink = findVenueLink(doc);
+      let _venueTabDoc  = null;
+      let _venueTabHref = '';
+      let _venueTabName = '';
       if (venueLink) {
         try {
           const venueHref  = venueLink.getAttribute('href');
@@ -1822,6 +1854,9 @@
                                             : eventType === 'nogig'     ? 'No gig'
                                             : '';
             renderVenueInfo(lastScheduledDiv || anchorEl, venueHref, venueName, match, detailVenuePart, venuePrefix);
+            _venueTabDoc  = venueDoc;
+            _venueTabHref = venueHref;
+            _venueTabName = venueName;
           }
         } catch (e) {
           logWarn(`  Venue page fetch failed: ${e.message}`);
@@ -1830,6 +1865,12 @@
 
       // ── Clickable icons ──────────────────────────────────────────────────
       wireIconHandlers(element, doc);
+
+      // ── Venue tab buttons ─────────────────────────────────────────────────
+      if (_venueTabDoc) {
+        const section = element.closest('.bb-section-processed');
+        if (section) addVenueTabButtons(_venueTabDoc, _venueTabHref, _venueTabName, section);
+      }
 
       // ── Setlist check ────────────────────────────────────────────────────
       if (setlistEls.length > 0) {
@@ -1925,6 +1966,7 @@
   function renderSetlistElement(el, label, items, detailLabel) {
     let html    = '';
     let isFirst = true;
+    let songNum = 0;
 
     const labelLc = label.toLowerCase();
     if (labelLc === 'soundcheck') {
@@ -1963,6 +2005,16 @@
     for (const item of items) {
       if (!isFirst) html += '<span class="bb-sep"> / </span>';
       isFirst = false;
+      songNum++;
+
+      // Song number: clickable when a song page URL is known, plain otherwise.
+      const numSongHref = item.detailSongUrl ?? null;
+      const numSongName = item.yearSong ?? item.detailSong ?? '';
+      if (numSongHref) {
+        html += `<a href="${esc(numSongHref)}" class="bb-song-num" data-sn="${esc(numSongName)}">${songNum}.</a>`;
+      } else {
+        html += `<span class="bb-song-num-plain">${songNum}.</span>`;
+      }
 
       const paraWarn = item.paragraphBased
         ? ` <span class="bb-para-warn" data-msg="Detail page lists this song as a paragraph (&lt;p&gt;) instead of a list item (&lt;ol&gt;/&lt;li&gt;). Setlist may be incomplete.">⚠️</span>`
@@ -1996,6 +2048,19 @@
     // inside the element before we overwrite innerHTML.
     const supHtml = [...el.querySelectorAll('sup')].map(s => s.outerHTML).join('');
     el.innerHTML = supHtml ? html + '<br>' + supHtml : html;
+
+    // Wire song-number click handlers so clicking loads the song tab row.
+    const numSection = el.closest('.bb-section-processed');
+    if (numSection) {
+      el.querySelectorAll('a.bb-song-num').forEach(numLink => {
+        const songHref = numLink.getAttribute('href');
+        const songName = numLink.dataset.sn || '';
+        numLink.addEventListener('click', e => {
+          e.preventDefault();
+          fetchAndToggleSongTabRow(songHref, songName, numSection, numLink);
+        });
+      });
+    }
 
     el.querySelectorAll('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff').forEach(span => {
       span.addEventListener('mouseenter', e => showSongTooltip(e, span));
@@ -3366,7 +3431,15 @@
     const hr = tab.querySelector('hr');
 
     if (!hr || !isLiveDLSplit(tab)) {
-      return { type: 'html', caption, html: tab.innerHTML };
+      if (canonical !== 'LiveDL') {
+        return { type: 'html', caption, html: tab.innerHTML };
+      }
+      // LiveDL with no hr split: still strip retail reference paragraphs.
+      const clone = tab.cloneNode(true);
+      clone.querySelectorAll('p').forEach(p => {
+        if (p.querySelector('a[href^="/retail:"]')) p.remove();
+      });
+      return { type: 'html', caption, html: clone.innerHTML };
     }
 
     const clone   = tab.cloneNode(true);
@@ -3381,6 +3454,10 @@
         parent.removeChild(node);
         node = next;
       }
+      // Strip retail reference paragraphs — shown under the Retail icon instead.
+      clone.querySelectorAll('p').forEach(p => {
+        if (p.querySelector('a[href^="/retail:"]')) p.remove();
+      });
     } else {
       // Remove every node before <hr>, then remove <hr> itself
       let node = parent.firstChild;
@@ -3629,6 +3706,141 @@
   }
 
   /**
+   * Fetches each retail page href and builds combined HTML: reference paragraphs
+   * from the Recording tab followed by the retail page body (YUI nav and YUI
+   * content containers stripped).
+   * @param {Element[]} retailParas  <p> elements from Recording tab with retail links.
+   * @param {string[]}  retailHrefs  Deduplicated /retail:… hrefs to fetch.
+   * @returns {Promise<{type:'html', caption:string, html:string}>}
+   */
+  async function buildRetailContent(retailParas, retailHrefs) {
+    let html = '<div class="bb-retail-refs">';
+    for (const p of retailParas) {
+      html += p.outerHTML;
+    }
+    html += '</div>';
+
+    for (const href of retailHrefs) {
+      try {
+        const retailDoc = await fetchPage('http://brucebase.wikidot.com' + href);
+        const content   = retailDoc.querySelector('#page-content');
+        if (content) {
+          const clone = content.cloneNode(true);
+
+          // Strip <script> tags — they don't execute via innerHTML but add noise.
+          clone.querySelectorAll('script').forEach(el => el.remove());
+
+          // Strip footer: find the disclaimer link, walk up to its direct-child-of-clone
+          // ancestor div, then also remove the <hr> that immediately precedes it.
+          const disclaimerLink = clone.querySelector('a[href="/content:disclaimer"]');
+          if (disclaimerLink) {
+            let footerEl = disclaimerLink;
+            while (footerEl.parentElement && footerEl.parentElement !== clone) {
+              footerEl = footerEl.parentElement;
+            }
+            const prevSib = footerEl.previousElementSibling;
+            if (prevSib && prevSib.tagName === 'HR') prevSib.remove();
+            footerEl.remove();
+          }
+
+          // Flatten each YUI navset into labeled tab panels so tab content is visible.
+          clone.querySelectorAll('.yui-navset').forEach(navset => {
+            const labels = [...navset.querySelectorAll('ul.yui-nav li')]
+              .map(li => li.querySelector('em')?.textContent.trim() ?? li.textContent.trim());
+            const panels = [...(navset.querySelector('div.yui-content')?.children ?? [])];
+            const wrapper = document.createElement('div');
+            wrapper.className = 'bb-retail-tabs';
+            panels.forEach((panel, i) => {
+              if (labels[i]) {
+                const lbl = document.createElement('p');
+                lbl.innerHTML = `<strong class="bb-retail-tab-label">${esc(labels[i])}</strong>`;
+                wrapper.appendChild(lbl);
+              }
+              panel.style.removeProperty('display');
+              wrapper.appendChild(panel.cloneNode(true));
+            });
+            navset.replaceWith(wrapper);
+          });
+
+          html += '<hr style="margin:8px 0;">' + clone.innerHTML;
+        }
+      } catch (e) {
+        html += `<p style="color:#c00">Failed to fetch ${esc(href)}: ${esc(e.message)}</p>`;
+      }
+    }
+    return { type: 'html', caption: 'Retail', html };
+  }
+
+  /**
+   * Wires the Retail icon: scans the Recording tab for paragraphs containing
+   * /retail: links. Adds a warning glyph if none are found; otherwise makes the
+   * icon clickable — first click lazily fetches retail pages and builds the panel.
+   * @param {HTMLImageElement}   icon      The Retail icon image.
+   * @param {Document}           doc       Parsed DETAIL page.
+   * @param {Map<string,number>} tabMap    Tab label → index map for doc.
+   * @param {HTMLElement}        section   Containing .bb-section-processed div.
+   * @param {string}             rawTitle  Icon title before any suffix was added.
+   */
+  function wireRetailIcon(icon, doc, tabMap, section, rawTitle) {
+    const recTab    = getTabEl(doc, tabMap, 'Recording');
+    const retailParas = [];
+    const retailHrefs = new Set();
+
+    if (recTab) {
+      for (const p of recTab.querySelectorAll('p')) {
+        if (p.querySelector('a[href^="/retail:"]')) {
+          retailParas.push(p);
+          for (const a of p.querySelectorAll('a[href^="/retail:"]')) {
+            retailHrefs.add(a.getAttribute('href'));
+          }
+        }
+      }
+    }
+
+    if (retailParas.length === 0) {
+      const warn = document.createElement('span');
+      warn.className  = 'bb-glyph bb-icon-sorry';
+      warn.textContent = '⚠️';
+      warn.dataset.msg = 'Retail icon on YEAR page but no retail reference found in the Recording tab.';
+      warn.addEventListener('mouseenter', e => showErrorTooltip(e, warn.dataset.msg));
+      warn.addEventListener('mouseleave', hideTooltip);
+      icon.after(warn);
+      icon.style.opacity = '0.45';
+      return;
+    }
+
+    icon.style.cursor = 'pointer';
+    icon.title = `${rawTitle} — click to expand`;
+    const hrefs = [...retailHrefs];
+
+    icon.addEventListener('click', async () => {
+      if (icon._bbRetailLoading) return;
+      if (icon._bbPanel) {
+        const open = icon._bbPanel.style.display !== 'none';
+        icon._bbPanel.style.display = open ? 'none' : '';
+        icon.classList.toggle('bb-icon-active', !open);
+        return;
+      }
+      icon._bbRetailLoading = true;
+      icon.style.cursor = 'wait';
+      icon.classList.add('bb-icon-active');
+      try {
+        const content    = await buildRetailContent(retailParas, hrefs);
+        icon._bbPanel    = buildIconPanel(content);
+        icon._bbPanel._bbIcon = icon;
+        section.appendChild(icon._bbPanel);
+        icon._bbPanel.style.display = '';
+      } catch (e) {
+        logWarn('  Retail panel build failed:', e.message);
+        icon.classList.remove('bb-icon-active');
+      } finally {
+        icon._bbRetailLoading = false;
+        icon.style.cursor = 'pointer';
+      }
+    });
+  }
+
+  /**
    * Scans icon images in the event's section, attaches click handlers for
    * actionable icons (as determined by ICON_TITLE_MAP) that have extractable
    * content from doc.
@@ -3644,9 +3856,22 @@
    * @param {Map<string,number>} tabMap
    * @param {HTMLElement}       section
    */
-  function addExtraTabButtons(doc, tabMap, section) {
+  /**
+   * Creates the fixed-width label span that precedes each tab button row.
+   * @param {string} text  e.g. "Event:" or "Venue:"
+   * @returns {HTMLElement}
+   */
+  function makeTabRowLabel(text) {
+    const span = document.createElement('span');
+    span.className = 'bb-tab-row-label';
+    span.textContent = text;
+    return span;
+  }
+
+  function addEventTabButtons(doc, tabMap, section) {
     const row = document.createElement('div');
-    row.className = 'bb-extra-tab-row';
+    row.className = 'bb-event-tab-row';
+    row.appendChild(makeTabRowLabel('Event:'));
 
     for (const [label] of tabMap) {
       if (ICON_COVERED_TABS.has(label) || SKIP_TABS.has(label)) continue;
@@ -3657,7 +3882,7 @@
 
       const content = { type: 'html', caption: label, html: tab.innerHTML };
       const btn = document.createElement('button');
-      btn.className = 'bb-extra-tab-btn';
+      btn.className = 'bb-event-tab-btn';
       btn.textContent = label;
       btn.title = `Click to expand/collapse the ${label} panel`;
 
@@ -3675,7 +3900,7 @@
       row.appendChild(btn);
     }
 
-    if (row.children.length > 0) section.appendChild(row);
+    if (row.children.length > 1) section.appendChild(row);
   }
 
   /**
@@ -3804,7 +4029,7 @@
   }
 
   /**
-   * Appends a "Tags" button to the event's .bb-extra-tab-row on the YEAR page.
+   * Appends a "Tags" button to the event's .bb-event-tab-row on the YEAR page.
    * The panel lists all DETAIL page tags as hyperlinks; expected-but-missing
    * tags are shown in bold red with a ⚠️ indicator. The button label also turns
    * red and shows the missing count when issues are found.
@@ -3860,15 +4085,16 @@
     html += '</ol>';
 
     const content = { type: 'html', caption: 'Tags', html };
-    let row = section.querySelector('.bb-extra-tab-row');
+    let row = section.querySelector('.bb-event-tab-row');
     if (!row) {
       row = document.createElement('div');
-      row.className = 'bb-extra-tab-row';
+      row.className = 'bb-event-tab-row';
+      row.appendChild(makeTabRowLabel('Event:'));
       section.appendChild(row);
     }
 
     const btn = document.createElement('button');
-    btn.className = 'bb-extra-tab-btn';
+    btn.className = 'bb-event-tab-btn';
     btn.textContent = issueParts.length > 0 ? `Tags ⚠️ (${issueParts.join(', ')})` : 'Tags';
     btn.title = issueParts.length > 0
       ? `Tags panel — issues detected: ${issueParts.join(', ')}`
@@ -3888,6 +4114,351 @@
     });
 
     row.appendChild(btn);
+  }
+
+  /**
+   * Returns the set of lowercase tags expected for a venue page.
+   * Currently: "venue" (always) and the first letter of the venue name.
+   * @param {string} venueName  - Text from the venue page's #page-title.
+   * @returns {Set<string>}
+   */
+  function computeExpectedVenueTags(venueName) {
+    const expected = new Set(['venue']);
+    const first = (venueName || '').trim()[0];
+    if (first && /[a-z]/i.test(first)) expected.add(first.toLowerCase());
+    return expected;
+  }
+
+  /**
+   * Returns true for venue-page tags whose presence can be verified:
+   * the "venue" tag and single lowercase letter tags (first-letter index).
+   * @param {string} tag
+   * @returns {boolean}
+   */
+  function isManagedVenueTag(tag) {
+    return tag === 'venue' || /^[a-z]$/.test(tag);
+  }
+
+  /**
+   * Appends a row of buttons (.bb-venue-tab-row) for the venue page tabs,
+   * plus a "Tags" button with consistency checks for the venue page tags.
+   * Called after wireIconHandlers so the venue row appears after the event row.
+   * @param {Document}    venueDoc   - Parsed venue page document.
+   * @param {string}      venueHref  - Relative href, e.g. "/venue:blue-cross-…"
+   * @param {string}      venueName  - Text from the venue page's #page-title.
+   * @param {HTMLElement} section    - .bb-section-processed container.
+   */
+  function addVenueTabButtons(venueDoc, venueHref, venueName, section) {
+    const venueTabMap = buildTabMap(venueDoc);
+    const row = document.createElement('div');
+    row.className = 'bb-venue-tab-row';
+    row.appendChild(makeTabRowLabel('Venue:'));
+
+    for (const [label] of venueTabMap) {
+      const tab = getTabEl(venueDoc, venueTabMap, label);
+      if (!tab) continue;
+      const text = tab.textContent.trim();
+      if (!text || SORRY_RE.test(text)) continue;
+
+      const html = tab.innerHTML
+        .replace(/href="\//g, `href="${location.protocol}//${location.host}/`);
+      const content = { type: 'html', caption: `Venue: ${label}`, html };
+      const btn = document.createElement('button');
+      btn.className = 'bb-venue-tab-btn';
+      btn.textContent = label;
+      btn.title = `Venue page tab — click to expand/collapse: ${label}`;
+
+      btn.addEventListener('click', () => {
+        if (!btn._bbPanel) {
+          btn._bbPanel = buildIconPanel(content);
+          btn._bbPanel._bbIcon = btn;
+          section.appendChild(btn._bbPanel);
+        }
+        const open = btn._bbPanel.style.display !== 'none';
+        btn._bbPanel.style.display = open ? 'none' : '';
+        btn.classList.toggle('bb-icon-active', !open);
+      });
+
+      row.appendChild(btn);
+    }
+
+    // Tags button for the venue page
+    addVenueTagsButton(venueDoc, venueName, section, row);
+
+    if (row.children.length > 1) section.appendChild(row);
+  }
+
+  /**
+   * Appends a "Tags" button (inside row) that shows the venue page's .page-tags
+   * with consistency checks: "venue" and the first-letter tag are always expected.
+   * @param {Document}    venueDoc   - Parsed venue page document.
+   * @param {string}      venueName  - Text from the venue page's #page-title.
+   * @param {HTMLElement} section    - .bb-section-processed container (panel host).
+   * @param {HTMLElement} row        - .bb-venue-tab-row to append the button to.
+   */
+  function addVenueTagsButton(venueDoc, venueName, section, row) {
+    const tagsEl = venueDoc.querySelector('.page-tags');
+    if (!tagsEl) return;
+    const tagLinks = [...tagsEl.querySelectorAll('a[href]')];
+    if (tagLinks.length === 0) return;
+
+    const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const expectedTags = computeExpectedVenueTags(venueName);
+    const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+
+    const existingItems = tagLinks.map(a => {
+      const tag     = a.textContent.trim().toLowerCase();
+      const spurious = isManagedVenueTag(tag) && !expectedTags.has(tag);
+      const tooltip  = spurious ? `Tag "${tag}" is present but not expected for this venue` : '';
+      return { tag, html: a.outerHTML, missing: false, spurious, tooltip };
+    });
+    const missingItems = missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' }));
+    const allItems = [...existingItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
+
+    const spuriousCount = existingItems.filter(i => i.spurious).length;
+    const issueParts = [];
+    if (missingTags.length > 0) issueParts.push(`${missingTags.length} missing`);
+    if (spuriousCount > 0)      issueParts.push(`${spuriousCount} spurious`);
+
+    let html = '';
+    if (missingTags.length > 0) {
+      html += '<p style="color:red; font-weight:bold; margin:0 0 6px 0">⚠️ Missing expected venue tags:</p>';
+    }
+    html += '<ol class="bb-tags-list" style="margin:4px 0; padding-left:18px;">';
+    for (const item of allItems) {
+      if (item.missing) {
+        html += `<li style="color:red; font-weight:bold">⚠️ ${esc(item.tag)}</li>`;
+      } else if (item.spurious) {
+        html += `<li>${item.html} <span style="color:darkorange; font-weight:bold; cursor:help" title="${esc(item.tooltip)}">⚠️</span></li>`;
+      } else {
+        html += `<li>${item.html}</li>`;
+      }
+    }
+    html += '</ol>';
+
+    const content = { type: 'html', caption: 'Venue Tags', html };
+    const btn = document.createElement('button');
+    btn.className = 'bb-venue-tab-btn';
+    btn.textContent = issueParts.length > 0 ? `Tags ⚠️ (${issueParts.join(', ')})` : 'Tags';
+    btn.title = issueParts.length > 0
+      ? `Venue Tags panel — issues detected: ${issueParts.join(', ')}`
+      : 'Click to expand/collapse the Venue Tags panel';
+    if (missingTags.length > 0)  btn.style.color = 'red';
+    else if (spuriousCount > 0)  btn.style.color = 'darkorange';
+
+    btn.addEventListener('click', () => {
+      if (!btn._bbPanel) {
+        btn._bbPanel = buildIconPanel(content);
+        btn._bbPanel._bbIcon = btn;
+        section.appendChild(btn._bbPanel);
+      }
+      const open = btn._bbPanel.style.display !== 'none';
+      btn._bbPanel.style.display = open ? 'none' : '';
+      btn.classList.toggle('bb-icon-active', !open);
+    });
+
+    row.appendChild(btn);
+  }
+
+  // ── Song tab rows (triggered from list-view number clicks) ────────────────
+
+  /**
+   * Returns the set of lowercase tags expected on a SONG page.
+   * @param {Document}           songDoc
+   * @param {Map<string,number>} songTabMap
+   * @param {string}             songName  - Display name from the <a> text.
+   * @returns {Set<string>}
+   */
+  function computeExpectedSongTags(songDoc, songTabMap, songName) {
+    const expected = new Set(['song']);
+    const first = (songName || '').trim()[0];
+    if (first && /[a-z]/i.test(first)) expected.add(first.toLowerCase());
+
+    // lyricsheet: Gallery tab has images with "lyricsheet" in src.
+    const galleryTab = getTabEl(songDoc, songTabMap, 'Gallery');
+    if (galleryTab && [...galleryTab.querySelectorAll('img')]
+        .some(img => /lyricsheet/i.test(img.src || img.getAttribute('src') || ''))) {
+      expected.add('lyricsheet');
+    }
+
+    return expected;
+  }
+
+  /**
+   * Returns true for song-page tags whose presence can be verified.
+   * @param {string} tag
+   * @returns {boolean}
+   */
+  function isManagedSongTag(tag) {
+    return tag === 'song' || tag === 'lyricsheet' || /^[a-z]$/.test(tag);
+  }
+
+  /**
+   * Appends a "Tags" button (inside row) for the song page's .page-tags.
+   * Consistency checks: "song", first-letter, and "lyricsheet" are managed.
+   * @param {Document}           songDoc
+   * @param {Map<string,number>} songTabMap
+   * @param {string}             songName
+   * @param {HTMLElement}        section
+   * @param {HTMLElement}        row
+   */
+  function addSongTagsButton(songDoc, songTabMap, songName, section, row) {
+    const tagsEl = songDoc.querySelector('.page-tags');
+    if (!tagsEl) return;
+    const tagLinks = [...tagsEl.querySelectorAll('a[href]')];
+    if (tagLinks.length === 0) return;
+
+    const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const expectedTags = computeExpectedSongTags(songDoc, songTabMap, songName);
+    const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+
+    const existingItems = tagLinks.map(a => {
+      const tag     = a.textContent.trim().toLowerCase();
+      const spurious = isManagedSongTag(tag) && !expectedTags.has(tag);
+      const tooltip  = spurious ? `Tag "${tag}" is present but not expected for this song` : '';
+      return { tag, html: a.outerHTML, missing: false, spurious, tooltip };
+    });
+    const missingItems = missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' }));
+    const allItems = [...existingItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
+
+    const spuriousCount = existingItems.filter(i => i.spurious).length;
+    const issueParts = [];
+    if (missingTags.length > 0) issueParts.push(`${missingTags.length} missing`);
+    if (spuriousCount > 0)      issueParts.push(`${spuriousCount} spurious`);
+
+    let html = '';
+    if (missingTags.length > 0) {
+      html += '<p style="color:red; font-weight:bold; margin:0 0 6px 0">⚠️ Missing expected song tags:</p>';
+    }
+    html += '<ol class="bb-tags-list" style="margin:4px 0; padding-left:18px;">';
+    for (const item of allItems) {
+      if (item.missing) {
+        html += `<li style="color:red; font-weight:bold">⚠️ ${esc(item.tag)}</li>`;
+      } else if (item.spurious) {
+        html += `<li>${item.html} <span style="color:darkorange; font-weight:bold; cursor:help" title="${esc(item.tooltip)}">⚠️</span></li>`;
+      } else {
+        html += `<li>${item.html}</li>`;
+      }
+    }
+    html += '</ol>';
+
+    const content = { type: 'html', caption: `${songName} — Tags`, html };
+    const btn = document.createElement('button');
+    btn.className = 'bb-song-tab-btn';
+    btn.textContent = issueParts.length > 0 ? `Tags ⚠️ (${issueParts.join(', ')})` : 'Tags';
+    btn.title = issueParts.length > 0
+      ? `Song Tags — issues: ${issueParts.join(', ')}`
+      : 'Click to expand/collapse the Song Tags panel';
+    if (missingTags.length > 0)  btn.style.color = 'red';
+    else if (spuriousCount > 0)  btn.style.color = 'darkorange';
+
+    btn.addEventListener('click', () => {
+      if (!btn._bbPanel) {
+        btn._bbPanel = buildIconPanel(content);
+        btn._bbPanel._bbIcon = btn;
+        section.appendChild(btn._bbPanel);
+      }
+      const open = btn._bbPanel.style.display !== 'none';
+      btn._bbPanel.style.display = open ? 'none' : '';
+      btn.classList.toggle('bb-icon-active', !open);
+    });
+
+    row.appendChild(btn);
+  }
+
+  /**
+   * Fetches a song page and appends a .bb-song-tab-row to section.
+   * Returns the row element, or null when the song page has no usable content.
+   * @param {Document}    songDoc
+   * @param {string}      songName
+   * @param {HTMLElement} section
+   * @returns {HTMLElement|null}
+   */
+  function addSongTabButtons(songDoc, songName, section) {
+    const songTabMap = buildTabMap(songDoc);
+    const row = document.createElement('div');
+    row.className = 'bb-song-tab-row';
+
+    const label = document.createElement('span');
+    label.className = 'bb-song-tab-label';
+    label.textContent = songName + ':';
+    label.title = songName;
+    row.appendChild(label);
+
+    for (const [tabLabel] of songTabMap) {
+      const tab = getTabEl(songDoc, songTabMap, tabLabel);
+      if (!tab) continue;
+      const text = tab.textContent.trim();
+      if (!text || SORRY_RE.test(text)) continue;
+
+      const html = tab.innerHTML
+        .replace(/href="\//g, `href="${location.protocol}//${location.host}/`);
+      const content = { type: 'html', caption: `${songName} — ${tabLabel}`, html };
+      const btn = document.createElement('button');
+      btn.className = 'bb-song-tab-btn';
+      btn.textContent = tabLabel;
+      btn.title = `Song tab — click to expand/collapse: ${tabLabel}`;
+
+      btn.addEventListener('click', () => {
+        if (!btn._bbPanel) {
+          btn._bbPanel = buildIconPanel(content);
+          btn._bbPanel._bbIcon = btn;
+          section.appendChild(btn._bbPanel);
+        }
+        const open = btn._bbPanel.style.display !== 'none';
+        btn._bbPanel.style.display = open ? 'none' : '';
+        btn.classList.toggle('bb-icon-active', !open);
+      });
+
+      row.appendChild(btn);
+    }
+
+    addSongTagsButton(songDoc, songTabMap, songName, section, row);
+
+    if (row.children.length <= 1) return null;  // only the label, nothing to show
+    section.appendChild(row);
+    return row;
+  }
+
+  /**
+   * Fetches a song page on demand (first click) or toggles an already-loaded row.
+   * The section element caches loaded rows in section._bbSongRows (Map<href, row>).
+   * @param {string}      songHref  e.g. "/song:night"
+   * @param {string}      songName  Display name for the label prefix
+   * @param {HTMLElement} section   .bb-section-processed container
+   * @param {HTMLAnchorElement} numLink  The number link that was clicked
+   */
+  async function fetchAndToggleSongTabRow(songHref, songName, section, numLink) {
+    if (!section._bbSongRows) section._bbSongRows = new Map();
+
+    const existing = section._bbSongRows.get(songHref);
+    if (existing) {
+      const visible = existing.style.display !== 'none';
+      existing.style.display = visible ? 'none' : '';
+      numLink.classList.toggle('bb-song-loaded', !visible);
+      return;
+    }
+
+    numLink.classList.add('bb-song-loading');
+    numLink.title = `Loading ${songName}…`;
+
+    try {
+      const url     = `${location.protocol}//${location.host}${songHref}`;
+      const songDoc = await fetchPage(url);
+      const row     = addSongTabButtons(songDoc, songName, section);
+      numLink.classList.remove('bb-song-loading');
+      if (row) {
+        section._bbSongRows.set(songHref, row);
+        numLink.classList.add('bb-song-loaded');
+        numLink.title = `${songName} — click to show/hide`;
+      } else {
+        numLink.title = `${songName} — no song tab content found`;
+      }
+    } catch (e) {
+      numLink.classList.remove('bb-song-loading');
+      numLink.title = `${songName} — fetch failed: ${e.message}`;
+      logWarn(`  Song page fetch failed for ${songHref}:`, e.message);
+    }
   }
 
   /**
@@ -3963,6 +4534,12 @@
       const rawTitle = icon.title.replace(/ — click to expand$/, '');
       const canonical = ICON_TITLE_MAP[rawTitle];
       if (!canonical) continue;
+      // Retail requires async page fetches — wire it separately and skip the
+      // synchronous extractIconContent path.
+      if (canonical === 'Retail') {
+        wireRetailIcon(icon, doc, tabMap, section, rawTitle);
+        continue;
+      }
       const content = extractIconContent(doc, canonical, tabMap);
       if (!content) {
         // Flag icons whose DETAIL tab explicitly says "Sorry, no X available"
@@ -3992,7 +4569,7 @@
         icon.addEventListener('click', () => toggleIconPanel(icon, content, section));
       }
     }
-    addExtraTabButtons(doc, tabMap, section);
+    addEventTabButtons(doc, tabMap, section);
     addTagsButton(doc, tabMap, section, eventLink);
   }
 
@@ -4342,8 +4919,18 @@
       .bb-section-toggle   { margin-left: 0; }
       .bb-list-toggle      { margin-left: 0; }
       .bb-list-label       { margin: 2px 0 1px; }
-      ol.bb-list-view      { margin: 0 0 4px 1.8em; padding: 0; }
-      ol.bb-list-view li   { margin: 1px 0; }
+      ol.bb-list-view      { list-style: none; margin: 0 0 4px 0; padding: 0; }
+      ol.bb-list-view li   { margin: 1px 0; display: flex; align-items: baseline; }
+      a.bb-song-num        { font-family: monospace; font-size: 0.85em; min-width: 2.4em; text-align: right; padding-right: 5px; flex-shrink: 0; color: #aaa; text-decoration: none; cursor: pointer; }
+      a.bb-song-num:hover  { color: #4a90d9; text-decoration: underline; }
+      a.bb-song-num.bb-song-loaded  { color: #2e8b57; font-weight: bold; }
+      a.bb-song-num.bb-song-loading { color: #ccc; cursor: wait; pointer-events: none; }
+      span.bb-song-num-plain { font-family: monospace; font-size: 0.85em; min-width: 2.4em; text-align: right; padding-right: 5px; flex-shrink: 0; color: #ccc; }
+      .bb-song-tab-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; align-items: center; }
+      .bb-song-tab-btn { background: #e8e8e8; border: 1px solid #bbb; border-radius: 3px; cursor: pointer; font-size: 0.8em; padding: 1px 7px; color: #333; font-family: sans-serif; }
+      .bb-song-tab-btn:hover { background: #d4d4d4; }
+      .bb-song-tab-btn.bb-icon-active { background: #4a90d9; color: #fff; border-color: #357abd; }
+      .bb-song-tab-label { flex-shrink: 0; font-size: 0.78em; color: #888; font-style: italic; max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #bb-fetch-all-btn  { margin: 6px 6px 2px 0; }
       #bb-year-progress  { color: #666; font-style: italic; margin: 0; font-size: 0.9em; font-family: monospace; }
 
@@ -4444,10 +5031,13 @@
       /* ── Clickable icons ─────────────────────────────────── */
       img.bb-icon-active { outline: 2px solid #4a90d9; border-radius: 2px; }
       .bb-icon-sorry { cursor: help; font-size: 0.8em; vertical-align: super; margin-left: 1px; }
-      .bb-extra-tab-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; }
-      .bb-extra-tab-btn { background: #e8e8e8; border: 1px solid #bbb; border-radius: 3px; cursor: pointer; font-size: 0.8em; padding: 1px 7px; color: #333; font-family: sans-serif; }
-      .bb-extra-tab-btn:hover { background: #d4d4d4; }
-      .bb-extra-tab-btn.bb-icon-active { background: #4a90d9; color: #fff; border-color: #357abd; }
+      .bb-event-tab-row, .bb-venue-tab-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; align-items: center; }
+      .bb-event-tab-btn, .bb-venue-tab-btn { background: #e8e8e8; border: 1px solid #bbb; border-radius: 3px; cursor: pointer; font-size: 0.8em; padding: 1px 7px; color: #333; font-family: sans-serif; }
+      .bb-event-tab-btn:hover, .bb-venue-tab-btn:hover { background: #d4d4d4; }
+      .bb-event-tab-btn.bb-icon-active, .bb-venue-tab-btn.bb-icon-active { background: #4a90d9; color: #fff; border-color: #357abd; }
+      .bb-tab-row-label { min-width: 3.5em; flex-shrink: 0; font-size: 0.78em; color: #888; font-style: italic; }
+      .bb-retail-tabs { margin: 6px 0; }
+      .bb-retail-tab-label { font-size: 0.82em; color: #555; display: block; margin: 8px 0 2px; }
       .bb-cache-retry { font-size: 0.9em; padding: 1px 5px; opacity: 0.75; }
       .bb-cache-retry:hover { opacity: 1; }
 

@@ -1,5 +1,96 @@
 [
     {
+        "version": "2.05",
+        "date": "2026-06-28",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "LiveDL icon panel: paragraphs containing /retail: links are now stripped from the 'Official Live Download' panel content. That information is already shown under the dedicated Retail icon. Applied in extractRecordingContent for both the hr-split path and the no-split (full-tab) path."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.04",
+        "date": "2026-06-28",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Retail icon panel: YUI tab content (e.g. 'Released', 'Additional Information' sections on retail pages) was missing because buildRetailContent stripped both ul.yui-nav and div.yui-content. Fixed by flattening each .yui-navset into a div.bb-retail-tabs with tab labels rendered as bb-retail-tab-label <strong> headings and all panels visible (display:none cleared).",
+                    "Retail icon panel: wikidot footer (disclaimer + social-media links) is now removed from the rendered retail page content. The <hr> immediately preceding the footer is also stripped.",
+                    "Retail icon panel: <script> tags are removed from the cloned retail page content."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.03",
+        "date": "2026-06-28",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page: Retail icon is now clickable. wireRetailIcon() scans the Recording tab of the DETAIL page for <p> elements containing /retail: links. If none are found, the icon is dimmed and a ⚠️ warning is appended (same bb-icon-sorry pattern as other icon warnings). When retail references exist, clicking the icon lazily fetches each referenced /retail: page, strips its <ul class=\"yui-nav\"> and <div class=\"yui-content\"> containers, and shows a panel (via buildIconPanel) that combines the reference paragraph(s) from the Recording tab with the retail page body content. Multiple retail hrefs within one event each get a separate section in the panel."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.02",
+        "date": "2026-06-28",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR page flat view: song numbers (a.bb-song-num / span.bb-song-num-plain) are now rendered before each song in the regular ' / ' separated paragraph view, matching the list view. Clicking a number in the flat view fetches and toggles the same .bb-song-tab-row as in the list view — both share the section._bbSongRows cache so the loaded state is consistent regardless of which view triggered the fetch."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.01",
+        "date": "2026-06-28",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page List view: each song entry now shows a clickable number (a.bb-song-num) instead of a plain CSS counter. Clicking the number fetches the corresponding SONG page and appends a .bb-song-tab-row (labeled with the song name) after the venue tab row. Each non-empty song page tab gets a button; clicking toggles an inline panel. Clicking the same number a second time hides the row; clicking again shows it.",
+                    "YEAR page List view — Song Tags button: each song tab row ends with a 'Tags' button showing the song page's .page-tags with consistency checks: 'song' (always expected), the first letter of the song name lowercased, and 'lyricsheet' (when Gallery tab contains lyricsheet images). Missing tags shown in bold red; spurious managed tags flagged with an orange ⚠️.",
+                    "YEAR page List view: songs without a /song: URL (year-only mismatches, medley entries without individual pages) get a non-clickable grey number (span.bb-song-num-plain). Multiple songs can each have their own loaded row simultaneously; each row is labeled with its song name."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.00",
+        "date": "2026-06-28",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR page: venue tab row is no longer green-tinted — both the event and venue tab rows now share the same button style. Instead, each row is prefixed with a fixed-width italic label ('Event:' / 'Venue:') so the button columns align vertically.",
+                    "YEAR page: a shared .bb-tab-row-label span and makeTabRowLabel() helper implement the label prefix. The guard for appending empty rows now correctly accounts for the label always being present as the first child."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "1.99",
+        "date": "2026-06-28",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page: each event now shows a venue tab row (.bb-venue-tab-row, green-tinted) below the event tab row. Buttons open inline panels for each non-empty tab on the referenced venue page (e.g. 'Performances', 'Cancelled', 'Gallery'). The venue page is fetched once (same request already used for the venue name check) so there is no additional network cost.",
+                    "YEAR page: a 'Tags' button in the venue tab row shows the venue page's .page-tags with consistency checks: 'venue' tag and the first-letter index tag (e.g. 'b' for 'Blue Cross Arena…') are always expected. Missing tags are shown in bold red; managed tags present without a matching condition are flagged with an orange ⚠️.",
+                    "YEAR page: the event tab row is renamed from bb-extra-tab-row to bb-event-tab-row (and buttons from bb-extra-tab-btn to bb-event-tab-btn) to distinguish it from the new venue row."
+                ]
+            }
+        ]
+    },
+    {
         "version": "1.98",
         "date": "2026-06-27",
         "sections": [

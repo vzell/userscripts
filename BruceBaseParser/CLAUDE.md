@@ -364,17 +364,30 @@ Panels are **independent** — multiple panels across different events can be op
 | `links` | `<p class="bb-news-item"><a>Title</a><span class="bb-link-source">(Source)</span></p>` per item. |
 | `html` | Raw tab `innerHTML`; relative `/` links rewritten to `http://brucebase.wikidot.com/…`. For `caption === 'Media'`: each `<iframe>`/`<object>`/`<embed>`/`<video>` is extracted from its wikidot wrapper into a clean `<div class="bb-media-item">` flex child to avoid wikidot CSS interfering with the flex layout. |
 
-### Extra-tab buttons (`addExtraTabButtons`)
+### Event-tab buttons (`addEventTabButtons`)
 
-After processing icon images, `wireIconHandlers` calls `addExtraTabButtons(doc, tabMap, section)`.
+After processing icon images, `wireIconHandlers` calls `addEventTabButtons(doc, tabMap, section)`.
 This iterates all labels in `tabMap`, skips those in `ICON_COVERED_TABS` or `SKIP_TABS`, and
 for each non-empty tab that does not start with `"Sorry, no X available"` creates a
-`<button class="bb-extra-tab-btn">` with the label as its text. All buttons for one event
-are wrapped in `<div class="bb-extra-tab-row">` (flex-wrap) appended to the section.
+`<button class="bb-event-tab-btn">` with the label as its text. All buttons for one event
+are wrapped in `<div class="bb-event-tab-row">` (flex-wrap) appended to the section.
 
 Clicking a button uses the same `buildIconPanel` + `_bbIcon` mechanism as icon handlers.
 Because `tabMap` is built in YUI nav insertion order, `"On Stage"` (always tab 0) appears
 first in the row, before tabs like `"Performances"`, `"Appearances"`, `"Cancelled"`, etc.
+
+### Venue-tab buttons (`addVenueTabButtons`)
+
+After `wireIconHandlers`, `processOneYearEvent` calls `addVenueTabButtons(venueDoc, venueHref, venueName, section)` when the venue page was successfully fetched (reusing the same `venueDoc` already fetched for the venue name check — no extra network request).
+
+This builds a tab map from the venue page and creates a `<div class="bb-venue-tab-row">` (green-tinted) with one `<button class="bb-venue-tab-btn">` per non-empty tab (e.g. `"Performances"`, `"Cancelled"`, `"Gallery"`). Relative hrefs inside tab HTML are rewritten to absolute `http://brucebase.wikidot.com/…` URLs. At the end, `addVenueTagsButton` appends a `"Tags"` button showing the venue page's `.page-tags` with consistency checks.
+
+**Venue tag consistency** (`computeExpectedVenueTags` / `isManagedVenueTag`):
+
+- `"venue"` — always expected on every venue page.
+- First letter of the venue name (lowercased) — e.g. `"b"` for `"Blue Cross Arena…"`.
+- `isManagedVenueTag` returns true for `"venue"` and any single `[a-z]` tag.
+- Missing managed tags shown in bold red; managed tags present without a matching condition flagged with an orange ⚠️.
 
 ### CSS classes (icon feature)
 
@@ -391,8 +404,10 @@ first in the row, before tabs like `"Performances"`, `"Appearances"`, `"Cancelle
 | `.bb-news-item` | `<p>` wrapper for one news link + source |
 | `.bb-link-source` | Italic grey source label after a news link |
 | `.bb-media-item` | Flex child wrapping one extracted video embed |
-| `.bb-extra-tab-row` | Flex-wrap row of extra-tab buttons |
-| `.bb-extra-tab-btn` | Individual extra-tab button; `.bb-icon-active` applied when open |
+| `.bb-event-tab-row` | Flex-wrap row of event (DETAIL page) tab buttons |
+| `.bb-event-tab-btn` | Individual event-tab button; `.bb-icon-active` applied when open |
+| `.bb-venue-tab-row` | Flex-wrap row of venue page tab buttons (green-tinted) |
+| `.bb-venue-tab-btn` | Individual venue-tab button; `.bb-icon-active` applied when open |
 | `#bb-lightbox` | Full-screen thumbnail grid overlay |
 | `#bb-lightbox-viewer` | Full-screen single-image viewer overlay (separate body child) |
 
@@ -536,9 +551,13 @@ Pages like `/gig:2003-09-14-kenan-memorial-stadium-chapel-hill-nc`.
 | `filenameCaption(url)` | Derives a human-readable caption from a dated filename (strips `YYYYMMDD_` prefix, replaces `_` with spaces) |
 | `toggleIconPanel(icon, content, section)` | Lazily builds and toggles an inline panel for a YEAR-page icon; panels are independent (multiple can be open) |
 | `buildIconPanel(content)` | Creates a detached panel div for a content object; handles `images`, `links`, and `html` types |
-| `addExtraTabButtons(doc, tabMap, section)` | Appends a `.bb-extra-tab-row` with buttons for DETAIL tabs not in `ICON_COVERED_TABS` or `SKIP_TABS` |
-| `addTagsButton(doc, tabMap, section, eventLink)` | Appends a "Tags" button (last in `.bb-extra-tab-row`) that opens a panel showing all DETAIL page tags as hyperlinks; missing expected tags shown in bold red, spurious managed tags shown with an orange ⚠️ tooltip; button label turns red/orange and shows counts |
-| `wireIconHandlers(eventLink, doc)` | Makes icon images interactive, calls `addExtraTabButtons`, then `addTagsButton`; called from `processOneYearEvent` |
+| `addEventTabButtons(doc, tabMap, section)` | Appends a `.bb-event-tab-row` with buttons for DETAIL tabs not in `ICON_COVERED_TABS` or `SKIP_TABS` |
+| `addTagsButton(doc, tabMap, section, eventLink)` | Appends a "Tags" button (last in `.bb-event-tab-row`) that opens a panel showing all DETAIL page tags as hyperlinks; missing expected tags shown in bold red, spurious managed tags shown with an orange ⚠️ tooltip; button label turns red/orange and shows counts |
+| `wireIconHandlers(eventLink, doc)` | Makes icon images interactive, calls `addEventTabButtons`, then `addTagsButton`; called from `processOneYearEvent` |
+| `addVenueTabButtons(venueDoc, venueHref, venueName, section)` | Appends a `.bb-venue-tab-row` (green-tinted) with buttons for each non-empty venue page tab, then calls `addVenueTagsButton`; reuses already-fetched `venueDoc` |
+| `addVenueTagsButton(venueDoc, venueName, section, row)` | Appends a "Tags" button to the venue tab row showing the venue page's `.page-tags` with consistency checks (`"venue"` and first-letter tag) |
+| `computeExpectedVenueTags(venueName)` | Returns `Set<string>` of tags expected on a venue page: `"venue"` always, plus the first letter of `venueName` lowercased |
+| `isManagedVenueTag(tag)` | Returns `true` for `"venue"` and single `[a-z]` tags (first-letter index tags) |
 | `computeExpectedTags(doc, tabMap, eventDate, eventType)` | Returns `Set<string>` of lowercase tags expected for an event — date-derived (year, month name, day, weekday), event-type, and content-based (bootleg, livedl, news, memorabilia, ticket, setlist, handwritten, printed, soundcheck, storyteller); see "Tag consistency checks" section below |
 | `isManagedTag(tag)` | Returns `true` for tags whose presence can be verified: content tags in `MANAGED_CONTENT_TAGS`, month names, weekday names, 4-digit years, 1–2 digit day numbers ≤ 31 |
 | `spuriousTagMsg(tag, expectedTags)` | Returns a human-readable tooltip string for a tag that is present but whose condition is not met; uses `SPURIOUS_TAG_REASONS` dict for content tags and derives contextual messages for date tags |
@@ -695,7 +714,7 @@ All three checks are run in both `checkYearAnchorConsistency` (called from `proc
 
 ### YEAR page Tags button
 
-`addTagsButton` is called from `wireIconHandlers` (after `addExtraTabButtons`). It:
+`addTagsButton` is called from `wireIconHandlers` (after `addEventTabButtons`). It:
 1. Reads `.page-tags a[href]` from the fetched DETAIL `doc`.
 2. Computes expected tags and compares against actual (using `isTagPresent`).
 3. Merges existing links + missing placeholders into one sorted list; renders in the `buildIconPanel` infrastructure.
