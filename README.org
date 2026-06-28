@@ -2130,7 +2130,7 @@ values with consistency checks
 
 when clicking a second/third/etc. song hyperlinked number add again an additional button bar per song, the descriptive text before each song button bar could be the song name
 
-** render the same small hyperlinked number also in the initial flat song view
+** DONE render the same small hyperlinked number also in the initial flat song view
 
 render the same small hyperlinked number also in the initial flat song view
 
@@ -2140,14 +2140,13 @@ render the same small hyperlinked number also in the initial flat song view
 
 also in the initial flat " / " separated song view before each song name
 
-** fix small hyperlinked number
+** DONE fix small hyperlinked number
 
 after the change in v2.02, now when switching to the list view, I get two numbers rendered before each song
 
 #+begin_example
 <li><a href="/song:night" class="bb-song-num bb-song-loaded" title="1. — click to show/hide">1.</a><a href="/song:night" class="bb-song-num" data-sn="NIGHT">1.</a><a href="/song:night" class="bb-song-match">NIGHT</a></li>
 #+end_example
-
 
 ** TODO fix button placement per event when there is additional info
 
@@ -2165,8 +2164,7 @@ http://brucebase.wikidot.com/gig:2008-02-28-civic-center-hartford-ct
 </tbody></table>
 #+end_example
 
-** TODO DETAIL pages original view should reset all mismatch warning markers
-
+** DONE DETAIL pages original view should reset all mismatch warning markers
 ** TODO all pages, VENUE, RETAIL etc should get the "Tag"-value mismatch treating
 ** TODO collapse section from tabs and remove retail banner icons
 
@@ -2181,7 +2179,7 @@ http://brucebase.wikidot.com/2008#020308
 
 http://brucebase.wikidot.com/gig:2008-03-02-bell-centre-montreal-qc
 
-** TODO remove the '<div class="list-pages-box">' from the '<div id="bb-pre-events">' container
+** DONE remove the '<div class="list-pages-box">' from the '<div id="bb-pre-events">' container
 
 1.)
 
@@ -2204,16 +2202,32 @@ initial state of the setlist under the "Setlist" tab, but also remove/hide all t
 <li><a href="/1973#160273">1973-02-16 - BOYLAN GYMNASIUM, MONMOUTH COLLEGE, WEST LONG BRANCH, NJ</a><span class="bb-glyph"> ❌</span></li>
 #+end_example
 
-** recent changes in table view
+** TODO recent changes in table view
 
 ** plan: filter events
 
-Implement a complete event filtering architecture with a supporting filter container rendered below the '<div id="bb-controls">'
+Implement a complete event filtering architecture with a supporting filter container rendered below the
+'<div id="bb-controls">' for YEAR pages and the '<div id="bb-btn-container">' on the MAIN page (maybe renaming the last one to be consistent with YEAR pages).
+
+The purpose is filtering/rendering ONLY events which match the filter criteria, by default ONLY the "event name" is
+checked case insensitive for comparison against the filter string. See below for how the filter string is
+interpreted. Additionally the matched filter string in the event should get highlighted.
+
+The following elements should be present
 
 #+begin_example
-
+<filtered event count/total events> [text input filter field with an X (for clearing rendered on the right side)] [ ]Cc [ ]Rx [ ]Ex | [ ]Ev
 #+end_example
 
+"[ ]Cc [ ]Rx [ ]Ex [ ]Ev" should be rendered as checkboxes, "|" is a horizontal divider, all elements should have proper tooltips except "|"
+
+How the filter expression in the input filter field is interpreted:
+
+Cc - Case sensitive filtering
+Rx - RegExp filtering
+Ex - Exclude matches
+
+If the "Ev" is additionally checked, the whole event info (inclusive set list entries, button titles, etc) is used for filter matching.
 
 * question
 ** initial
