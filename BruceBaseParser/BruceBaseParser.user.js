@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.07
+// @version      2.08
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -908,6 +908,9 @@
         // Remove <br> elements — they only add wasteful vertical space in the
         // compact sticky bar (e.g. the <br>2012<br> inside the year heading).
         for (const br of [...preEventsDiv.querySelectorAll('br')]) br.remove();
+        // Remove all wikidot list-pages widgets (e.g. "Jump to most recent") —
+        // they render nothing useful in the sticky bar and add visual noise.
+        for (const box of [...preEventsDiv.querySelectorAll('.list-pages-box')]) box.remove();
         stickyBar.appendChild(preEventsDiv);
       }
     }

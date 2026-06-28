@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.08",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: all .list-pages-box widgets are now removed from #bb-pre-events inside setupStickyBar, covering any box that does not carry 'most recent' text and would therefore have survived the earlier hideJumpToRecentBox filter."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.07",
         "date": "2026-06-28",
         "sections": [
