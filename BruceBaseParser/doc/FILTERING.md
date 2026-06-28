@@ -46,14 +46,24 @@ Inverts the match: shows events that do NOT match the query. Highlighting is dis
 (non-matching visible events have no highlight to add). Compose with `Rx` and `Cc` freely.
 
 ### Ev — Full-text mode
-Widens the search scope beyond the event name:
-- **YEAR page**: matches against `yearName + all setlistEls.textContent` joined.
-- **LIST page**: matches against `rawName` (full link-line text including suffix parentheticals).
+Widens the search scope to the entire rendered section:
+- **YEAR page**: matches against `processedDiv.textContent` (event name, type/alias spans, setlist, button labels, all inline text).
+- **LIST page**: matches against `rawName` (full link-line text) plus the `<em>` suffix (e.g. `(Rehearsal)`).
 - **HOME page (year mode)**: matches against `sec.textContent` (entire rendered section).
-- **HOME page (list mode)**: matches against the list row's text content.
+- **HOME page (list mode)**: matches against the list row's full text content.
 
-When `Ev` is active, **all occurrences** of the filter string within the full section content are
-highlighted (not just the event name). When `Ev` is off, only the event name link is highlighted.
+When `Ev` is active, **all occurrences** across the full section are highlighted via
+`highlightSectionContent` (text-node walking). When `Ev` is off, see Non-Ev scope below.
+
+### Non-Ev matching scope (Ev unchecked)
+
+The search is narrowed to the event's identifying text row:
+
+- **YEAR page / HOME (year mode)**: event name link text + `.bb-event-type` sibling span text + `.bb-event-alias` sibling span text. Searching `rehearsal` or an alias name works without enabling `Ev`.
+- **LIST page / HOME (list mode)**: stripped event name link text + `<em>` sibling text (event-type suffix such as `(Rehearsal)`).
+
+All elements that contribute to the non-Ev match are also individually highlighted when matched
+(see Highlighting section).
 
 ---
 
@@ -149,13 +159,25 @@ A section is hidden when it fails **any** active filter condition.
 
 ### Default mode (Ev off) — `highlightEventName`
 
-- Finds the event name `<a>` link element.
-- Stores original `innerHTML` in `data-bb-filter-original` (only on first call; never overwritten).
-- Reads `textContent` for match positions, then builds replacement HTML using `esc()` for safety,
-  inserting `<mark class="bb-filter-match">` around each match.
-- Restored via `clearEventNameHighlight(linkEl)`: reads the attribute, restores `innerHTML`,
-  deletes the attribute.
+`highlightEventName(el, query, options)` is called once per highlighted element:
+
+- Stores `el.innerHTML` in `data-bb-filter-original` (only on first call; never overwritten while active).
+- Reads `textContent` for match positions, builds replacement HTML using `esc()` for safety,
+  inserts `<mark class="bb-filter-match">` around each match.
+- Restored via `clearEventNameHighlight(el)`: reads the attribute, restores `innerHTML`, deletes the attribute.
 - No-op when the query is empty or in exclude mode.
+
+Which elements are highlighted per page:
+
+| Page | Elements highlighted |
+|---|---|
+| YEAR | `<a>` event name link, `.bb-event-type` span, `.bb-event-alias` span |
+| LIST | `<a>` event name link, `<em>` suffix element |
+| HOME (year mode) | `highlightSectionContent` used — entire section (see Ev mode) |
+| HOME (list mode) | `<a>` event name link, `<em>` suffix element |
+
+All potentially highlighted elements are explicitly cleared (`clearEventNameHighlight`) at the
+start of each filter pass before re-evaluation, preventing stacked `<mark>` elements.
 
 ### Ev mode — `highlightSectionContent`
 
@@ -216,7 +238,7 @@ clicks ▶ Start. This limitation is acceptable for the cache-load path.
 | Selector | Purpose |
 |---|---|
 | `#bb-filter-bar` | Outer flex row; second row in `#bb-sticky-bar` |
-| `#bb-filter-count` | Live count span |
+| `#bb-filter-count` | Live "N / M events" span; bold, 1.05em monospace; tooltip: "Visible events / total events on this page" |
 | `#bb-filter-input-wrap` | Input + clear button flex wrapper |
 | `#bb-filter-input` | Text input |
 | `#bb-filter-clear` | `×` clear button; `.visible` class shows it |
