@@ -2168,7 +2168,8 @@ there is the following type of table container, e.g.
 When present the '<div class="bb-section-controls">' (event specific buttons) should be rendered after it instead of before it as it is now
 
 ** DONE DETAIL pages original view should reset all mismatch warning markers
-** TODO all pages, VENUE, RETAIL etc should get the "Tag"-value mismatch treating
+** DONE all pages, VENUE, RETAIL etc should get the "Tag"-value mismatch treating
+*** initial
 
 1.)
 
@@ -2197,7 +2198,7 @@ also on the VENUE and RETAIL pages
   patterns, I can extend computeExpectedRetailTags.
 #+end_example
 
-** TODO extend retail
+*** DONE extend retail
 
 When the following text block on a RETAIL page has a "Commercially Released: July 15, 2008" line
 
@@ -2214,18 +2215,48 @@ Design by Michelle Holme</code></pre></div>
 
 extend computeExpectedRetailTags with the tag values e.g. "july", "15" and "2008"
 
-** TODO add console debugging for retail and venus pages
+*** DONE add console debugging for retail and venus pages
 
 add console debugging when rendering RETAIL and VENUE pages, as the changes in "version": "2.11" somehow have NO effect,
 the buttons do no show up on these pages below the '<div id="page-title">'
 
-** doc
+** DONE song and relation
+*** initial
 
-The following files are found in the `doc` folder and should be updated after code changes whenever relevant information
-should be noted
+1.)
+
+the SONG e.g- http://brucebase.wikidot.com/song:atlantic-city and RELATION
+e.g. http://brucebase.wikidot.com/relation:max-weinberg pages should also get the "Tag"-value mismatch treating, not
+only their panel counterparts (Tags button) on the YEAR events. RELATION links are not yet used on YEAR pages but will.
+
+a.)
+
+the tag values for SONG pages should at least have an entry for
+
+- song - every SONG page is tagged with "song"
+
+b.)
+
+the tag values for RELATION pages should at least have an entry for
+
+- person/band - every RELATION page is tagged with either "person" (when it has a tab named "Bands" or "band" (when it has a tab named "Members")
+
+
+2.)
+
+include the
+
+#+begin_example
+<div id="bb-btn-container"><button id="bb-global-toggle" class="bb-toggle-btn" title="Toggle between the original unprocessed setlist and the annotated processed view">⇄ Original Page</button><button id="bb-save-btn" class="bb-toggle-btn" title="Save the processed page to a JSON cache file for offline use">💾 Save</button><button id="bb-load-btn" class="bb-toggle-btn" title="Load a previously saved JSON cache file to restore the processed view">📂 Load</button></div>
+#+end_example
+
+also on the SONG and RELATION pages
+
+*** doc
+
+adjust the relevant @doc files, commit and push
 
 ** TODO collapse section from tabs and remove retail banner icons
-
 ** TODO empty "News" panel on
 
 http://brucebase.wikidot.com/2008#020308
@@ -2420,8 +2451,8 @@ render in a bigger font the '<span id="bb-filter-count">' (also add a tooltip fo
 
 also apply the filter highlight for the newly matched elements
 
-
-** TODO on YEAR pages make the event title rows collapsible
+** DONE on YEAR pages make the event title rows collapsible
+*** initial
 
 On YEAR pages highlight each event name line with a "light grey" background color and make the whole event collapsable
 when clicking the part of the line after the "bb-glyph" or when present after the "bb-event-alias"
@@ -2429,7 +2460,7 @@ when clicking the part of the line after the "bb-glyph" or when present after th
 First click should collapse, second should uncollapse again.
 "Ctrl"-clicking an event line should collapse/uncollapse all events on the YEAR page. Also add proper tooltips on the part of the line where the toggle collapse functionality will work  
 
-** bug
+*** bug
 
 The toggle is there now. Initially for an event
 
@@ -2445,10 +2476,292 @@ and after clicking
 
 but the actual collapsing/uncollapsing doesn't work
 
-** bug
+*** bug
 
 The toggle is there, but it stays in the initial state even after clicking and nothing happens
 @debug/toggle.html
+
+*** panels
+
+bug:
+when panels have been uncollapsed by clicking on icons in the event icon row or buttons in '<div class="bb-event-tab-row">' and '<div class="bb-event-tab-row">'
+or one of the '<div class="bb-song-tab-row">' and then collapsing the event, the panels stay open
+
+** TODO add mammoth api to filter field
+
+** doc .md adjustments
+
+The following files are found in the `doc` folder and should be updated after code changes whenever relevant information
+should be noted
+
+** plan: relation (artist) support
+*** initial
+
+On the YEAR pages implement support for the involved "persons/artists" and/or "bands/groups" (each is called a RELATION
+and lives on it's own page e.g. http://brucebase.wikidot.com/relation:bruce-springsteen) per EVENT by injecting the
+involved relations from the EVENT DETAIL pages right before the setlist(s) listings.
+
+1.)
+
+On the initial rendered YEAR page the relation names should be rendered in a flat one line structure where the string "
+/ " is used as a separation between relation names. So for @debug/relations.html the flat structure should be rendered like
+
+#+begin_example
+• Bruce Springsteen / • The World's Most Dangerous Band / ◦ Anton Fig / ◦ Will Lee / ...
+#+end_example
+
+- "•" and "◦" should be hyperlinked to the corresponding "a href="/relation:" entry, and when clicked should render the relation name together with the 
+- "◦" means the entry is a member of a band
+
+2.)
+
+when in the event list view (after clicking the '<button class="bb-toggle-btn bb-list-toggle" title="Toggle between flat paragraph view and numbered list view for this setlist">☰ List</button>'
+the original relations strucure e.g. like in @debug/relations.html should be rendered but again with the "•" and "◦" symbols hyperlinked and click action as in 1.)
+
+3.)
+
+Download and parse the mentioned URLs below to get complete insight.
+
+There are different cases to distinguish.
+
+E.g. on the YEAR page http://brucebase.wikidot.com/1987
+
+a.)
+
+for the event http://brucebase.wikidot.com/1987#210187, the DETAIL page
+http://brucebase.wikidot.com/gig:1987-01-21-waldorf-astoria-hotel-new-york-city-ny lists the relations under the first
+tab of '<ul class="yui-nav">' below the following structure
+
+#+begin_example
+<p><strong>Rock &amp; Roll Hall Of Fame Induction Ceremony</strong></p>
+<hr>
+#+end_example
+
+This is what on the YEAR page gets already rendered as the event alias '<span class="bb-event-alias">'
+
+b.)
+
+for the event http://brucebase.wikidot.com/1987#120487, there is NO "bb-event-alias" involved on the DETAIL page
+http://brucebase.wikidot.com/gig:1987-04-12-stone-pony-asbury-park-nj and it's an example for a relation with additional
+information
+
+#+begin_example
+    <span style="font-size:80%;">
+      <em>(Guest)
+      </em>
+    </span>
+#+end_example
+
+it should be rendered as is
+
+c.)
+
+for the EVENT http://brucebase.wikidot.com/2026#170126 and DETAIL page http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n
+the DETAIL page precedes RELATION listings with "strong" containers e.g.
+
+#+begin_example
+<p><strong>Willie Nile Set</strong></p>
+#+end_example
+
+and
+
+#+begin_example
+<p><strong>Joe Grushecky &amp; The Houserockers Set</strong></p>
+#+end_example
+
+which on the YEAR page are rendered as labels (sometimes with a warning symbols if label name and "strong" entry do NOT
+exactly match) right before the different setlist entries
+
+#+begin_example
+<p><span class="bb-section-label">with Willie Nile: </span><span class="bb-section-label-warn bb-para-warn" data-msg="Section label mismatch: YEAR page has &quot;with Willie Nile&quot;, DETAIL page has &quot;With Willie Nile&quot;">⚠️</span> <a href="/song:one-guitar" class="bb-song-num" data-sn="ONE GUITAR">1.</a><a href="/song:one-guitar" class="bb-song-match">ONE GUITAR</a> (with James Maddock)</p>
+#+end_example
+
+and
+
+#+begin_example
+<p><span class="bb-section-label">with Joe Grushecky &amp; The Houserockers: </span><span class="bb-section-label-warn bb-para-warn" data-msg="Section label mismatch: YEAR page has &quot;with Joe Grushecky &amp; The Houserockers&quot;, DETAIL page has &quot;With Joe Grushecky &amp; The Houserockers&quot;">⚠️</span> <a href="/song:jole-blon" class="bb-song-num" data-sn="JOLÉ BLON">1.</a><a href="/song:jole-blon" class="bb-song-match">JOLÉ BLON</a> (with Gary U.S. Bonds, Laurie Anderson, Mark Leimbach, and Joe Grillo)<span class="bb-sep"> / </span><a href="/song:this-little-girl" class="bb-song-num" data-sn="THIS LITTLE GIRL">2.</a><a href="/song:this-little-girl" class="bb-song-match">THIS LITTLE GIRL</a> (with Gary U.S. Bonds, Laurie Anderson, Mark Leimbach, and Joe Grillo)<span class="bb-sep"> / </span><a href="/song:darkness-on-the-edge-of-town" class="bb-song-num" data-sn="DARKNESS ON THE EDGE OF TOWN">3.</a><a href="/song:darkness-on-the-edge-of-town" class="bb-song-match">DARKNESS ON THE EDGE OF TOWN</a><span class="bb-sep"> / </span><a href="/song:savin-up" class="bb-song-num" data-sn="SAVIN' UP">4.</a><a href="/song:savin-up" class="bb-song-match">SAVIN' UP</a><span class="bb-sep"> / </span><a href="/song:i-m-not-sleeping" class="bb-song-num" data-sn="I'M NOT SLEEPING">5.</a><a href="/song:i-m-not-sleeping" class="bb-song-match">I'M NOT SLEEPING</a><span class="bb-sep"> / </span><a href="/song:pumping-iron" class="bb-song-num" data-sn="PUMPING IRON">6.</a><a href="/song:pumping-iron" class="bb-song-match">PUMPING IRON</a> (with Danny Clinch)<span class="bb-sep"> / </span><a href="/song:lucky-town" class="bb-song-num" data-sn="LUCKY TOWN">7.</a><a href="/song:lucky-town" class="bb-song-match">LUCKY TOWN</a><span class="bb-sep"> / </span><a href="/song:atlantic-city" class="bb-song-num" data-sn="ATLANTIC CITY">8.</a><a href="/song:atlantic-city" class="bb-song-match">ATLANTIC CITY</a><span class="bb-sep"> / </span><a href="/song:never-be-enough-time" class="bb-song-num" data-sn="NEVER BE ENOUGH TIME">9.</a><a href="/song:never-be-enough-time" class="bb-song-match">NEVER BE ENOUGH TIME</a><span class="bb-sep"> / </span><a href="/song:johnny-99" class="bb-song-num" data-sn="JOHNNY 99">10.</a><a href="/song:johnny-99" class="bb-song-match">JOHNNY 99</a> (with Danny Clinch)<span class="bb-sep"> / </span><a href="/song:the-promised-land" class="bb-song-num" data-sn="THE PROMISED LAND">11.</a><a href="/song:the-promised-land" class="bb-song-match">THE PROMISED LAND</a> (with John Rzeznik)<span class="bb-sep"> / </span><span class="bb-song-num-plain">12.</span><span class="bb-song-year-only" data-year-song="LIGHT OF DAY - HAPPY BIRTHDAY">LIGHT OF DAY - HAPPY BIRTHDAY (with all performers)</span><span class="bb-sep"> / </span><span class="bb-song-num-plain">13.</span><span class="bb-song-detail-only" data-detail-song="LIGHT OF DAY - HAPPY BIRTHDAY TO YOU">LIGHT OF DAY - HAPPY BIRTHDAY TO YOU</span><span class="bb-sep"> / </span><a href="/song:thunder-road" class="bb-song-num" data-sn="THUNDER ROAD">14.</a><a href="/song:thunder-road" class="bb-song-match">THUNDER ROAD</a> (with all performers)</p>
+#+end_example
+
+In such a scenario, the relation list for each labeled setlist should be rendered separately right before each label
+
+d.)
+
+the event http://brucebase.wikidot.com/2026#300126 on the YEAR page has also a "Setlist:" label entry plus the actual "Show:" (unlabeled)
+
+In such a case the relation list from the DETAIL page on http://brucebase.wikidot.com/gig:2026-01-30-first-avenue-minneapolis-mn should be rendered before the unlabeled "Show:" entry
+
+The "Show:" label will show up in the "List view" of such an event on the YEAR page
+*** act
+
+read the @debug/relation.support and act on it
+*** bugs
+
+1.)
+
+there should be a blank line before rendering a relation list, either in flat or list view
+
+2.)
+
+in list view the relation list should get an additional
+
+#+begin_example
+<span class="bb-section-label">Relations:</span>
+#+end_example
+
+line before the actual relation list
+
+3.)
+
+on the event http://brucebase.wikidot.com/2026#300126 the rendering currently produces @debug/soundcheck-bug.html
+
+a.)
+
+the actual relation names like e.g. "Bruce Springsteen" should also get hyperlinked and when clicked should call the RELATION URL
+
+b.)
+
+the "•" and "◦" symbols should be hyperlinked (like now), but when clicked should render a new "Relation:" button container
+
+#+begin_example
+<div class="bb-relation-tab-row"><span class="bb-tab-row-label">Relation:</span> ...
+#+end_example
+
+below the "Venue:" container, where each button represents a tab with content from the RELATION page
+like in the "Venue:" container case e.g.
+
+#+begin_example
+<div class="bb-venue-tab-row"><span class="bb-tab-row-label">Venue:</span><button class="bb-venue-tab-btn" title="Venue page tab — click to expand/collapse: Performances">Performances</button><button class="bb-venue-tab-btn" title="Venue page tab — click to expand/collapse: Gallery">Gallery</button><button class="bb-venue-tab-btn" title="Click to expand/collapse the Venue Tags panel">Tags</button></div>
+#+end_example
+
+c.)
+
+in flat view the relation list line is still rendered before the "Soundcheck:" label instead of before the actual non-labeled (default "Show:") setlist
+
+4.)
+
+on the event http://brucebase.wikidot.com/2026#170126 in "List view" curretnly the following is rendered @debug/list-view.html
+
+a.)
+
+the section label before relation lists in list view should always be "Relations:" instead of "Show:"
+
+#+begin_example
+    <p class="bb-list-label">
+      <span class="bb-section-label">Show:
+      </span>
+    </p>
+#+end_example
+
+b.)
+
+there should be an empty line in the following kind of structure, see '.... ENTER AN EMPTY line HERE ....' in the following block
+
+
+#+begin_example
+    <ol class="bb-list-view">
+      <li>
+	<a href="/song:one-guitar" class="bb-song-num" title="ONE GUITAR — click to load song page tabs">1.
+	</a>
+	<a href="/song:one-guitar" class="bb-song-match">ONE GUITAR
+	</a> (with James Maddock)
+      </li>
+    </ol>
+    .... ENTER AN EMPTY line HERE ....
+    <p class="bb-list-label">
+      <span class="bb-section-label">Show:
+      </span>
+    </p>
+#+end_example
+
+c.)
+
+relation list entries in list view currently render like this
+
+#+begin_example
+<li><span class="bb-song-num-plain">1.</span><a href="/relation:joe-grushecky-the-houserockers" class="bb-rel-bullet bb-rel-main">•</a> Joe Grushecky &amp; The Houserockers</li>
+<li><span class="bb-song-num-plain">2.</span><a href="/relation:joe-grushecky" class="bb-rel-bullet bb-rel-member">◦</a> Joe Grushecky</li>
+#+end_example
+
+There shouldn't be any ordered list here and the "bb-rel-member" should be rendered indented
+
+** fixes
+
+2.)
+
+for recording sessions also put the relation inside a box
+
+4.)
+
+rendering the different blocks is bugy with multiple render setlists and reations in list view - http://brucebase.wikidot.com/2026#170126
+
+7.)
+
+add VENUE, RELATION caching in indexedDB
+
+8.) "Error: cannot read properties of undefined (reading 'localCompare')" in the tooltipü
+
+http://brucebase.wikidot.com/gig:1965-00-00b-elks-lodge-freehold-nj
+
+9.)
+
+render "•" symbol in "grey"
+
+10.)
+
+CHIMES OF FREEDOMSet details may be inaccurate. at 2026-03-26 - OCEAN GROVE YOUTH TEMPLE, OCEAN GROVE, NJ (rehearsal) ✅ — Closed Rehearsal
+
+11.)
+
+12.)
+
+events with NO setlist render the relation list e.g. http://brucebase.wikidot.com/2026#010226
+
+BUT it should be renderd afte the "Schedule" line
+
+13.)
+
+http://brucebase.wikidot.com/nogig:2026-06-06-center-for-american-music-west-long-branch
+
+Tags missing: "6" => "06"
+
+14.)
+
+"Bruce Springsteen" has empty tab "Documents" should be falled as being there BUT empty
+
+** act
+
+1.)
+
+don't underline relation names when they are hyperlinked only on hover, like setlist entries
+
+2.)
+
+when clicking the "•" and "◦" symbols, the button row label should actually be the relation name like when clicking a song hyperlink for opening in it's button row 
+
+3.)
+
+events with NO setlist but relations should still render the relation list e.g. http://brucebase.wikidot.com/2026#010226
+
+** bugs
+
+http://brucebase.wikidot.com/2026#010226
+
+in such a case after the line
+
+#+begin_example
+<div class="bb-scheduled">Scheduled: ??:?? | Local Start Time ??:?? / End Time ??:?? at <strong style="font-size: 1.1em;"><em><a href="http://brucebase.wikidot.com/venue:crypto-com-arena-los-angeles-ca" target="_blank" rel="noopener noreferrer">Crypto.com Arena, Los Angeles, CA</a></em></strong><span class="bb-glyph" style="cursor: help;"> ✅</span></div>
+#+end_example
+
+** plan: global relation toggle button
+
+add a global toggle "Hide Relations"/"Show Relations" button at the sticky top button row, when clicked hide all the
+relation list(s) related information (inclusive label), when clicked again, show the relation lists again
+
+** add also an event specific "Hide Relations"/"Show Relations" button
+
+add also an event specific "Hide Relations"/"Show Relations" button in the '<div class="bb-section-controls">' container
+
+
 
 * question
 ** initial
