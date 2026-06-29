@@ -1,5 +1,18 @@
 [
     {
+        "version": "2.21",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: relation • / ◦ bullet symbols now rendered in grey (#888) instead of blue.",
+                    "YEAR page list view: footnote <sup> (e.g. 'Set details may be inaccurate.') now appears on its own line below the last song entry. The list item uses flex-wrap:wrap and the sup gets width:100% + baseline alignment so the browser's <br> suppression inside flex containers no longer causes it to render inline."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.20",
         "date": "2026-06-29",
         "sections": [

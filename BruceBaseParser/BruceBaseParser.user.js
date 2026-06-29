@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.20
+// @version      2.21
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -6638,7 +6638,8 @@
       .bb-list-toggle      { margin-left: 0; }
       .bb-list-label       { margin: 2px 0 1px; }
       ol.bb-list-view      { list-style: none; margin: 0 0 4px 0; padding: 0; }
-      ol.bb-list-view li   { margin: 1px 0; display: flex; align-items: baseline; }
+      ol.bb-list-view li   { margin: 1px 0; display: flex; align-items: baseline; flex-wrap: wrap; }
+      ol.bb-list-view li sup { vertical-align: baseline; font-size: 0.85em; width: 100%; }
       a.bb-song-num        { font-family: monospace; font-size: 0.85em; min-width: 2.4em; text-align: right; padding-right: 5px; flex-shrink: 0; color: #aaa; text-decoration: none; cursor: pointer; }
       a.bb-song-num:hover  { color: #4a90d9; text-decoration: underline; }
       a.bb-song-num.bb-song-loaded  { color: #2e8b57; font-weight: bold; }
@@ -6820,7 +6821,7 @@
       .bb-relations-list { margin: 0.6em 0 4px; }
       ul.bb-relations-list-ul { list-style: none; margin: 0; padding: 0; }
       ul.bb-relations-list-ul ul.bb-relations-list-ul { padding-left: 1.2em; }
-      .bb-rel-bullet { text-decoration: none; color: #06c; cursor: pointer; }
+      .bb-rel-bullet { text-decoration: none; color: #888; cursor: pointer; }
       .bb-rel-bullet:hover { text-decoration: underline; }
       .bb-rel-name { color: inherit; text-decoration: none; }
       .bb-rel-name:hover { text-decoration: underline; }
