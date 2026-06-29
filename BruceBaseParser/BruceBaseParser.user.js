@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.25
+// @version      2.26
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -4472,11 +4472,20 @@
     const noSetlist = eligible.length === 0;
     const n = noSetlist ? relGroups.length : Math.min(relGroups.length, eligible.length);
 
+    const headingHref = (processedDiv.querySelector('.bb-event-heading a[href]')
+      ?.getAttribute('href') || '');
+    const isRecordingEvent = headingHref.startsWith('/recording:');
+
     for (let i = 0; i < n; i++) {
       const group = relGroups[i];
       if (!group.items.length) continue;
 
-      const flatEl = document.createElement('p');
+      // Use <blockquote> for the flat relation block on recording events so the
+      // relation line is visually indented alongside the recording setlist blockquote.
+      const useBlockquote = noSetlist
+        ? isRecordingEvent
+        : eligible[i].sourceEl.tagName === 'BLOCKQUOTE';
+      const flatEl = document.createElement(useBlockquote ? 'blockquote' : 'p');
       flatEl.className = 'bb-relations-flat';
       flatEl.innerHTML = renderRelationsFlatHtml(group);
 

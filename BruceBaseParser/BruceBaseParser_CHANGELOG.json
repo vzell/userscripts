@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.26",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR page: for recording events the flat-view relation block is now rendered as <blockquote class=\"bb-relations-flat\"> instead of <p>, giving it the same visual indentation as the recording setlist blockquote. Detection uses sourceEl.tagName==='BLOCKQUOTE' for events with a setlist and /recording: href prefix for no-setlist recording events."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.25",
         "date": "2026-06-29",
         "sections": [
