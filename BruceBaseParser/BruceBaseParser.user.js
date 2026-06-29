@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.12
+// @version      2.13
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -13,6 +13,7 @@
 // @require      file:///V:/home/vzell/git/springsteen-site-parser/adapters/brucebase.js
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64(-list)?|start)?$/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/
+// @include      /^https?:\/\/brucebase\.wikidot\.com\/system:recent-changes$/
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @connect      brucebase.wikidot.com
@@ -117,6 +118,22 @@
       } },
   ];
 
+  /** SmartTable column definitions for the system:recent-changes page. */
+  const RECENT_CHANGES_COLUMNS = [
+    { key: 'title',    label: 'Page',    type: 'string' },
+    { key: 'flags',    label: 'Type',    type: 'string', width: '70px' },
+    { key: 'date',     label: 'Date',    type: 'string', width: '155px' },
+    { key: 'revision', label: 'Rev',     type: 'number', width: '55px' },
+    { key: 'author',   label: 'By',      type: 'string', width: '120px' },
+    { key: 'comment',  label: 'Comment', type: 'string' },
+    { key: 'url',      label: 'Link',    type: 'string', sortable: false, filterable: false,
+      render: url => {
+        const a = document.createElement('a');
+        a.href = url; a.textContent = 'Open'; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        return a;
+      } },
+  ];
+
   /** Maps each canonical icon type to the DETAIL page tab that holds its content. */
   const CANONICAL_TAB_LABEL = {
     Photo:        'Gallery',
@@ -144,8 +161,9 @@
   const isListPage   = /^(\d{4}|1949-64)-list$/.test(path);
   const isYearPage   = /^\d{4}$/.test(path) || path === '1949-64';
   const isDetailPage = DETAIL_TYPE_RE.test(path);
-  const isVenuePage  = /^venue:/.test(path);
-  const isRetailPage = /^retail:/.test(path);
+  const isVenuePage          = /^venue:/.test(path);
+  const isRetailPage         = /^retail:/.test(path);
+  const isRecentChangesPage  = path === 'system:recent-changes';
 
   if (isHomePage) {
     log('Detected HOME page');
@@ -165,6 +183,9 @@
   } else if (isRetailPage) {
     log('Detected RETAIL page');
     await runRetailPage();
+  } else if (isRecentChangesPage) {
+    log('Detected RECENT CHANGES page');
+    await runRecentChangesPage();
   } else {
     logWarn('Unrecognized page type for path:', path);
   }
@@ -2897,6 +2918,161 @@
     pageTitle.after(btnContainer);
 
     setupGlobalToggle(globalBtn, content, originalHtml);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // RECENT CHANGES PAGE MODE
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Runs on /system:recent-changes.
+   * Inserts #bb-sticky-bar with a "⊞ Table View" button. When clicked, collects
+   * up to 1000 recent changes (5 pages × 200 revisions) via DOM-driven pagination
+   * and renders them in the SmartTable.
+   */
+  async function runRecentChangesPage() {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+
+    const tableViewBtn = document.createElement('button');
+    tableViewBtn.id        = 'bb-rc-table-btn';
+    tableViewBtn.className = 'bb-toggle-btn';
+    tableViewBtn.textContent = '⊞ Table View';
+    tableViewBtn.title = 'Collect the last 1000 recent changes and show in a sortable SmartTable';
+
+    const progressEl = document.createElement('span');
+    progressEl.style.cssText = 'font-size:0.85em;margin-left:8px;color:#555;';
+
+    const btnContainer = document.createElement('div');
+    btnContainer.id = 'bb-btn-container';
+    btnContainer.append(tableViewBtn);
+
+    const controlsEl = document.createElement('div');
+    controlsEl.id = 'bb-controls';
+    controlsEl.append(btnContainer, progressEl);
+
+    const stickyBar = document.createElement('div');
+    stickyBar.id = 'bb-sticky-bar';
+    stickyBar.appendChild(controlsEl);
+
+    if (pageTitle.parentNode) {
+      pageTitle.parentNode.insertBefore(stickyBar, pageTitle);
+      pageTitle.style.display = 'none';
+    }
+
+    const headerEl = document.getElementById('header');
+    if (headerEl) {
+      document.documentElement.style.setProperty(
+        '--bb-header-h', `${Math.round(headerEl.getBoundingClientRect().height)}px`
+      );
+    }
+    document.documentElement.style.setProperty('--bb-sticky-bar-h', `${stickyBar.offsetHeight}px`);
+
+    tableViewBtn.addEventListener('click', async () => {
+      tableViewBtn.disabled = true;
+      const allRows = await collectRecentChanges(progressEl);
+      document.body.style.cursor = '';   // reset any Wikidot AJAX loading cursor
+      if (allRows.length === 0) {
+        progressEl.textContent = 'No data collected.';
+        tableViewBtn.disabled = false;
+        return;
+      }
+      progressEl.textContent = `Done — ${allRows.length} changes collected`;
+
+      if (typeof SmartTable !== 'undefined') {
+        const stHost = document.createElement('div');
+        stHost.id = 'bb-rc-smarttable-host';
+        stickyBar.after(stHost);
+        SmartTable.render({
+          columns:   RECENT_CHANGES_COLUMNS,
+          rows:      allRows,
+          container: stHost,
+          options:   { stickyOffset: 'calc(var(--bb-header-h) + var(--bb-sticky-bar-h))' },
+        });
+        const stBtn = stHost.querySelector('.st-btn-trigger');
+        if (stBtn) {
+          btnContainer.appendChild(stBtn);
+          stBtn.click();
+        }
+      } else {
+        progressEl.textContent += ' — SmartTable not available';
+      }
+      tableViewBtn.remove();
+    });
+  }
+
+  /**
+   * Scrapes 10 successive pages of #site-changes-list
+   * via DOM clicks on the "next »" pager link, collecting up to 1000 rows total.
+   * Uses MutationObserver to detect each AJAX reload before proceeding.
+   * @param {HTMLElement} progressEl  Status span updated during collection.
+   * @returns {Promise<object[]>}
+   */
+  async function collectRecentChanges(progressEl) {
+    const allRows = [];
+    const changesList = document.getElementById('site-changes-list');
+    if (!changesList) {
+      logErr('RC: #site-changes-list not found');
+      return allRows;
+    }
+
+    /** Resolves after the first childList mutation on `node`, or rejects on timeout. */
+    function waitForMutation(node, timeout = 12000) {
+      return new Promise((resolve, reject) => {
+        const t = setTimeout(() => { obs.disconnect(); reject(new Error('timeout')); }, timeout);
+        const obs = new MutationObserver(() => { clearTimeout(t); obs.disconnect(); resolve(); });
+        obs.observe(node, { childList: true, subtree: true });
+      });
+    }
+
+    /** Parses all .changes-list-item entries currently in the live DOM. */
+    function parseCurrentPage() {
+      const rows = [];
+      document.querySelectorAll('#site-changes-list .changes-list-item').forEach(item => {
+        const titleEl  = item.querySelector('td.title a');
+        if (!titleEl) return;
+        const flagEls  = [...item.querySelectorAll('td.flags .spantip')];
+        const dateEl   = item.querySelector('td.mod-date .odate');
+        const revEl    = item.querySelector('td.revision-no');
+        const authorEl = item.querySelector('td.mod-by .printuser a');
+        const commentEl = item.querySelector('.comments');
+
+        const revText  = revEl?.textContent.trim() || '';
+        const revMatch = revText.match(/\d+/);
+
+        rows.push({
+          title:    titleEl.textContent.trim(),
+          url:      titleEl.href || '',
+          flags:    flagEls.map(s => s.title || s.textContent.trim()).join(', '),
+          date:     dateEl?.textContent.trim() || '',
+          revision: revMatch ? parseInt(revMatch[0], 10) : 0,
+          author:   authorEl?.textContent.trim() || '',
+          comment:  commentEl?.textContent.trim() || '',
+        });
+      });
+      return rows;
+    }
+
+    // ── Scrape 10 pages via pager clicks ───────────────────────────────────
+    for (let page = 1; page <= 10; page++) {
+      progressEl.textContent = `Collecting page ${page} of 10…`;
+      const pageRows = parseCurrentPage();
+      allRows.push(...pageRows);
+      log(`RC: page ${page} — ${pageRows.length} rows`);
+
+      if (page === 10) break;
+
+      const nextLink = [...document.querySelectorAll('.pager .target a')]
+        .find(a => /next/i.test(a.textContent));
+      if (!nextLink) { log('RC: no "next" link — stopping at page', page); break; }
+
+      const mut = waitForMutation(changesList);
+      nextLink.click();
+      try { await mut; } catch { logWarn('RC: timeout waiting for page', page + 1); break; }
+      await new Promise(r => setTimeout(r, 600));
+    }
+
+    return allRows;
   }
 
   // Appends a ⚠️ warning to <p><strong>…</strong></p> section-header elements

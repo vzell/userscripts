@@ -8,6 +8,9 @@
 | YEAR | `/YYYY` or `/1949-64` | `\d{4}$` or `1949-64` |
 | YEAR LIST | `/YYYY-list` or `/1949-64-list` | `\d{4}-list$` |
 | DETAIL | `/type:YYYY-MM-DD-slug` | `(gig\|nogig\|…):` prefix |
+| VENUE | `/venue:…` | `venue:` prefix |
+| RETAIL | `/retail:…` | `retail:` prefix |
+| RECENT CHANGES | `/system:recent-changes` | exact match |
 
 Known event types: `gig`, `interview`, `nogig`, `offstage`, `onstage`,
 `recording`, `rehearsal`, `soundcheck`. Any URL type outside this set receives
@@ -69,6 +72,35 @@ sufficient. `scrollbar-gutter: stable` has the same problem; avoid it.
 Both `addStyles()` and `createTooltipElement()` always run before any page
 dispatcher. `addStyles()` injects all CSS via `GM_addStyle`; `createTooltipElement()`
 appends `#bb-tooltip` to `document.body`.
+
+---
+
+## RECENT CHANGES page (`system:recent-changes`)
+
+The page uses Wikidot's `SiteChangesModule` for JavaScript-driven pagination.
+Content lives in `<div class="changes-list" id="site-changes-list">`, which
+Wikidot replaces wholesale on every page/perpage change — making it the
+natural `MutationObserver` target.
+
+Each change entry is a `div.changes-list-item` containing a one-row `<table>`:
+
+| TD class | Content |
+|---|---|
+| `td.title` | `<a href="/slug">Page Name</a>` |
+| `td.flags` | One or more `<span class="spantip" title="change type">` |
+| `td.mod-date` | `<span class="odate time_EPOCH">Human date</span>` |
+| `td.revision-no` | `(rev. N)` or `(new)` |
+| `td.mod-by` | `<span class="printuser"><a>username</a></span>` |
+
+Optional `<div class="comments">` sibling holds the revision comment.
+
+`runRecentChangesPage()` inserts `#bb-sticky-bar` with a "⊞ Table View" button.
+Clicking it calls `collectRecentChanges()`, which:
+1. Parses all `div.changes-list-item` entries with `parseCurrentPage()`.
+2. Finds the "next »" pager link (`.pager .target a` matching `/next/i`) and clicks it.
+3. Waits for `#site-changes-list` to mutate (AJAX reload) via MutationObserver.
+4. Repeats steps 1–3 for 10 pages total (200 changes at the default 20 per page).
+5. Renders collected rows in a SmartTable (columns: Page / Type / Date / Rev / By / Comment / Link).
 
 ---
 

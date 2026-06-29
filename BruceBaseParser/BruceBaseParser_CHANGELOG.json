@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.13",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "RECENT CHANGES page (system:recent-changes) is now recognised and enhanced: inserts #bb-sticky-bar with a '⊞ Table View' button that collects the 200 most recent changes (10 pages via pager clicks, MutationObserver on #site-changes-list) and renders them in a sortable/filterable SmartTable (columns: Page, Type, Date, Rev, By, Comment, Link)."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.12",
         "date": "2026-06-29",
         "sections": [
