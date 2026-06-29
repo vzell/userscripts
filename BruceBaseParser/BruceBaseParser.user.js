@@ -13,6 +13,8 @@
 // @require      file:///V:/home/vzell/git/springsteen-site-parser/adapters/brucebase.js
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64(-list)?|start)?$/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/
+// @include      /^https?:\/\/brucebase\.wikidot\.com\/venue:/
+// @include      /^https?:\/\/brucebase\.wikidot\.com\/retail:/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/system:recent-changes$/
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
