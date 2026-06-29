@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.14
+// @version      2.15
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -15,6 +15,8 @@
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/venue:/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/retail:/
+// @include      /^https?:\/\/brucebase\.wikidot\.com\/song:/
+// @include      /^https?:\/\/brucebase\.wikidot\.com\/relation:/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/system:recent-changes$/
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
@@ -165,12 +167,15 @@
   const isDetailPage = DETAIL_TYPE_RE.test(path);
   const isVenuePage          = /^venue:/.test(path);
   const isRetailPage         = /^retail:/.test(path);
+  const isSongPage           = /^song:/.test(path);
+  const isRelationPage       = /^relation:/.test(path);
   const isRecentChangesPage  = path === 'system:recent-changes';
 
   log('[DBG] path:', JSON.stringify(path),
       '| home:', isHomePage, '| list:', isListPage, '| year:', isYearPage,
       '| detail:', isDetailPage, '| venue:', isVenuePage,
-      '| retail:', isRetailPage, '| recent:', isRecentChangesPage);
+      '| retail:', isRetailPage, '| song:', isSongPage,
+      '| relation:', isRelationPage, '| recent:', isRecentChangesPage);
 
   if (isHomePage) {
     log('Detected HOME page');
@@ -190,6 +195,12 @@
   } else if (isRetailPage) {
     log('Detected RETAIL page');
     await runRetailPage();
+  } else if (isSongPage) {
+    log('Detected SONG page');
+    await runSongPage();
+  } else if (isRelationPage) {
+    log('Detected RELATION page');
+    await runRelationPage();
   } else if (isRecentChangesPage) {
     log('Detected RECENT CHANGES page');
     await runRecentChangesPage();
@@ -2944,6 +2955,84 @@
   }
 
   // ════════════════════════════════════════════════════════════════════════════
+  // SONG PAGE MODE
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Runs on /song:… pages.
+   * Adds #bb-btn-container (⇄ Original Page | 💾 Save | 📂 Load) and annotates
+   * .page-tags with song tag consistency checks inline on the page.
+   */
+  async function runSongPage() {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+    const content = document.getElementById('page-content');
+    if (!content) return;
+
+    const originalHtml = content.innerHTML;
+
+    annotateSongPageTags();
+
+    const globalBtn = document.createElement('button');
+    globalBtn.id        = 'bb-global-toggle';
+    globalBtn.className = 'bb-toggle-btn';
+    globalBtn.textContent = '⇄ Original Page';
+    globalBtn.title = 'Toggle between the original page and the annotated view';
+
+    const [saveBtn, loadBtn] = makeSaveLoadBtns('song', () => content, () => originalHtml);
+    loadBtn.addEventListener('click', () =>
+      triggerLoadCache(data => loadPageCache('song', content, null, data))
+    );
+    saveBtn.disabled = false;
+
+    const btnContainer = document.createElement('div');
+    btnContainer.id = 'bb-btn-container';
+    btnContainer.append(globalBtn, saveBtn, loadBtn);
+    pageTitle.after(btnContainer);
+
+    setupGlobalToggle(globalBtn, content, originalHtml);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // RELATION PAGE MODE
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Runs on /relation:… pages.
+   * Adds #bb-btn-container (⇄ Original Page | 💾 Save | 📂 Load) and annotates
+   * .page-tags with relation tag consistency checks inline on the page.
+   */
+  async function runRelationPage() {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+    const content = document.getElementById('page-content');
+    if (!content) return;
+
+    const originalHtml = content.innerHTML;
+
+    annotateRelationPageTags();
+
+    const globalBtn = document.createElement('button');
+    globalBtn.id        = 'bb-global-toggle';
+    globalBtn.className = 'bb-toggle-btn';
+    globalBtn.textContent = '⇄ Original Page';
+    globalBtn.title = 'Toggle between the original page and the annotated view';
+
+    const [saveBtn, loadBtn] = makeSaveLoadBtns('relation', () => content, () => originalHtml);
+    loadBtn.addEventListener('click', () =>
+      triggerLoadCache(data => loadPageCache('relation', content, null, data))
+    );
+    saveBtn.disabled = false;
+
+    const btnContainer = document.createElement('div');
+    btnContainer.id = 'bb-btn-container';
+    btnContainer.append(globalBtn, saveBtn, loadBtn);
+    pageTitle.after(btnContainer);
+
+    setupGlobalToggle(globalBtn, content, originalHtml);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
   // RECENT CHANGES PAGE MODE
   // ════════════════════════════════════════════════════════════════════════════
 
@@ -5597,6 +5686,156 @@
       missingSpan.className = 'bb-tag-missing';
       missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
       missingSpan.title = `Tag "${tag}" expected for this retail page but not present`;
+      missingSpan.textContent = ` ⚠️${tag}`;
+      span.appendChild(missingSpan);
+    }
+  }
+
+  // ── Song page tag helpers ─────────────────────────────────────────────────
+
+  /**
+   * Returns the set of lowercase tags expected on a song page.
+   * Every song page must have the "song" tag.
+   * @returns {Set<string>}
+   */
+  function computeExpectedSongTags() {
+    return new Set(['song']);
+  }
+
+  /**
+   * Returns true for song-page tags whose presence can be verified.
+   * @param {string} tag
+   * @returns {boolean}
+   */
+  function isManagedSongTag(tag) {
+    return tag === 'song';
+  }
+
+  /**
+   * On SONG pages: wraps .page-tags in a yellow warning box and annotates
+   * missing / spurious song tags inline on the live page.
+   * No-op when all expected tags are present and no spurious managed tags exist.
+   */
+  function annotateSongPageTags() {
+    const tagsContainer = document.querySelector('.page-tags');
+    if (!tagsContainer) return;
+
+    const tagLinks     = [...tagsContainer.querySelectorAll('a[href]')];
+    const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const expectedTags = computeExpectedSongTags();
+    const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+    const spuriousLinks = tagLinks.filter(a => {
+      const tag = a.textContent.trim().toLowerCase();
+      return isManagedSongTag(tag) && !expectedTags.has(tag);
+    });
+
+    if (missingTags.length === 0 && spuriousLinks.length === 0) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bb-tags-warn-box';
+    wrapper.style.cssText = 'border:3px solid gold; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
+    tagsContainer.parentNode.insertBefore(wrapper, tagsContainer);
+    wrapper.appendChild(tagsContainer);
+
+    for (const a of spuriousLinks) {
+      const tag      = a.textContent.trim().toLowerCase();
+      const msg      = `Tag "${tag}" is present but not expected for this song page`;
+      const warnSpan = document.createElement('span');
+      warnSpan.className = 'bb-tag-spurious';
+      warnSpan.style.cssText = 'color:darkorange; font-weight:bold; cursor:help; margin:0 2px;';
+      warnSpan.textContent = '⚠️';
+      warnSpan.title = msg;
+      warnSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+      warnSpan.addEventListener('mouseleave', hideTooltip);
+      a.after(warnSpan);
+    }
+
+    const span = tagsContainer.querySelector('span') || tagsContainer;
+    for (const tag of missingTags) {
+      const missingSpan = document.createElement('span');
+      missingSpan.className = 'bb-tag-missing';
+      missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
+      missingSpan.title = `Tag "${tag}" expected for this song page but not present`;
+      missingSpan.textContent = ` ⚠️${tag}`;
+      span.appendChild(missingSpan);
+    }
+  }
+
+  // ── Relation page tag helpers ─────────────────────────────────────────────
+
+  /**
+   * Returns the set of lowercase tags expected on a relation page.
+   * Presence of a "Bands" tab → expects "person".
+   * Presence of a "Members" tab → expects "band".
+   * Uses the live document's .yui-nav to detect tab labels.
+   * @returns {Set<string>}
+   */
+  function computeExpectedRelationTags() {
+    const tabLabels = new Set(
+      [...document.querySelectorAll('.yui-nav em')].map(em => em.textContent.trim())
+    );
+    const expected = new Set();
+    if (tabLabels.has('Bands'))   expected.add('person');
+    if (tabLabels.has('Members')) expected.add('band');
+    return expected;
+  }
+
+  /**
+   * Returns true for relation-page tags whose presence can be verified.
+   * @param {string} tag
+   * @returns {boolean}
+   */
+  function isManagedRelationTag(tag) {
+    return tag === 'person' || tag === 'band';
+  }
+
+  /**
+   * On RELATION pages: wraps .page-tags in a yellow warning box and annotates
+   * missing / spurious relation tags inline on the live page.
+   * No-op when all expected tags are present, no spurious managed tags exist,
+   * or when no determinate tab ("Bands" / "Members") is found.
+   */
+  function annotateRelationPageTags() {
+    const tagsContainer = document.querySelector('.page-tags');
+    if (!tagsContainer) return;
+
+    const tagLinks     = [...tagsContainer.querySelectorAll('a[href]')];
+    const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const expectedTags = computeExpectedRelationTags();
+    if (expectedTags.size === 0) return;   // can't determine person vs band — skip
+    const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+    const spuriousLinks = tagLinks.filter(a => {
+      const tag = a.textContent.trim().toLowerCase();
+      return isManagedRelationTag(tag) && !expectedTags.has(tag);
+    });
+
+    if (missingTags.length === 0 && spuriousLinks.length === 0) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bb-tags-warn-box';
+    wrapper.style.cssText = 'border:3px solid gold; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
+    tagsContainer.parentNode.insertBefore(wrapper, tagsContainer);
+    wrapper.appendChild(tagsContainer);
+
+    for (const a of spuriousLinks) {
+      const tag      = a.textContent.trim().toLowerCase();
+      const msg      = `Tag "${tag}" is present but not expected for this relation page`;
+      const warnSpan = document.createElement('span');
+      warnSpan.className = 'bb-tag-spurious';
+      warnSpan.style.cssText = 'color:darkorange; font-weight:bold; cursor:help; margin:0 2px;';
+      warnSpan.textContent = '⚠️';
+      warnSpan.title = msg;
+      warnSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+      warnSpan.addEventListener('mouseleave', hideTooltip);
+      a.after(warnSpan);
+    }
+
+    const span = tagsContainer.querySelector('span') || tagsContainer;
+    for (const tag of missingTags) {
+      const missingSpan = document.createElement('span');
+      missingSpan.className = 'bb-tag-missing';
+      missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
+      missingSpan.title = `Tag "${tag}" expected for this relation page but not present`;
       missingSpan.textContent = ` ⚠️${tag}`;
       span.appendChild(missingSpan);
     }

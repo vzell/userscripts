@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.15",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "SONG and RELATION pages now supported: adds #bb-btn-container (⇄ Original Page | 💾 Save | 📂 Load) and tag consistency checks inline on the live page. SONG pages must carry the 'song' tag. RELATION pages must carry 'person' when a 'Bands' tab is present, or 'band' when a 'Members' tab is present. @include patterns for song: and relation: added to the userscript header."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.14",
         "date": "2026-06-29",
         "sections": [
