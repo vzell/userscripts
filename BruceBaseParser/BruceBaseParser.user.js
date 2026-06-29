@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.21
+// @version      2.22
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1495,7 +1495,24 @@
     div.style.display = 'none';
     div.appendChild(document.createElement('br'));
 
-    for (const el of setlistEls) {
+    for (let i = 0; i < setlistEls.length; i++) {
+      const el = setlistEls[i];
+
+      // For multi-section events, any bb-relations-list that sits between the
+      // previous setlist element and this one belongs to this section.  Move it
+      // into the list div here so relations appear before their section rather
+      // than after the combined bb-section-list div.
+      if (i > 0) {
+        let sib = setlistEls[i - 1].nextElementSibling;
+        while (sib && sib !== el) {
+          const next = sib.nextElementSibling;
+          if (sib.classList.contains('bb-relations-list')) {
+            div.appendChild(sib);
+          }
+          sib = next;
+        }
+      }
+
       let labelHtml = '';
       const groups  = [[]];   // array of HTML-string arrays, split on .bb-sep
 

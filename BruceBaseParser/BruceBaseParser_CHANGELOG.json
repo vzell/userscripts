@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.22",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page list view: for events with multiple setlist sections (e.g. 2026#170126 with 'with Willie Nile' + 'with Joe Grushecky'), each section's relation participant block now appears before its own section instead of after the combined bb-section-list div. buildListDiv now uses an indexed loop and moves any .bb-relations-list elements found between the previous and current setlistEl into the list div before that section's label."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.21",
         "date": "2026-06-29",
         "sections": [
