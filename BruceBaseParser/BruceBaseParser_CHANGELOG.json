@@ -1,5 +1,18 @@
 [
     {
+        "version": "2.11",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "VENUE pages (/venue:…) are now recognised and processed: adds #bb-btn-container with ⇄ Original Page, 💾 Save, 📂 Load buttons; annotates .page-tags inline with the same gold warning box and missing/spurious tag treatment already applied on DETAIL pages (using computeExpectedVenueTags / isManagedVenueTag).",
+                    "RETAIL pages (/retail:…) are now recognised and processed: same button container and inline tag annotation (new computeExpectedRetailTags / isManagedRetailTag / annotateRetailPageTags). Expected tags: 'retail' + first-letter index tag."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.10",
         "date": "2026-06-29",
         "sections": [

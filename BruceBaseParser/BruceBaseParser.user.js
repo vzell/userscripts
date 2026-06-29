@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.10
+// @version      2.11
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -144,6 +144,8 @@
   const isListPage   = /^(\d{4}|1949-64)-list$/.test(path);
   const isYearPage   = /^\d{4}$/.test(path) || path === '1949-64';
   const isDetailPage = DETAIL_TYPE_RE.test(path);
+  const isVenuePage  = /^venue:/.test(path);
+  const isRetailPage = /^retail:/.test(path);
 
   if (isHomePage) {
     log('Detected HOME page');
@@ -157,6 +159,12 @@
   } else if (isDetailPage) {
     log('Detected DETAIL page');
     await runDetailPage();
+  } else if (isVenuePage) {
+    log('Detected VENUE page');
+    await runVenuePage();
+  } else if (isRetailPage) {
+    log('Detected RETAIL page');
+    await runRetailPage();
   } else {
     logWarn('Unrecognized page type for path:', path);
   }
@@ -2807,6 +2815,90 @@
     await runDetailProcessing();
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // VENUE PAGE MODE
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Runs on /venue:… pages.
+   * Adds #bb-btn-container (⇄ Original Page | 💾 Save | 📂 Load) and annotates
+   * .page-tags with venue tag consistency checks inline on the page.
+   */
+  async function runVenuePage() {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+    const venueName = pageTitle.textContent.trim();
+    const content   = document.getElementById('page-content');
+    if (!content) return;
+
+    const originalHtml = content.innerHTML;
+
+    // Annotate .page-tags with missing / spurious venue tags.
+    annotateVenuePageTags(venueName);
+
+    // Build button container.
+    const globalBtn = document.createElement('button');
+    globalBtn.id        = 'bb-global-toggle';
+    globalBtn.className = 'bb-toggle-btn';
+    globalBtn.textContent = '⇄ Original Page';
+    globalBtn.title = 'Toggle between the original page and the annotated view';
+
+    const [saveBtn, loadBtn] = makeSaveLoadBtns('venue', () => content, () => originalHtml);
+    loadBtn.addEventListener('click', () =>
+      triggerLoadCache(data => loadPageCache('venue', content, null, data))
+    );
+    saveBtn.disabled = false;
+
+    const btnContainer = document.createElement('div');
+    btnContainer.id = 'bb-btn-container';
+    btnContainer.append(globalBtn, saveBtn, loadBtn);
+    pageTitle.after(btnContainer);
+
+    setupGlobalToggle(globalBtn, content, originalHtml);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // RETAIL PAGE MODE
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Runs on /retail:… pages.
+   * Adds #bb-btn-container (⇄ Original Page | 💾 Save | 📂 Load) and annotates
+   * .page-tags with retail tag consistency checks inline on the page.
+   */
+  async function runRetailPage() {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+    const retailName = pageTitle.textContent.trim();
+    const content    = document.getElementById('page-content');
+    if (!content) return;
+
+    const originalHtml = content.innerHTML;
+
+    // Annotate .page-tags with missing / spurious retail tags.
+    annotateRetailPageTags(retailName);
+
+    // Build button container.
+    const globalBtn = document.createElement('button');
+    globalBtn.id        = 'bb-global-toggle';
+    globalBtn.className = 'bb-toggle-btn';
+    globalBtn.textContent = '⇄ Original Page';
+    globalBtn.title = 'Toggle between the original page and the annotated view';
+
+    const [saveBtn, loadBtn] = makeSaveLoadBtns('retail', () => content, () => originalHtml);
+    loadBtn.addEventListener('click', () =>
+      triggerLoadCache(data => loadPageCache('retail', content, null, data))
+    );
+    saveBtn.disabled = false;
+
+    const btnContainer = document.createElement('div');
+    btnContainer.id = 'bb-btn-container';
+    btnContainer.append(globalBtn, saveBtn, loadBtn);
+    pageTitle.after(btnContainer);
+
+    setupGlobalToggle(globalBtn, content, originalHtml);
+  }
+
   // Appends a ⚠️ warning to <p><strong>…</strong></p> section-header elements
   // on the DETAIL page when their label does not match the corresponding YEAR
   // section label (matched by position).  Also flags any DETAIL headers that have
@@ -5047,6 +5139,131 @@
       missingSpan.className = 'bb-tag-missing';
       missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
       missingSpan.title = `Tag "${tag}" expected based on event data but not present`;
+      missingSpan.textContent = ` ⚠️${tag}`;
+      span.appendChild(missingSpan);
+    }
+  }
+
+  /**
+   * On VENUE pages: wraps .page-tags in a yellow warning box and annotates
+   * missing / spurious venue tags inline on the live page.
+   * No-op when all expected tags are present and no spurious managed tags exist.
+   * @param {string} venueName - Text from the venue page's #page-title.
+   */
+  function annotateVenuePageTags(venueName) {
+    const tagsContainer = document.querySelector('.page-tags');
+    if (!tagsContainer) return;
+
+    const tagLinks      = [...tagsContainer.querySelectorAll('a[href]')];
+    const actualTags    = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const expectedTags  = computeExpectedVenueTags(venueName);
+    const missingTags   = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+    const spuriousLinks = tagLinks.filter(a => {
+      const tag = a.textContent.trim().toLowerCase();
+      return isManagedVenueTag(tag) && !expectedTags.has(tag);
+    });
+
+    if (missingTags.length === 0 && spuriousLinks.length === 0) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bb-tags-warn-box';
+    wrapper.style.cssText = 'border:3px solid gold; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
+    tagsContainer.parentNode.insertBefore(wrapper, tagsContainer);
+    wrapper.appendChild(tagsContainer);
+
+    for (const a of spuriousLinks) {
+      const tag      = a.textContent.trim().toLowerCase();
+      const msg      = `Tag "${tag}" is present but not expected for this venue`;
+      const warnSpan = document.createElement('span');
+      warnSpan.className = 'bb-tag-spurious';
+      warnSpan.style.cssText = 'color:darkorange; font-weight:bold; cursor:help; margin:0 2px;';
+      warnSpan.textContent = '⚠️';
+      warnSpan.title = msg;
+      warnSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+      warnSpan.addEventListener('mouseleave', hideTooltip);
+      a.after(warnSpan);
+    }
+
+    const span = tagsContainer.querySelector('span') || tagsContainer;
+    for (const tag of missingTags) {
+      const missingSpan = document.createElement('span');
+      missingSpan.className = 'bb-tag-missing';
+      missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
+      missingSpan.title = `Tag "${tag}" expected for this venue but not present`;
+      missingSpan.textContent = ` ⚠️${tag}`;
+      span.appendChild(missingSpan);
+    }
+  }
+
+  /**
+   * Returns the set of lowercase tags expected on a retail page.
+   * Always expects "retail"; also expects the first-letter index tag.
+   * @param {string} retailName - Text from the retail page's #page-title.
+   * @returns {Set<string>}
+   */
+  function computeExpectedRetailTags(retailName) {
+    const expected = new Set(['retail']);
+    const first = (retailName || '').trim()[0];
+    if (first && /[a-z]/i.test(first)) expected.add(first.toLowerCase());
+    return expected;
+  }
+
+  /**
+   * Returns true for retail-page tags whose presence can be verified:
+   * the "retail" tag and single lowercase letter tags (first-letter index).
+   * @param {string} tag
+   * @returns {boolean}
+   */
+  function isManagedRetailTag(tag) {
+    return tag === 'retail' || /^[a-z]$/.test(tag);
+  }
+
+  /**
+   * On RETAIL pages: wraps .page-tags in a yellow warning box and annotates
+   * missing / spurious retail tags inline on the live page.
+   * No-op when all expected tags are present and no spurious managed tags exist.
+   * @param {string} retailName - Text from the retail page's #page-title.
+   */
+  function annotateRetailPageTags(retailName) {
+    const tagsContainer = document.querySelector('.page-tags');
+    if (!tagsContainer) return;
+
+    const tagLinks      = [...tagsContainer.querySelectorAll('a[href]')];
+    const actualTags    = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const expectedTags  = computeExpectedRetailTags(retailName);
+    const missingTags   = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+    const spuriousLinks = tagLinks.filter(a => {
+      const tag = a.textContent.trim().toLowerCase();
+      return isManagedRetailTag(tag) && !expectedTags.has(tag);
+    });
+
+    if (missingTags.length === 0 && spuriousLinks.length === 0) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bb-tags-warn-box';
+    wrapper.style.cssText = 'border:3px solid gold; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
+    tagsContainer.parentNode.insertBefore(wrapper, tagsContainer);
+    wrapper.appendChild(tagsContainer);
+
+    for (const a of spuriousLinks) {
+      const tag      = a.textContent.trim().toLowerCase();
+      const msg      = `Tag "${tag}" is present but not expected for this retail page`;
+      const warnSpan = document.createElement('span');
+      warnSpan.className = 'bb-tag-spurious';
+      warnSpan.style.cssText = 'color:darkorange; font-weight:bold; cursor:help; margin:0 2px;';
+      warnSpan.textContent = '⚠️';
+      warnSpan.title = msg;
+      warnSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+      warnSpan.addEventListener('mouseleave', hideTooltip);
+      a.after(warnSpan);
+    }
+
+    const span = tagsContainer.querySelector('span') || tagsContainer;
+    for (const tag of missingTags) {
+      const missingSpan = document.createElement('span');
+      missingSpan.className = 'bb-tag-missing';
+      missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
+      missingSpan.title = `Tag "${tag}" expected for this retail page but not present`;
       missingSpan.textContent = ` ⚠️${tag}`;
       span.appendChild(missingSpan);
     }
