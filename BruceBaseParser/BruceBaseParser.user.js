@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.13
+// @version      2.14
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -3905,6 +3905,7 @@
     const glyphSpan = makeGlyphSpan(glyph);
     const nodes     = alias ? [typeSpan, glyphSpan, makeAliasSpan(alias)] : [typeSpan, glyphSpan];
     element.after(...nodes);
+    addCollapseToggle(element.parentElement);
     const enter = e => showYearTooltip(e, yearName, normalizedDetailName, rawDetailName, eventType, match, isEarlyLate, anchorName);
     [element, typeSpan, glyphSpan].forEach(n => {
       n.addEventListener('mouseenter', enter);
@@ -3939,11 +3940,97 @@
   function addUnknownGlyph(element, eventType, url) {
     const glyphSpan = makeGlyphSpan('❓');
     element.after(makeEventTypeSpan(eventType), glyphSpan);
+    addCollapseToggle(element.parentElement);
     const msg = `Unknown event type: "${eventType}"\n${url}`;
     [element, glyphSpan].forEach(n => {
       n.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
       n.addEventListener('mouseleave', hideTooltip);
     });
+  }
+
+  /**
+   * Wraps all DOM siblings after headingP (until the next .bb-event-heading or
+   * parent boundary) inside a .bb-event-content div for collapse/expand.
+   * Idempotent — returns the existing wrapper if already created.
+   * Returns null when there is no content to wrap.
+   * @param {HTMLElement} headingP  The .bb-event-heading <p> element
+   * @returns {HTMLElement|null}
+   */
+  function getOrWrapEventContent(headingP) {
+    const existing = headingP.nextElementSibling;
+    if (existing?.classList.contains('bb-event-content')) return existing;
+    const toWrap = [];
+    let sib = headingP.nextSibling;
+    while (sib) {
+      if (sib.nodeType === Node.ELEMENT_NODE && sib.classList.contains('bb-event-heading')) break;
+      toWrap.push(sib);
+      sib = sib.nextSibling;
+    }
+    if (toWrap.length === 0) return null;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bb-event-content';
+    headingP.after(wrapper);
+    toWrap.forEach(n => wrapper.appendChild(n));
+    return wrapper;
+  }
+
+  /**
+   * Collapses or uncollapses one event's content wrapper.
+   * Uses style.display directly for guaranteed cross-CSS reliability.
+   * @param {HTMLElement} headingP          The .bb-event-heading <p> element
+   * @param {boolean|null} [force=null]     true = collapse, false = expand, null = toggle
+   */
+  function setEventCollapsed(headingP, force) {
+    const wrapper = getOrWrapEventContent(headingP);
+    if (!wrapper) return;
+    const wasCollapsed = wrapper.style.display === 'none';
+    const collapsed    = (force !== null && force !== undefined) ? force : !wasCollapsed;
+    wrapper.style.display = collapsed ? 'none' : '';
+    const toggle = headingP.querySelector('.bb-event-collapse-toggle');
+    if (toggle) {
+      toggle.textContent = collapsed ? ' ▸' : ' ▾';
+      toggle.title = collapsed
+        ? 'Click to expand · Ctrl+Click to expand all events'
+        : 'Click to collapse · Ctrl+Click to collapse all events';
+    }
+  }
+
+  /**
+   * Collapses or expands every event heading <p> on the YEAR page.
+   * @param {boolean} collapse  true = collapse all, false = expand all
+   */
+  function setAllEventsCollapsed(collapse) {
+    document.querySelectorAll('.bb-event-heading-p').forEach(h => setEventCollapsed(h, collapse));
+  }
+
+  /**
+   * Appends a ▾/▸ collapse-toggle span after the glyph/alias and wires collapse
+   * behaviour.  The toggle is appended to innerEl (direct parent of the event link,
+   * e.g. a <strong>), but sibling-walking for collapsing is done on the containing
+   * <p> (headingP), which is found via closest('p').  Idempotent.
+   * @param {HTMLElement} innerEl  element.parentElement — direct parent of event <a>
+   */
+  function addCollapseToggle(innerEl) {
+    if (!innerEl) return;
+    const headingP = innerEl.closest('p') || innerEl;
+    if (headingP.classList.contains('bb-event-heading-p')) return;
+    headingP.classList.add('bb-event-heading-p', 'bb-event-heading');
+    const toggle = document.createElement('span');
+    toggle.className = 'bb-event-collapse-toggle';
+    toggle.textContent = ' ▾';
+    toggle.title = 'Click to collapse · Ctrl+Click to collapse all events';
+    toggle.addEventListener('click', e => {
+      e.stopPropagation();
+      if (e.ctrlKey) {
+        const existingWrapper = headingP.nextElementSibling;
+        const isCollapsed = existingWrapper?.classList.contains('bb-event-content') &&
+                            existingWrapper.style.display === 'none';
+        setAllEventsCollapsed(!isCollapsed);
+      } else {
+        setEventCollapsed(headingP, null);
+      }
+    });
+    innerEl.appendChild(toggle);
   }
 
   // Returns the event alias from the first tab of a detail page, or null.
@@ -5855,6 +5942,9 @@
       .bb-event-alias       { font-style: italic; font-weight: bold; color: #555; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }
       .bb-scheduled { font-size: 0.9em; font-family: monospace; color: #555; margin: 1px 0 3px; }
+      .bb-event-heading { background: #f0f0f0; border-radius: 2px; padding: 1px 4px; }
+      .bb-event-collapse-toggle { display: inline-block; cursor: pointer; user-select: none; padding: 0 10px 0 6px; color: #999; font-size: 0.9em; font-style: normal; }
+      .bb-event-collapse-toggle:hover { color: #333; }
 
       /* Toggle buttons */
       .bb-toggle-btn {

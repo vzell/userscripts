@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.14",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR page: each event heading line now has a light grey background (.bb-event-heading). A ▾/▸ toggle span appended after the glyph/alias lets users collapse or expand the event's content (scheduled blocks, venue info, icon tabs, setlist). Click toggles the individual event; Ctrl+Click collapses or expands all events on the page. Tooltip updates dynamically to reflect the current state."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.13",
         "date": "2026-06-29",
         "sections": [
