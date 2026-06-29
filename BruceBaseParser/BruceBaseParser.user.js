@@ -3977,6 +3977,9 @@
   /**
    * Collapses or uncollapses one event's content wrapper.
    * Uses style.display directly for guaranteed cross-CSS reliability.
+   * On collapse, absorbs any siblings that were appended to section after the
+   * wrapper was created (lazy panels, song-tab rows, etc. all use
+   * section.appendChild and therefore land outside the wrapper).
    * @param {HTMLElement} headingP          The .bb-event-heading <p> element
    * @param {boolean|null} [force=null]     true = collapse, false = expand, null = toggle
    */
@@ -3985,7 +3988,19 @@
     if (!wrapper) return;
     const wasCollapsed = wrapper.style.display === 'none';
     const collapsed    = (force !== null && force !== undefined) ? force : !wasCollapsed;
-    wrapper.style.display = collapsed ? 'none' : '';
+    if (collapsed) {
+      // Absorb any siblings appended to section after the wrapper was created.
+      let sib = wrapper.nextSibling;
+      while (sib) {
+        if (sib.nodeType === Node.ELEMENT_NODE && sib.classList.contains('bb-event-heading-p')) break;
+        const next = sib.nextSibling;
+        wrapper.appendChild(sib);
+        sib = next;
+      }
+      wrapper.style.display = 'none';
+    } else {
+      wrapper.style.display = '';
+    }
     const toggle = headingP.querySelector('.bb-event-collapse-toggle');
     if (toggle) {
       toggle.textContent = collapsed ? ' ▸' : ' ▾';
