@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.15
+// @version      2.17
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1219,6 +1219,12 @@
           listDiv.style.display = view === 'list' ? '' : 'none';
           setlistEls?.forEach(s => { s.style.display = view === 'list' ? 'none' : ''; });
         }
+        processedDiv.querySelectorAll('.bb-relations-flat').forEach(el => {
+          el.style.display = view === 'list' ? 'none' : '';
+        });
+        processedDiv.querySelectorAll('.bb-relations-list').forEach(el => {
+          el.style.display = view === 'list' ? '' : 'none';
+        });
         origBtn.textContent = view === 'original' ? '⇄ Processed' : '⇄ Original';
         listBtn.textContent = view === 'list'      ? '☰ Flat'      : '☰ List';
       }
@@ -1230,6 +1236,7 @@
         if (viewState === 'list') { showView('flat'); return; }
         if (!listDiv) {
           setlistEls = [...processedDiv.querySelectorAll('p, blockquote')].filter(el =>
+            !el.classList.contains('bb-relations-flat') &&
             el.querySelector('.bb-sep, .bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff')
           );
           if (!setlistEls.length) return;
@@ -1379,6 +1386,13 @@
         listDiv.style.display = view === 'list' ? '' : 'none';
         setlistEls.forEach(el => { el.style.display = view === 'list' ? 'none' : ''; });
       }
+      // Swap relation flat/list views alongside the setlist toggle.
+      processedDiv.querySelectorAll('.bb-relations-flat').forEach(el => {
+        el.style.display = view === 'list' ? 'none' : '';
+      });
+      processedDiv.querySelectorAll('.bb-relations-list').forEach(el => {
+        el.style.display = view === 'list' ? '' : 'none';
+      });
       origBtn.textContent = view === 'original' ? '⇄ Processed' : '⇄ Original';
       listBtn.textContent = view === 'list'     ? '☰ Flat'      : '☰ List';
     }
@@ -1393,6 +1407,7 @@
       } else {
         if (!listDiv) {
           setlistEls = [...processedDiv.querySelectorAll('p, blockquote')].filter(el =>
+            !el.classList.contains('bb-relations-flat') &&
             el.querySelector('.bb-sep, .bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff')
           );
           if (setlistEls.length === 0) return;  // nothing to list-ify
@@ -2481,6 +2496,13 @@
             }
           });
           renderYearSetlist(yearSections, diffItems);
+
+          // ── Relation participants ───────────────────────────────────────────
+          const relGroups = extractRelations(doc);
+          if (relGroups.length > 0) {
+            const processedDiv = element.closest('.bb-section-processed');
+            if (processedDiv) injectEventRelations(processedDiv, relGroups, yearSections);
+          }
         }
       }
 
@@ -4186,6 +4208,204 @@
     return span;
   }
 
+  // ── Relation participant extraction and rendering ──────────────────────────
+
+  /**
+   * Parses #wiki-tab-0-0 of a DETAIL page and returns an array of relation groups.
+   * Each group has an optional header (from <p><strong>…</strong></p> dividers)
+   * and a list of RelItem objects. Multiple consecutive <ul> blocks without an
+   * intervening header are merged into the same group (case b: Guest pattern).
+   * Stops at <hr> or <ol> (setlist area begins).
+   * @param {Document} doc
+   * @returns {Array<{header:string|null, items:Array<{href:string, name:string, extra:string|null, members:Array<{href:string,name:string,extra:string|null}>}>}>}
+   */
+  function extractRelations(doc) {
+    const tab = doc.getElementById('wiki-tab-0-0');
+    if (!tab) return [];
+
+    const kids = [...tab.children];
+    // Skip alias block: <p><strong>…</strong></p> followed by <hr>
+    let startIdx = 0;
+    if (kids.length >= 2 && kids[0].tagName === 'P' && kids[1].tagName === 'HR') {
+      const strong = kids[0].querySelector('strong');
+      if (strong && kids[0].textContent.trim() === strong.textContent.trim()) {
+        startIdx = 2;
+      }
+    }
+
+    const groups = [];
+    let currentGroup = null;
+
+    for (let i = startIdx; i < kids.length; i++) {
+      const el = kids[i];
+      if (el.tagName === 'HR' || el.tagName === 'OL') break;
+      if (el.tagName === 'P') {
+        const strong = el.querySelector('strong');
+        if (!strong) break; // prose paragraph — setlist area
+        currentGroup = { header: strong.textContent.trim(), items: [] };
+        groups.push(currentGroup);
+      } else if (el.tagName === 'UL') {
+        if (!currentGroup) {
+          currentGroup = { header: null, items: [] };
+          groups.push(currentGroup);
+        }
+        for (const li of el.querySelectorAll(':scope > li')) {
+          const a = li.querySelector(':scope > a[href^="/relation:"]');
+          if (!a) continue;
+          const extraEl = li.querySelector('span[style*="font-size"]');
+          const memberUl = li.querySelector(':scope > ul');
+          const members = memberUl
+            ? [...memberUl.querySelectorAll(':scope > li')].map(mli => {
+                const ma = mli.querySelector(':scope > a[href^="/relation:"]');
+                if (!ma) return null;
+                const mExtra = mli.querySelector('span[style*="font-size"]');
+                return {
+                  href:  ma.getAttribute('href'),
+                  name:  ma.textContent.trim(),
+                  extra: mExtra ? mExtra.textContent.trim() : null
+                };
+              }).filter(Boolean)
+            : [];
+          currentGroup.items.push({
+            href:    a.getAttribute('href'),
+            name:    a.textContent.trim(),
+            extra:   extraEl ? extraEl.textContent.trim() : null,
+            members
+          });
+        }
+        // Do NOT reset currentGroup — consecutive ULs without a header merge
+        // into the same group (handles the "(Guest)" second-block pattern).
+      }
+    }
+
+    return groups.filter(g => g.items.length > 0);
+  }
+
+  /**
+   * Returns an HTML string for the flat one-line relation view of a single group.
+   * Top-level entries use "•" (bb-rel-main); band members use "◦" (bb-rel-member).
+   * Extra annotations (e.g. "(Guest)") are rendered as .bb-rel-extra spans.
+   * @param {{header:string|null, items:Array}} group
+   * @returns {string}
+   */
+  function renderRelationsFlatHtml(group) {
+    const parts = [];
+    for (const item of group.items) {
+      const extra = item.extra
+        ? ` <span class="bb-rel-extra">${esc(item.extra)}</span>`
+        : '';
+      // Bullet: span (click → Relation tab row).  Name: link (click → relation page).
+      parts.push(
+        `<span class="bb-rel-bullet bb-rel-main" data-rel-href="${esc(item.href)}" data-rel-name="${esc(item.name)}">•</span> <a href="${esc(item.href)}" class="bb-rel-name">${esc(item.name)}</a>${extra}`
+      );
+      for (const m of item.members) {
+        const mExtra = m.extra
+          ? ` <span class="bb-rel-extra">${esc(m.extra)}</span>`
+          : '';
+        parts.push(
+          `<span class="bb-rel-bullet bb-rel-member" data-rel-href="${esc(m.href)}" data-rel-name="${esc(m.name)}">◦</span> <a href="${esc(m.href)}" class="bb-rel-name">${esc(m.name)}</a>${mExtra}`
+        );
+      }
+    }
+    return parts.join('<span class="bb-sep"> / </span>');
+  }
+
+  /**
+   * Returns a <ul class="bb-relations-list-ul"> DOM element for the nested list
+   * view of a single relation group. Top-level items use "•" bullets; band
+   * members use "◦" bullets in an indented nested <ul>.
+   * @param {{header:string|null, items:Array}} group
+   * @returns {HTMLUListElement}
+   */
+  function renderRelationsListEl(group) {
+    const ul = document.createElement('ul');
+    ul.className = 'bb-relations-list-ul';
+    for (const item of group.items) {
+      const li = document.createElement('li');
+      const extra = item.extra
+        ? ` <span class="bb-rel-extra">${esc(item.extra)}</span>`
+        : '';
+      li.innerHTML =
+        `<span class="bb-rel-bullet bb-rel-main" data-rel-href="${esc(item.href)}" data-rel-name="${esc(item.name)}">•</span>` +
+        ` <a href="${esc(item.href)}" class="bb-rel-name">${esc(item.name)}</a>${extra}`;
+      if (item.members.length > 0) {
+        const memberUl = document.createElement('ul');
+        memberUl.className = 'bb-relations-list-ul';
+        for (const m of item.members) {
+          const mli = document.createElement('li');
+          const mExtra = m.extra
+            ? ` <span class="bb-rel-extra">${esc(m.extra)}</span>`
+            : '';
+          mli.innerHTML =
+            `<span class="bb-rel-bullet bb-rel-member" data-rel-href="${esc(m.href)}" data-rel-name="${esc(m.name)}">◦</span>` +
+            ` <a href="${esc(m.href)}" class="bb-rel-name">${esc(m.name)}</a>${mExtra}`;
+          memberUl.appendChild(mli);
+        }
+        li.appendChild(memberUl);
+      }
+      ul.appendChild(li);
+    }
+    return ul;
+  }
+
+  /**
+   * Injects relation participant blocks into processedDiv, one per eligible year
+   * section (indexed after filtering out "setlist" preview sections for case d).
+   * Each injection is a pair: <p class="bb-relations-flat"> (visible by default)
+   * and <div class="bb-relations-list"> (hidden; shown by the ☰ List toggle).
+   * @param {Element} processedDiv
+   * @param {Array} relGroups  — from extractRelations()
+   * @param {Array} yearSections — from parseYearSetlist()
+   */
+  function injectEventRelations(processedDiv, relGroups, yearSections) {
+    if (!relGroups.length) return;
+    // Exclude "setlist" preview sections (case d) and "soundcheck" sections:
+    // relations describe show participants, not soundcheck performers.
+    // Fall back to soundcheck-inclusive if no other sections exist.
+    const noSoundcheck = yearSections.filter(s => {
+      const lc = s.label.toLowerCase();
+      return lc !== 'setlist' && lc !== 'soundcheck';
+    });
+    const eligible = noSoundcheck.length > 0
+      ? noSoundcheck
+      : yearSections.filter(s => s.label.toLowerCase() !== 'setlist');
+
+    const n = Math.min(relGroups.length, eligible.length);
+    for (let i = 0; i < n; i++) {
+      const group = relGroups[i];
+      if (!group.items.length) continue;
+
+      const flatEl = document.createElement('p');
+      flatEl.className = 'bb-relations-flat';
+      flatEl.innerHTML = renderRelationsFlatHtml(group);
+
+      // "Relations:" label shown above the nested list in list view
+      const relLabelP = document.createElement('p');
+      relLabelP.className = 'bb-list-label';
+      const relLabelSpan = document.createElement('span');
+      relLabelSpan.className = 'bb-section-label';
+      relLabelSpan.textContent = 'Relations:';
+      relLabelP.appendChild(relLabelSpan);
+
+      const listEl = document.createElement('div');
+      listEl.className = 'bb-relations-list';
+      listEl.style.display = 'none';
+      listEl.appendChild(relLabelP);
+      listEl.appendChild(renderRelationsListEl(group));
+
+      eligible[i].sourceEl.before(flatEl, listEl);
+
+      // Wire bullet click handlers: • / ◦ open a Relation: tab row panel
+      for (const container of [flatEl, listEl]) {
+        container.querySelectorAll('.bb-rel-bullet').forEach(span => {
+          span.addEventListener('click', () => {
+            fetchAndToggleRelationTabRow(span.dataset.relHref, span.dataset.relName, processedDiv, span);
+          });
+        });
+      }
+    }
+  }
+
   // Returns all timing/scheduling code blocks from a detail page.
   // Blocks are <div class="code"><pre><code>…</code></pre></div> elements.
   // Covers "Scheduled: …", "Local Start Time …", and any future patterns.
@@ -5480,6 +5700,88 @@
   }
 
   /**
+   * Builds a .bb-relation-tab-row containing one button per non-empty tab on
+   * the relation page. Appended to section; returns the row (or null if empty).
+   * @param {Document}    relDoc    - Parsed relation page document.
+   * @param {string}      relName   - Display name for the row label.
+   * @param {HTMLElement} section   - .bb-section-processed container.
+   * @returns {HTMLElement|null}
+   */
+  function addRelationTabButtons(relDoc, relName, section) {
+    const tabMap = buildTabMap(relDoc);
+    const row = document.createElement('div');
+    row.className = 'bb-relation-tab-row';
+    row.appendChild(makeTabRowLabel('Relation:'));
+
+    for (const [label] of tabMap) {
+      const tab = getTabEl(relDoc, tabMap, label);
+      if (!tab) continue;
+      const text = tab.textContent.trim();
+      if (!text || SORRY_RE.test(text)) continue;
+
+      const html = tab.innerHTML
+        .replace(/href="\//g, `href="${location.protocol}//${location.host}/`);
+      const content = { type: 'html', caption: `${relName}: ${label}`, html };
+      const btn = document.createElement('button');
+      btn.className = 'bb-relation-tab-btn';
+      btn.textContent = label;
+      btn.title = `Relation page tab — click to expand/collapse: ${label}`;
+
+      btn.addEventListener('click', () => {
+        if (!btn._bbPanel) {
+          btn._bbPanel = buildIconPanel(content);
+          btn._bbPanel._bbIcon = btn;
+          section.appendChild(btn._bbPanel);
+        }
+        const open = btn._bbPanel.style.display !== 'none';
+        btn._bbPanel.style.display = open ? 'none' : '';
+        btn.classList.toggle('bb-icon-active', !open);
+      });
+
+      row.appendChild(btn);
+    }
+
+    if (row.children.length <= 1) return null;
+    section.appendChild(row);
+    return row;
+  }
+
+  /**
+   * Fetches a relation page on demand (first click on a bullet) or toggles an
+   * already-loaded row. Relation tab rows are cached on section._bbRelRows.
+   * @param {string}      relHref   e.g. "/relation:bruce-springsteen"
+   * @param {string}      relName   Display name for the row label
+   * @param {HTMLElement} section   .bb-section-processed container
+   * @param {HTMLElement} bullet    The .bb-rel-bullet span that was clicked
+   */
+  async function fetchAndToggleRelationTabRow(relHref, relName, section, bullet) {
+    if (!section._bbRelRows) section._bbRelRows = new Map();
+
+    const existing = section._bbRelRows.get(relHref);
+    if (existing) {
+      const visible = existing.style.display !== 'none';
+      existing.style.display = visible ? 'none' : '';
+      bullet.classList.toggle('bb-icon-active', !visible);
+      return;
+    }
+
+    bullet.classList.add('bb-rel-loading');
+    try {
+      const url    = `${location.protocol}//${location.host}${relHref}`;
+      const relDoc = await fetchPage(url);
+      const row    = addRelationTabButtons(relDoc, relName, section);
+      bullet.classList.remove('bb-rel-loading');
+      if (row) {
+        section._bbRelRows.set(relHref, row);
+        bullet.classList.add('bb-icon-active');
+      }
+    } catch (e) {
+      bullet.classList.remove('bb-rel-loading');
+      logWarn(`  Relation page fetch failed for ${relHref}:`, e.message);
+    }
+  }
+
+  /**
    * On DETAIL pages: wraps .page-tags in a yellow warning box and appends
    * expected-but-missing tags as bold-red spans inside the tag container.
    * No-op when all expected tags are present.
@@ -6424,6 +6726,21 @@
       .bb-filter-cb-label input[type="checkbox"] { margin: 0; cursor: pointer; }
       .bb-filter-sep { color: #bbb; font-size: 1.1em; padding: 0 2px; user-select: none; }
       mark.bb-filter-match { background: #ffe066; color: inherit; border-radius: 2px; padding: 0 1px; }
+
+      /* ── Relation participant blocks ───────────────────────────────────── */
+      .bb-relations-flat { margin: 0.6em 0 2px; font-size: 0.9em; color: #555; }
+      .bb-relations-list { margin: 0.6em 0 4px; }
+      ul.bb-relations-list-ul { list-style: none; margin: 0; padding: 0; }
+      ul.bb-relations-list-ul ul.bb-relations-list-ul { padding-left: 1.2em; }
+      .bb-rel-bullet { text-decoration: none; color: #06c; cursor: pointer; }
+      .bb-rel-bullet:hover { text-decoration: underline; }
+      .bb-rel-name { color: inherit; }
+      .bb-rel-extra { color: #888; font-style: italic; font-size: 0.85em; }
+      .bb-rel-loading { opacity: 0.5; cursor: wait; }
+      .bb-relation-tab-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0; }
+      .bb-relation-tab-btn { font-size: 0.8em; padding: 1px 6px; cursor: pointer; border: 1px solid #999; border-radius: 3px; background: #f5f5f5; }
+      .bb-relation-tab-btn:hover, .bb-relation-tab-btn.bb-icon-active { background: #dce8ff; border-color: #66a; }
+      ol.bb-list-view + p.bb-list-label { margin-top: 0.5em; }
     `);
   }
 

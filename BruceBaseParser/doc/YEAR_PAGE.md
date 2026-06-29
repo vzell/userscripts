@@ -120,7 +120,30 @@ Fetches the DETAIL page with `fetchPage(url)`, then runs in sequence:
 
 When `setlistEls.length > 0` — see [SETLIST.md](SETLIST.md).
 
-### 7. Anchor consistency check
+### 7. Relation participants
+
+Called at the end of the `setlistEls.length > 0` block, after `renderYearSetlist`:
+
+- `extractRelations(doc)` — parses `#wiki-tab-0-0` to extract the artist/band
+  participants listed under each event. Returns `RelGroup[]` where each group
+  has an optional header (from `<p><strong>…</strong></p>` section dividers) and
+  a list of `RelItem` objects `{ href, name, extra, members }`.
+  - Skips the alias block (`<p><strong>…</strong></p><hr>`) at the start if
+    present.
+  - Multiple consecutive `<ul>` blocks without an intervening header are merged
+    into one group (handles the "Guest" annotation pattern — case b).
+  - Stops at `<hr>` or `<ol>` (setlist area begins).
+- `injectEventRelations(processedDiv, relGroups, yearSections)` — inserts one
+  `<p class="bb-relations-flat">` + `<div class="bb-relations-list">` pair before
+  each matching setlist `<p>` element. Matching is index-based after filtering
+  out `label === 'setlist'` preview sections (case d). Top-level entries use `•`
+  bullets; band members use `◦` bullets; both hyperlinked to `/relation:` pages.
+  Extra info (e.g. `(Guest)`) is rendered inline as `.bb-rel-extra`.
+
+The list view (`showView('list')` in `insertSectionToggle`) toggles `.bb-relations-flat`
+hidden and `.bb-relations-list` visible, showing the original nested hierarchy.
+
+### 8. Anchor consistency check
 
 `checkYearAnchorConsistency(doc, anchorName, anchorEl, eventDate)` — see
 [ANCHORS.md](ANCHORS.md).

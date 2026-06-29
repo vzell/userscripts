@@ -154,6 +154,42 @@ Clicking a `bb-song-num` link calls
 
 ---
 
+## Relation participant elements
+
+Injected by `injectEventRelations` (called from `processOneYearEvent`) into
+`processedDiv` immediately before each eligible setlist `<p>` element.
+`injectEventRelations` excludes `'setlist'` preview sections (case d) and
+`'soundcheck'` sections, falling back to soundcheck-inclusive if no show
+sections exist.
+
+| CSS class | Role |
+|---|---|
+| `.bb-relations-flat` | Flat one-liner `<p>` visible in flat/original views |
+| `.bb-relations-list` | Nested `<div>` with "Relations:" label + `<ul>`; visible only in list view |
+| `ul.bb-relations-list-ul` | Nested `<ul>` inside the list-view div; top-level and member lists |
+| `.bb-rel-bullet.bb-rel-main` | `•` `<span>` for top-level artists/bands — click opens Relation: tab row |
+| `.bb-rel-bullet.bb-rel-member` | `◦` `<span>` for band members — click opens Relation: tab row |
+| `.bb-rel-name` | `<a href>` link on the name text — navigates to the relation page |
+| `.bb-rel-extra` | Extra annotation inline after name, e.g. `(Guest)` |
+| `.bb-rel-loading` | Added to bullet while the relation page is being fetched |
+| `.bb-relation-tab-row` | Container row appended to `section` by `addRelationTabButtons` |
+| `.bb-relation-tab-btn` | Button per relation-page tab in the tab row |
+
+Bullet click handling is wired in `injectEventRelations` immediately after
+injection. Clicks call `fetchAndToggleRelationTabRow(relHref, relName, section,
+bullet)` which fetches the relation page on first click and builds
+`.bb-relation-tab-row` (via `addRelationTabButtons`), caching the row on
+`section._bbRelRows` (keyed by `relHref`) for subsequent toggle clicks.
+
+The `showView()` closure in both `insertSectionToggle` and
+`rewireSectionControls` queries `.bb-relations-flat` and `.bb-relations-list`
+at toggle-click time (lazy, via `processedDiv.querySelectorAll`) to switch
+between the two representations alongside the setlist toggle.
+`.bb-relations-flat` elements are excluded from `setlistEls` detection so that
+`buildListDiv` does not process them as song sections.
+
+---
+
 ## Footnote preservation
 
 `<sup>` nodes (e.g. "Setlist incomplete.") are cloned out before any

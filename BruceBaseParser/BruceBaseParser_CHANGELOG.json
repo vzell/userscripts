@@ -1,5 +1,35 @@
 [
     {
+        "version": "2.17",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page relation blocks: add top margin before flat and list view relation elements.",
+                    "YEAR page relation list view: prepend 'Relations:' section label above the nested list.",
+                    "YEAR page relation flat view: relation names are now hyperlinked to the relation page; clicking the • / ◦ bullet fetches the RELATION page and renders a collapsible tab-row (like Venue:) instead of navigating.",
+                    "YEAR page relation flat view: relations now inject before the unlabelled show section, not before 'Soundcheck:' — 'soundcheck' is excluded from the eligible section list (with fallback when no show sections exist).",
+                    "YEAR page list view: exclude .bb-relations-flat elements from setlist detection so they are not processed by buildListDiv as numbered song entries; relation content is now correctly shown via .bb-relations-list in list view.",
+                    "YEAR page list view: add top margin between consecutive song list <ol> and the next section label.",
+                    "YEAR page cache restore: rewireSectionControls now also toggles .bb-relations-flat / .bb-relations-list alongside the setlist elements when switching between flat and list views."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.16",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page: inject relation (performer/band) participants from DETAIL page per event. Flat one-line view before each setlist section with linked • / ◦ bullets; nested hierarchy shown in ☰ List view. Handles alias events (case a), extra annotations like (Guest) (case b), multiple labeled sets with separate relation blocks (case c), and Setlist-preview + Show entries (case d)."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.15",
         "date": "2026-06-29",
         "sections": [
