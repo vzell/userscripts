@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.11
+// @version      2.12
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -5201,21 +5201,53 @@
    * @param {string} retailName - Text from the retail page's #page-title.
    * @returns {Set<string>}
    */
-  function computeExpectedRetailTags(retailName) {
+  /**
+   * Returns the set of lowercase tags expected on a retail page.
+   * Always expects "retail" + first-letter index tag.
+   * When a "Commercially Released: Month DD, YYYY" line is found in a
+   * <div class="code"><pre><code>…</code></pre></div> block, also expects
+   * the lowercase month name, the day-of-month (no leading zero), and the year.
+   * @param {string}   retailName - Text from the retail page's #page-title.
+   * @param {Document} [doc]      - Defaults to the live document.
+   * @returns {Set<string>}
+   */
+  function computeExpectedRetailTags(retailName, doc = document) {
     const expected = new Set(['retail']);
     const first = (retailName || '').trim()[0];
     if (first && /[a-z]/i.test(first)) expected.add(first.toLowerCase());
+
+    // Parse release date from the metadata code block, if present.
+    const codeEl = doc.querySelector('div.code pre code, pre code');
+    if (codeEl) {
+      for (const line of codeEl.textContent.split('\n')) {
+        const m = line.match(/^Commercially Released:\s*(\w+)\s+(\d{1,2}),\s*(\d{4})/i);
+        if (m) {
+          const monthIdx = MONTH_NAMES.indexOf(m[1].toLowerCase());
+          if (monthIdx !== -1) expected.add(MONTH_NAMES[monthIdx]);
+          expected.add(String(parseInt(m[2], 10)));
+          expected.add(m[3]);
+          break;
+        }
+      }
+    }
+
     return expected;
   }
 
   /**
    * Returns true for retail-page tags whose presence can be verified:
-   * the "retail" tag and single lowercase letter tags (first-letter index).
+   * the "retail" tag, single lowercase letter tags (first-letter index),
+   * month names, 4-digit years, and day-of-month numbers (1–31).
    * @param {string} tag
    * @returns {boolean}
    */
   function isManagedRetailTag(tag) {
-    return tag === 'retail' || /^[a-z]$/.test(tag);
+    if (tag === 'retail') return true;
+    if (/^[a-z]$/.test(tag)) return true;
+    if (MONTH_NAMES.includes(tag)) return true;
+    if (/^\d{4}$/.test(tag)) return true;
+    if (/^\d{1,2}$/.test(tag) && parseInt(tag, 10) >= 1 && parseInt(tag, 10) <= 31) return true;
+    return false;
   }
 
   /**

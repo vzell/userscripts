@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.12",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "RETAIL page tag checks: computeExpectedRetailTags now parses the <div class=\"code\"><pre><code> metadata block for a 'Commercially Released: Month DD, YYYY' line and adds the lowercase month name, day-of-month (no leading zero), and year to the expected tag set. isManagedRetailTag extended to cover month names, 4-digit years, and day-of-month numbers so spurious date tags are also flagged."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.11",
         "date": "2026-06-29",
         "sections": [
