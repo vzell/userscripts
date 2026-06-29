@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.24
+// @version      2.25
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1268,9 +1268,12 @@
             !el.classList.contains('bb-relations-flat') &&
             el.querySelector('.bb-sep, .bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff')
           );
-          if (!setlistEls.length) return;
-          listDiv = buildListDiv(setlistEls, processedDiv);
-          setlistEls[0].parentNode.insertBefore(listDiv, setlistEls[0]);
+          const hasRelBlocks = !!processedDiv.querySelector('.bb-relations-flat');
+          if (!setlistEls.length && !hasRelBlocks) return;
+          if (setlistEls.length > 0) {
+            listDiv = buildListDiv(setlistEls, processedDiv);
+            setlistEls[0].parentNode.insertBefore(listDiv, setlistEls[0]);
+          }
         }
         showView('list');
       });
@@ -1451,9 +1454,12 @@
             !el.classList.contains('bb-relations-flat') &&
             el.querySelector('.bb-sep, .bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff')
           );
-          if (setlistEls.length === 0) return;  // nothing to list-ify
-          listDiv = buildListDiv(setlistEls, processedDiv);
-          setlistEls[0].parentNode.insertBefore(listDiv, setlistEls[0]);
+          const hasRelBlocks = !!processedDiv.querySelector('.bb-relations-flat');
+          if (setlistEls.length === 0 && !hasRelBlocks) return;  // nothing to list-ify
+          if (setlistEls.length > 0) {
+            listDiv = buildListDiv(setlistEls, processedDiv);
+            setlistEls[0].parentNode.insertBefore(listDiv, setlistEls[0]);
+          }
         }
         showView('list');
       }
