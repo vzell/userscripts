@@ -165,6 +165,11 @@
   const isRetailPage         = /^retail:/.test(path);
   const isRecentChangesPage  = path === 'system:recent-changes';
 
+  log('[DBG] path:', JSON.stringify(path),
+      '| home:', isHomePage, '| list:', isListPage, '| year:', isYearPage,
+      '| detail:', isDetailPage, '| venue:', isVenuePage,
+      '| retail:', isRetailPage, '| recent:', isRecentChangesPage);
+
   if (isHomePage) {
     log('Detected HOME page');
     await runHomePage();
@@ -2846,11 +2851,15 @@
    * .page-tags with venue tag consistency checks inline on the page.
    */
   async function runVenuePage() {
+    log('[DBG] runVenuePage: entered');
     const pageTitle = document.getElementById('page-title');
-    if (!pageTitle) return;
+    log('[DBG] runVenuePage: #page-title =', pageTitle);
+    if (!pageTitle) { logWarn('[DBG] runVenuePage: no #page-title — aborting'); return; }
     const venueName = pageTitle.textContent.trim();
+    log('[DBG] runVenuePage: venueName =', JSON.stringify(venueName));
     const content   = document.getElementById('page-content');
-    if (!content) return;
+    log('[DBG] runVenuePage: #page-content =', content);
+    if (!content) { logWarn('[DBG] runVenuePage: no #page-content — aborting'); return; }
 
     const originalHtml = content.innerHTML;
 
@@ -2873,9 +2882,13 @@
     const btnContainer = document.createElement('div');
     btnContainer.id = 'bb-btn-container';
     btnContainer.append(globalBtn, saveBtn, loadBtn);
+    log('[DBG] runVenuePage: calling pageTitle.after(btnContainer)');
     pageTitle.after(btnContainer);
+    log('[DBG] runVenuePage: #bb-btn-container in DOM =', document.getElementById('bb-btn-container'));
+    log('[DBG] runVenuePage: pageTitle.nextElementSibling =', pageTitle.nextElementSibling);
 
     setupGlobalToggle(globalBtn, content, originalHtml);
+    log('[DBG] runVenuePage: done');
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -2888,11 +2901,15 @@
    * .page-tags with retail tag consistency checks inline on the page.
    */
   async function runRetailPage() {
+    log('[DBG] runRetailPage: entered');
     const pageTitle = document.getElementById('page-title');
-    if (!pageTitle) return;
+    log('[DBG] runRetailPage: #page-title =', pageTitle);
+    if (!pageTitle) { logWarn('[DBG] runRetailPage: no #page-title — aborting'); return; }
     const retailName = pageTitle.textContent.trim();
+    log('[DBG] runRetailPage: retailName =', JSON.stringify(retailName));
     const content    = document.getElementById('page-content');
-    if (!content) return;
+    log('[DBG] runRetailPage: #page-content =', content);
+    if (!content) { logWarn('[DBG] runRetailPage: no #page-content — aborting'); return; }
 
     const originalHtml = content.innerHTML;
 
@@ -2915,9 +2932,13 @@
     const btnContainer = document.createElement('div');
     btnContainer.id = 'bb-btn-container';
     btnContainer.append(globalBtn, saveBtn, loadBtn);
+    log('[DBG] runRetailPage: calling pageTitle.after(btnContainer)');
     pageTitle.after(btnContainer);
+    log('[DBG] runRetailPage: #bb-btn-container in DOM =', document.getElementById('bb-btn-container'));
+    log('[DBG] runRetailPage: pageTitle.nextElementSibling =', pageTitle.nextElementSibling);
 
     setupGlobalToggle(globalBtn, content, originalHtml);
+    log('[DBG] runRetailPage: done');
   }
 
   // ════════════════════════════════════════════════════════════════════════════
