@@ -1,5 +1,19 @@
 [
     {
+        "version": "2.18",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page relation names: no underline by default; underline only on hover, matching setlist entry styling.",
+                    "YEAR page relation tab row: clicking a • / ◦ bullet now labels the opened row with the relation name (e.g. 'Bruce Springsteen:') instead of the generic 'Relation:' label.",
+                    "YEAR page: events with no setlist (e.g. benefit concerts) now also show relation participant blocks; relation injection is no longer gated on setlistEls being non-empty."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.17",
         "date": "2026-06-29",
         "sections": [

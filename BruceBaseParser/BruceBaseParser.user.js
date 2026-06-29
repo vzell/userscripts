@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.17
+// @version      2.18
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -2457,13 +2457,14 @@
       }
 
       // ── Setlist check ────────────────────────────────────────────────────
+      let yearSections = [];
       if (setlistEls.length > 0) {
-        const yearSections   = parseYearSetlist(setlistEls);
-        const detailSections = parseDetailSetlist(doc);
-        const yearFlat      = yearSections.flatMap(s => s.songs);
-        const yearRawFlat   = yearSections.flatMap(s => s.rawSongs);
-        const detailFlat    = detailSections.flatMap(s => s.songs);
-        const detailUrlFlat = detailSections.flatMap(s => s.songUrls || s.songs.map(() => null));
+        yearSections            = parseYearSetlist(setlistEls);
+        const detailSections    = parseDetailSetlist(doc);
+        const yearFlat          = yearSections.flatMap(s => s.songs);
+        const yearRawFlat       = yearSections.flatMap(s => s.rawSongs);
+        const detailFlat        = detailSections.flatMap(s => s.songs);
+        const detailUrlFlat     = detailSections.flatMap(s => s.songUrls || s.songs.map(() => null));
         log(`  Setlist: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
 
         if (yearFlat.length > 0 || detailFlat.length > 0) {
@@ -2496,13 +2497,17 @@
             }
           });
           renderYearSetlist(yearSections, diffItems);
+        }
+      }
 
-          // ── Relation participants ───────────────────────────────────────────
-          const relGroups = extractRelations(doc);
-          if (relGroups.length > 0) {
-            const processedDiv = element.closest('.bb-section-processed');
-            if (processedDiv) injectEventRelations(processedDiv, relGroups, yearSections);
-          }
+      // ── Relation participants ─────────────────────────────────────────────
+      // yearSections is [] for no-setlist events; injectEventRelations handles
+      // that by appending relation blocks directly to processedDiv.
+      {
+        const relGroups = extractRelations(doc);
+        if (relGroups.length > 0) {
+          const processedDiv = element.closest('.bb-section-processed');
+          if (processedDiv) injectEventRelations(processedDiv, relGroups, yearSections);
         }
       }
 
@@ -4370,7 +4375,10 @@
       ? noSoundcheck
       : yearSections.filter(s => s.label.toLowerCase() !== 'setlist');
 
-    const n = Math.min(relGroups.length, eligible.length);
+    // No setlist at all: inject all groups appended to processedDiv.
+    const noSetlist = eligible.length === 0;
+    const n = noSetlist ? relGroups.length : Math.min(relGroups.length, eligible.length);
+
     for (let i = 0; i < n; i++) {
       const group = relGroups[i];
       if (!group.items.length) continue;
@@ -4393,7 +4401,12 @@
       listEl.appendChild(relLabelP);
       listEl.appendChild(renderRelationsListEl(group));
 
-      eligible[i].sourceEl.before(flatEl, listEl);
+      if (noSetlist) {
+        processedDiv.appendChild(flatEl);
+        processedDiv.appendChild(listEl);
+      } else {
+        eligible[i].sourceEl.before(flatEl, listEl);
+      }
 
       // Wire bullet click handlers: • / ◦ open a Relation: tab row panel
       for (const container of [flatEl, listEl]) {
@@ -5711,7 +5724,7 @@
     const tabMap = buildTabMap(relDoc);
     const row = document.createElement('div');
     row.className = 'bb-relation-tab-row';
-    row.appendChild(makeTabRowLabel('Relation:'));
+    row.appendChild(makeTabRowLabel(relName + ':'));
 
     for (const [label] of tabMap) {
       const tab = getTabEl(relDoc, tabMap, label);
@@ -6734,7 +6747,8 @@
       ul.bb-relations-list-ul ul.bb-relations-list-ul { padding-left: 1.2em; }
       .bb-rel-bullet { text-decoration: none; color: #06c; cursor: pointer; }
       .bb-rel-bullet:hover { text-decoration: underline; }
-      .bb-rel-name { color: inherit; }
+      .bb-rel-name { color: inherit; text-decoration: none; }
+      .bb-rel-name:hover { text-decoration: underline; }
       .bb-rel-extra { color: #888; font-style: italic; font-size: 0.85em; }
       .bb-rel-loading { opacity: 0.5; cursor: wait; }
       .bb-relation-tab-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0; }
