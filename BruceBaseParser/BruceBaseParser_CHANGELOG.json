@@ -1,5 +1,18 @@
 [
     {
+        "version": "2.23",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "YEAR page list view: removed the leading <br> from bb-section-list (replaced by CSS margin-top:0.6em) to eliminate the double blank line that appeared between the first Relations block and the 'with Willie Nile:' section label.",
+                    "YEAR page list view: a <hr> separator is now inserted before each Relations block that is moved into the combined bb-section-list div for multi-section events, visually demarcating each participant group from the preceding section's songs."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.22",
         "date": "2026-06-29",
         "sections": [

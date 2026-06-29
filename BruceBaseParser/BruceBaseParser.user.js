@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.22
+// @version      2.23
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1493,7 +1493,6 @@
     const div = document.createElement('div');
     div.className = 'bb-section-list';
     div.style.display = 'none';
-    div.appendChild(document.createElement('br'));
 
     for (let i = 0; i < setlistEls.length; i++) {
       const el = setlistEls[i];
@@ -1507,6 +1506,7 @@
         while (sib && sib !== el) {
           const next = sib.nextElementSibling;
           if (sib.classList.contains('bb-relations-list')) {
+            div.appendChild(document.createElement('hr'));
             div.appendChild(sib);
           }
           sib = next;
@@ -6653,6 +6653,7 @@
       .bb-section-controls { display: inline-flex; gap: 4px; margin: 2px 0; }
       .bb-section-toggle   { margin-left: 0; }
       .bb-list-toggle      { margin-left: 0; }
+      div.bb-section-list  { margin-top: 0.6em; }
       .bb-list-label       { margin: 2px 0 1px; }
       ol.bb-list-view      { list-style: none; margin: 0 0 4px 0; padding: 0; }
       ol.bb-list-view li   { margin: 1px 0; display: flex; align-items: baseline; flex-wrap: wrap; }
