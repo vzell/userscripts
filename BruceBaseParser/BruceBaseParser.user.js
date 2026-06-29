@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.23
+// @version      2.24
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -5324,13 +5324,16 @@
     const dm = (eventDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (dm) {
       const [, yr, mo, dd] = dm;
+      const moNum = parseInt(mo, 10);
+      const ddNum = parseInt(dd, 10);
       expected.add(yr);
-      expected.add(MONTH_NAMES[parseInt(mo, 10) - 1]);
-      expected.add(String(parseInt(dd, 10)));
-      const dayNum = parseInt(dd, 10);
-      if (dayNum > 0) {
-        const d = new Date(parseInt(yr, 10), parseInt(mo, 10) - 1, dayNum);
-        if (!isNaN(d.getTime())) expected.add(DAY_NAMES[d.getDay()]);
+      if (moNum > 0) expected.add(MONTH_NAMES[moNum - 1]);
+      if (ddNum > 0) {
+        expected.add(String(ddNum));
+        if (moNum > 0) {
+          const d = new Date(parseInt(yr, 10), moNum - 1, ddNum);
+          if (!isNaN(d.getTime())) expected.add(DAY_NAMES[d.getDay()]);
+        }
       }
     }
 

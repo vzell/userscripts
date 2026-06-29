@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.24",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: events with unknown month/day (date '1965-00-00') crashed with 'Cannot read properties of undefined (reading localeCompare)'. computeExpectedTags was calling MONTH_NAMES[parseInt('00',10)-1] = MONTH_NAMES[-1] = undefined, which entered the expectedTags Set and propagated to missingTags. Fixed by guarding the month and day additions with moNum>0/ddNum>0 checks."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.23",
         "date": "2026-06-29",
         "sections": [
