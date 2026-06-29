@@ -10,6 +10,8 @@
 | DETAIL | `/type:YYYY-MM-DD-slug` | `(gig\|nogig\|…):` prefix |
 | VENUE | `/venue:…` | `venue:` prefix |
 | RETAIL | `/retail:…` | `retail:` prefix |
+| SONG | `/song:…` | `song:` prefix |
+| RELATION | `/relation:…` | `relation:` prefix |
 | RECENT CHANGES | `/system:recent-changes` | exact match |
 
 Known event types: `gig`, `interview`, `nogig`, `offstage`, `onstage`,

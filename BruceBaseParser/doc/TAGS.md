@@ -1,9 +1,13 @@
 # TAGS.md — Tag Consistency Checks
 
-Tag consistency checks run in two contexts:
+Tag consistency checks run in four contexts:
 
 - **YEAR page**: `addTagsButton` opens a panel showing all DETAIL page tags.
 - **DETAIL page**: `annotateDetailPageTags` directly annotates the `.page-tags` block.
+- **VENUE page**: `annotateVenuePageTags` annotates `.page-tags` inline on the live page.
+- **RETAIL page**: `annotateRetailPageTags` annotates `.page-tags` inline on the live page.
+- **SONG page**: `annotateSongPageTags` annotates `.page-tags` inline on the live page.
+- **RELATION page**: `annotateRelationPageTags` annotates `.page-tags` inline on the live page.
 
 ---
 
@@ -101,10 +105,40 @@ Called from `runDetailPage` right after `addDetailTitleAnnotation`. It:
 
 ---
 
+## SONG page annotation (`annotateSongPageTags`)
+
+Called from `runSongPage`. Rules:
+
+| Expected tag | Condition |
+|---|---|
+| `song` | Always — every `/song:…` page must carry this tag |
+
+`isManagedSongTag(tag)` returns true only for `"song"`.
+
+---
+
+## RELATION page annotation (`annotateRelationPageTags`)
+
+Called from `runRelationPage`. Detects the expected tag by reading tab labels
+from the live page's `.yui-nav em` elements:
+
+| Tab present | Expected tag |
+|---|---|
+| `Bands` | `person` — this entry is a person who belongs to bands |
+| `Members` | `band` — this entry is a band that has members |
+| Neither | No annotation (type cannot be determined) |
+
+`isManagedRelationTag(tag)` returns true for `"person"` and `"band"`.
+
+`computeExpectedRelationTags()` returns an empty set when neither `Bands` nor
+`Members` tab is found, causing `annotateRelationPageTags` to exit early.
+
+---
+
 ## CSS classes (tag feature)
 
 | CSS class | Purpose |
 |---|---|
-| `.bb-tag-missing` | Bold red span for expected-but-absent tags (DETAIL page) |
-| `.bb-tag-spurious` | Orange ⚠️ for present-but-unexpected managed tags (DETAIL page) |
+| `.bb-tag-missing` | Bold red span for expected-but-absent tags |
+| `.bb-tag-spurious` | Orange ⚠️ for present-but-unexpected managed tags |
 | `.bb-tags-warn-box` | Gold border, #fffbe6 background wrapper around `.page-tags` when issues found |

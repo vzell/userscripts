@@ -127,6 +127,46 @@ When `setlistEls.length > 0` — see [SETLIST.md](SETLIST.md).
 
 ---
 
+## Collapsible event heading lines
+
+Each processed event heading `<p>` receives:
+
+- Class `bb-event-heading` (light grey background, `#f0f0f0`) applied to the `<p>`.
+- Class `bb-event-heading-p` (used as a selector by `setAllEventsCollapsed`).
+- A `<span class="bb-event-collapse-toggle">▾/▸</span>` appended inside the
+  innermost container of the event link (e.g. a `<strong>` wrapper), placed after
+  the glyph and optional alias span.
+
+**`addCollapseToggle(innerEl)`** — called from `addYearGlyph` and
+`addUnknownGlyph` immediately after the glyph/alias spans are inserted.
+Uses `innerEl.closest('p')` to resolve the outer `<p>` (necessary because
+BruceBase wraps event links in `<strong>` so `element.parentElement` is not
+always the `<p>`).
+
+**`getOrWrapEventContent(headingP)`** — lazily wraps all DOM siblings after
+`headingP` (up to the next `.bb-event-heading-p` or section end) in a
+`<div class="bb-event-content">`. Idempotent; returns the existing wrapper on
+subsequent calls. Returns `null` when there are no siblings to wrap.
+
+**`setEventCollapsed(headingP, force)`** — collapses (`force=true`), expands
+(`force=false`), or toggles (`force=null`) one event.
+
+- Before hiding, sweeps up any siblings appended to the section *after* the
+  wrapper was first created (lazy panels and tab rows use `section.appendChild`
+  and land outside the wrapper). This ensures open panels are also hidden.
+- Uses `style.display = 'none'` / `''` directly — avoids CSS specificity issues.
+- Updates the toggle indicator (`▾` expanded / `▸` collapsed) and its `title`.
+
+**`setAllEventsCollapsed(collapse)`** — queries all `.bb-event-heading-p`
+elements and calls `setEventCollapsed` on each.
+
+**Click behaviour:**
+- Single click on toggle → collapse/expand that one event.
+- Ctrl+Click → collapse all if the clicked event was expanded; expand all if it
+  was collapsed (determined from the pre-click state of the wrapper).
+
+---
+
 ## Per-section controls (`insertSectionToggle`)
 
 Inserts `<div class="bb-section-controls">` with two buttons immediately after
