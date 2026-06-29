@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.19
+// @version      2.20
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -4472,8 +4472,13 @@
       listEl.appendChild(renderRelationsListEl(group));
 
       if (noSetlist) {
-        processedDiv.appendChild(flatEl);
-        processedDiv.appendChild(listEl);
+        const scheduledDiv = processedDiv.querySelector('.bb-scheduled');
+        if (scheduledDiv) {
+          scheduledDiv.after(flatEl, listEl);
+        } else {
+          processedDiv.appendChild(flatEl);
+          processedDiv.appendChild(listEl);
+        }
       } else {
         eligible[i].sourceEl.before(flatEl, listEl);
       }

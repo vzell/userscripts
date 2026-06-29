@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.20",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: for events with no setlist, relation blocks now appear immediately after the scheduled line (.bb-scheduled) instead of at the bottom of the event."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.19",
         "date": "2026-06-29",
         "sections": [
