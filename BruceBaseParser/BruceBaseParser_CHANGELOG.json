@@ -1,5 +1,18 @@
 [
     {
+        "version": "2.19",
+        "date": "2026-06-29",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page: global 'Hide Relations' / 'Show Relations' button added to sticky bar after ⚡ Mismatches. Toggles body.bb-relations-hidden class to hide all relation participant blocks page-wide via CSS. Button is disabled until processing completes, clone-replaced on restart, and re-wired on cache load.",
+                    "YEAR page: per-event 'Hide Relations' / 'Show Relations' button added to .bb-section-controls (alongside ⇄ Original and ☰ List). Only present on events that have relation blocks. Toggles .bb-rel-hidden class on processedDiv, scoped to that event only. Re-wired by rewireSectionControls on cache load."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.18",
         "date": "2026-06-29",
         "sections": [

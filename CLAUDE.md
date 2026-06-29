@@ -68,7 +68,7 @@ immediately after `#page-title`.
 | Page | Button order |
 |------|-------------|
 | HOME | ▶ Fetch All Year Pages \| ▶ Fetch All Year-List Pages \| ⚡ Mismatches \| 💾 Save \| 📂 Load |
-| YEAR | ▶ Start \| 💾 Save \| 📂 Load \| ⇄ Original Page \| ⚡ Mismatches \| [SmartTable] |
+| YEAR | ▶ Start \| 💾 Save \| 📂 Load \| ⇄ Original Page \| ⚡ Mismatches \| Hide Relations \| [SmartTable] |
 | LIST | ⇄ Original Page \| ⚡ Mismatches \| 💾 Save \| 📂 Load |
 | DETAIL | 💾 Save \| 📂 Load (⇄ Original Page prepended after processing) |
 

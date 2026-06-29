@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.18
+// @version      2.19
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -737,6 +737,13 @@
     mismatchBtn.title = 'Filter to show only events with name or setlist mismatches';
     mismatchBtn.disabled = true;
 
+    let relToggleBtn = document.createElement('button');
+    relToggleBtn.id        = 'bb-rel-toggle';
+    relToggleBtn.className = 'bb-toggle-btn';
+    relToggleBtn.textContent = 'Hide Relations';
+    relToggleBtn.title = 'Hide or show all relation participant blocks';
+    relToggleBtn.disabled = true;
+
     const [yearSaveBtn, yearLoadBtn] = makeSaveLoadBtns(
       'year', () => content, () => _savedOriginalHtml
     );
@@ -749,7 +756,7 @@
     yearStartBtn.textContent = '▶ Start';
     yearStartBtn.title = 'Start processing all events on this page';
 
-    btnContainer.append(yearStartBtn, yearSaveBtn, yearLoadBtn, globalBtn, mismatchBtn);
+    btnContainer.append(yearStartBtn, yearSaveBtn, yearLoadBtn, globalBtn, mismatchBtn, relToggleBtn);
 
     // ── SmartTable integration (optional) ────────────────────────────────────
     if (stRows) {
@@ -840,6 +847,14 @@
       mismatchBtn.replaceWith(freshMismatch);
       mismatchBtn = freshMismatch;
 
+      document.body.classList.remove('bb-relations-hidden');
+      content.querySelectorAll('.bb-rel-hidden').forEach(el => el.classList.remove('bb-rel-hidden'));
+      const freshRelToggle = relToggleBtn.cloneNode(true);
+      freshRelToggle.textContent = 'Hide Relations';
+      freshRelToggle.disabled = true;
+      relToggleBtn.replaceWith(freshRelToggle);
+      relToggleBtn = freshRelToggle;
+
       yearSaveBtn.disabled = true;
 
       // Re-extract events from the now-clean DOM.
@@ -884,6 +899,8 @@
       globalBtn.disabled = false;
       mismatchBtn.disabled = false;
       yearSaveBtn.disabled = false;
+      setupRelationsToggle(relToggleBtn);
+      relToggleBtn.disabled = false;
 
       _yearProcessing = false;
       yearStartBtn.textContent = '▶ Start';
@@ -1145,6 +1162,18 @@
       freshMismatch.disabled = false;
     }
 
+    // Relations toggle (YEAR only)
+    const oldRelToggle = document.getElementById('bb-rel-toggle');
+    if (oldRelToggle && pageType === 'year') {
+      document.body.classList.remove('bb-relations-hidden');
+      contentEl.querySelectorAll('.bb-rel-hidden').forEach(el => el.classList.remove('bb-rel-hidden'));
+      const freshRelToggle = oldRelToggle.cloneNode(true);
+      freshRelToggle.textContent = 'Hide Relations';
+      oldRelToggle.replaceWith(freshRelToggle);
+      setupRelationsToggle(freshRelToggle);
+      freshRelToggle.disabled = false;
+    }
+
     // Enable save button
     const saveBtn = document.getElementById('bb-save-btn');
     if (saveBtn) saveBtn.disabled = false;
@@ -1245,6 +1274,18 @@
         }
         showView('list');
       });
+
+      // Re-wire per-event relation toggle (only present on events with relation blocks).
+      const relBtnOld = controls.querySelector('.bb-rel-section-toggle');
+      if (relBtnOld) {
+        const relBtn = relBtnOld.cloneNode(true);
+        relBtnOld.replaceWith(relBtn);
+        relBtn.addEventListener('click', () => {
+          const hiding = !processedDiv.classList.contains('bb-rel-hidden');
+          processedDiv.classList.toggle('bb-rel-hidden', hiding);
+          relBtn.textContent = hiding ? 'Show Relations' : 'Hide Relations';
+        });
+      }
     });
   }
 
@@ -1421,6 +1462,21 @@
     const controls = document.createElement('div');
     controls.className = 'bb-section-controls';
     controls.append(origBtn, listBtn);
+
+    // Only add the per-event relation toggle when this event has relation blocks.
+    if (processedDiv.querySelector('.bb-relations-flat')) {
+      const relBtn = document.createElement('button');
+      relBtn.className = 'bb-toggle-btn bb-rel-section-toggle';
+      relBtn.textContent = 'Hide Relations';
+      relBtn.title = 'Hide or show relation participant blocks for this event';
+      relBtn.addEventListener('click', () => {
+        const hiding = !processedDiv.classList.contains('bb-rel-hidden');
+        processedDiv.classList.toggle('bb-rel-hidden', hiding);
+        relBtn.textContent = hiding ? 'Show Relations' : 'Hide Relations';
+      });
+      controls.append(relBtn);
+    }
+
     controlAnchor.after(controls);
   }
 
@@ -1551,6 +1607,20 @@
         : `⚡ Mismatches (${mismatchCount})`;
       if (state) state.mismatchActive = filterActive;
       if (applyFn) applyFn(); else applyMismatchFilter(filterActive);
+    });
+  }
+
+  /**
+   * Wires the global "Hide/Show Relations" toggle button.
+   * Toggles body.bb-relations-hidden which hides all .bb-relations-flat and
+   * .bb-relations-list elements page-wide via CSS (display:none !important).
+   * @param {HTMLButtonElement} btn
+   */
+  function setupRelationsToggle(btn) {
+    btn.addEventListener('click', () => {
+      const hiding = !document.body.classList.contains('bb-relations-hidden');
+      document.body.classList.toggle('bb-relations-hidden', hiding);
+      btn.textContent = hiding ? 'Show Relations' : 'Hide Relations';
     });
   }
 
@@ -6755,6 +6825,12 @@
       .bb-relation-tab-btn { font-size: 0.8em; padding: 1px 6px; cursor: pointer; border: 1px solid #999; border-radius: 3px; background: #f5f5f5; }
       .bb-relation-tab-btn:hover, .bb-relation-tab-btn.bb-icon-active { background: #dce8ff; border-color: #66a; }
       ol.bb-list-view + p.bb-list-label { margin-top: 0.5em; }
+      /* Global "Hide Relations" sticky-bar toggle */
+      body.bb-relations-hidden .bb-relations-flat,
+      body.bb-relations-hidden .bb-relations-list { display: none !important; }
+      /* Per-event "Hide Relations" section-controls toggle */
+      .bb-rel-hidden .bb-relations-flat,
+      .bb-rel-hidden .bb-relations-list { display: none !important; }
     `);
   }
 
