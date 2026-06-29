@@ -4,6 +4,7 @@
 cd ~/git/springsteen-site-parser ; npm run watch
 #+end_example
 
+
 * BruceBase parser
 ** plan
 
@@ -1881,8 +1882,7 @@ which have on the YEAR page labeled event lists like e.g. "Soundcheck:" plus the
 <li title=""><a href="javascript:;"><em>Performances</em></a></li><li title="active" class="selected"><a href="javascript:;"><em>Gallery</em></a></li></ul>
 #+end_example
 
-** TODO "Recording:" and "Show:"
-*** initial
+** DONE "Recording:" and "Show:"
 
 when clicking the button'<button class="bb-toggle-btn bb-list-toggle">☰ List</button>':
 
@@ -2016,7 +2016,7 @@ the date check
 
 should succeed when the actual event date falls in the "1949-64" range 
 
-** TODO retail
+** DONE retail
 
 If there is a "Retail" icon
 
@@ -2148,9 +2148,10 @@ after the change in v2.02, now when switching to the list view, I get two number
 <li><a href="/song:night" class="bb-song-num bb-song-loaded" title="1. — click to show/hide">1.</a><a href="/song:night" class="bb-song-num" data-sn="NIGHT">1.</a><a href="/song:night" class="bb-song-match">NIGHT</a></li>
 #+end_example
 
-** TODO fix button placement per event when there is additional info
+** DONE fix button placement per event when there is additional info
 
-http://brucebase.wikidot.com/gig:2008-02-28-civic-center-hartford-ct
+Sometimes inside a '<div class="bb-section-processed">' of an event on a YEAR page e.g. http://brucebase.wikidot.com/gig:2008-02-28-civic-center-hartford-ct
+there is the following type of table container, e.g.
 
 #+begin_example
 <table style="width: 100%">
@@ -2164,8 +2165,65 @@ http://brucebase.wikidot.com/gig:2008-02-28-civic-center-hartford-ct
 </tbody></table>
 #+end_example
 
+When present the '<div class="bb-section-controls">' (event specific buttons) should be rendered after it instead of before it as it is now
+
 ** DONE DETAIL pages original view should reset all mismatch warning markers
 ** TODO all pages, VENUE, RETAIL etc should get the "Tag"-value mismatch treating
+
+1.)
+
+the VENUE and RETAIL pages should also get the "Tag"-value mismatch treating, not only their panel counterparts (Tags
+button) on the YEAR events.
+
+2.)
+
+include the
+
+#+begin_example
+<div id="bb-btn-container"><button id="bb-global-toggle" class="bb-toggle-btn" title="Toggle between the original unprocessed setlist and the annotated processed view">⇄ Original Page</button><button id="bb-save-btn" class="bb-toggle-btn" title="Save the processed page to a JSON cache file for offline use">💾 Save</button><button id="bb-load-btn" class="bb-toggle-btn" title="Load a previously saved JSON cache file to restore the processed view">📂 Load</button></div>
+#+end_example
+
+also on the VENUE and RETAIL pages
+
+#+begin_example
+ What was added:
+
+  - Boot dispatch now recognises /venue:… and /retail:… paths and routes them to runVenuePage() / runRetailPage()
+  - Both run functions create #bb-btn-container with ⇄ Original Page, 💾 Save, 📂 Load — the global toggle stores pre-annotation innerHTML and swaps between annotated and original views
+  - annotateVenuePageTags(venueName) — reuses existing computeExpectedVenueTags / isManagedVenueTag; same gold box + red missing + orange spurious ⚠️ treatment as annotateDetailPageTags
+  - annotateRetailPageTags(retailName) — uses new computeExpectedRetailTags (expects retail + first-letter index) and isManagedRetailTag
+
+  One thing to verify once you can test: retail pages may carry additional verifiable tags beyond retail + first-letter (year of release, format tags, etc.) — the initial logic is conservative. If you spot
+  patterns, I can extend computeExpectedRetailTags.
+#+end_example
+
+** TODO extend retail
+
+When the following text block on a RETAIL page has a "Commercially Released: July 15, 2008" line
+
+#+begin_example
+<div class="code">
+<pre><code>Commercially Released: July 15, 2008
+Label: Columbia
+Produced by Bruce Springsteen, video by Chris Hilson and Thom Zimny (March - April 2008)
+Recorded by John Cooper
+Mixed by Bob Clearmountain
+Mastered by Bob Ludwig
+Design by Michelle Holme</code></pre></div>
+#+end_example
+
+extend computeExpectedRetailTags with the tag values e.g. "july", "15" and "2008"
+
+** TODO add console debugging for retail and venus pages
+
+add console debugging when rendering RETAIL and VENUE pages, as the changes in "version": "2.11" somehow have NO effect,
+the buttons do no show up on these pages below the '<div id="page-title">'
+
+** doc
+
+The following files are found in the `doc` folder and should be updated after code changes whenever relevant information
+should be noted
+
 ** TODO collapse section from tabs and remove retail banner icons
 
 ** TODO empty "News" panel on
@@ -2202,16 +2260,109 @@ initial state of the setlist under the "Setlist" tab, but also remove/hide all t
 <li><a href="/1973#160273">1973-02-16 - BOYLAN GYMNASIUM, MONMOUTH COLLEGE, WEST LONG BRANCH, NJ</a><span class="bb-glyph"> ❌</span></li>
 #+end_example
 
-** TODO recent changes in table view
+** TODO implement recent changes in smartable view
+*** initial
 
-** plan: filter events
+Implement on the page http://brucebase.wikidot.com/system:recent-changes another '<div id="bb-sticky-bar">' section with
+a button container with a new button "Table View". When pressed the information about recent changes should be rendered in a smarttable.
+
+Download and parse the URL to get enough context for implementation.
+
+The following should happen:
+
+Emulate a click on the "200" option to get 200 revisions per page
+
+#+begin_example
+<tr>
+				<td>
+					Revisions per page:
+				</td>
+				<td>
+					<select id="rev-perpage">
+						<option value="10">10</option>
+						<option value="20" selected="selected">20</option>
+						<option value="50">50</option>
+						<option value="100">100</option>
+						<option value="200">200</option>
+					</select>
+				</td>
+			</tr>
+#+end_example
+
+Then emulate a click on the "Update list"-button
+
+#+begin_example
+<div class="buttons">
+			<input type="button" class="btn btn-default btn-sm" value="Update list" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(null)">
+		</div>
+#+end_example
+
+Finally emulate clicks in the "pager" to fetch the individual pages 
+
+#+begin_example
+<div class="pager"><span class="pager-no">page 1</span><span class="current">1</span><span class="target"><a href="javascript:;" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(2)">2</a></span><span class="target"><a href="javascript:;" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(3)">3</a></span><span class="dots">...</span><span class="target"><a href="javascript:;" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(2)">next »</a></span></div>
+#+end_example
+
+Repeat this step 5 times to get the last 1000 BruceBase page changes
+
+*** TODO bugs
+
+actually after
+
+#+begin_example
+Emulate a click on the "200" option to get 200 revisions per page
+#+end_example
+
+a click on the "Update list"-button should be emulated 
+
+#+begin_example
+<div class="buttons">
+			<input type="button" class="btn btn-default btn-sm" value="Update list" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(null)">
+		</div>
+#+end_example
+
+*** TODO console log
+
+there is a bug, here the console log
+
+#+begin_example
+[BruceBase] Script starting on http://brucebase.wikidot.com/system:recent-changes
+index.js:65 [BruceBase] Detected RECENT CHANGES page
+index.js:65 [BruceBase] RC: page 1 — 20 rows
+index.js:65 [BruceBase] RC: page 2 — 20 rows
+index.js:65 [BruceBase] RC: page 3 — 20 rows
+index.js:65 [BruceBase] RC: page 4 — 20 rows
+index.js:65 [BruceBase] RC: page 5 — 20 rows
+#+end_example
+
+Somehow the select option "200" is rendered but not acknowledged. I can see how it sequences through the numbered buttons 1 up to 5
+
+#+begin_example
+<div class="pager"><span class="pager-no">page 5</span><span class="target"><a href="javascript:;" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(4)">« previous</a></span><span class="target"><a href="javascript:;" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(1)">1</a></span><span class="target"><a href="javascript:;" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(2)">2</a></span><span class="target"><a href="javascript:;" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(3)">3</a></span><span class="target"><a href="javascript:;" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(4)">4</a></span><span class="current">5</span><span class="target"><a href="javascript:;" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(6)">6</a></span><span class="target"><a href="javascript:;" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(7)">7</a></span><span class="dots">...</span><span class="target"><a href="javascript:;" onclick="WIKIDOT.modules.SiteChangesModule.listeners.updateList(6)">next »</a></span></div>
+#+end_example
+
+and finally stays on the 5. It fetches each time 20 new changes.
+
+But most importantly, the mouse pointer stays in a busy state on the final rendererd page showing the sand-glas icon
+
+*** TODO still
+
+Nothing changed. Manually choosing a different select option like the value "50" works, but it doesn't honour the manual
+button click on the "Update list" button. The page only ever renders 20 changes
+
+Still nothing changed at all. So what we do now is:
+Leave out the "200" selection and the button click all together, just emulate clicking in the "pager" class, 10 times 
+
+** DONE plan: filter events
+*** initial
 
 Implement a complete event filtering architecture with a supporting filter container rendered below the
 '<div id="bb-controls">' for YEAR pages and the '<div id="bb-btn-container">' on the MAIN page (maybe renaming the last one to be consistent with YEAR pages).
 
-The purpose is filtering/rendering ONLY events which match the filter criteria, by default ONLY the "event name" is
-checked case insensitive for comparison against the filter string. See below for how the filter string is
-interpreted. Additionally the matched filter string in the event should get highlighted.
+The purpose is filtering/rendering ONLY events which match the filter criteria (like what the '<button
+id="bb-mismatch-toggle"' is doing when displaying events which somehow have mismatches with other data), by default ONLY
+the "event name" is checked case insensitive for comparison against the filter string. See below for how the filter
+string is interpreted. Additionally the matched filter string in the event should get highlighted.
 
 The following elements should be present
 
@@ -2228,6 +2379,76 @@ Rx - RegExp filtering
 Ex - Exclude matches
 
 If the "Ev" is additionally checked, the whole event info (inclusive set list entries, button titles, etc) is used for filter matching.
+
+Make note off the filtering architecture if approved in a @doc/FILTERING.md and reference it from CLAUDE.md
+
+*** refine
+
+add the following and implement right away
+
+1.)
+
+when the filter field has focus and has input, pressing the Escape-key first clears the filter field, second Escape-key press blurs
+
+2.)
+
+When in "Ev" mode, all occurences of filterstring matches should be highlighted not ONLY in the event name
+
+*** bug
+
+1.)
+
+extend the filter matching when matching against the event name to also include the "bb-event-type" and "bb-event-alias" information on YEAR/MAIN pages
+
+#+begin_example
+<strong><a href="/rehearsal:2008-02-25-convention-hall-asbury-park-nj">2008-02-25 - CONVENTION HALL, ASBURY PARK, NJ</a><span class="bb-event-type"> (rehearsal)</span><span class="bb-glyph"> ✅</span><span class="bb-event-alias"> — Closed Rehearsal</span></strong>
+#+end_example
+
+2.)
+
+on LIST pages (or the accumulated LIST pages on MAIN) also the "<em>" container should be taken into account when filtering
+
+#+begin_example
+<li><a href="/1965#000065a">1965-00-00 - CAPRIONI RESIDENCE, FREEHOLD, NJ</a><span class="bb-glyph"> ✅</span> <span style="font-size:80%;"><em>(Rehearsal)</em></span></li>
+#+end_example
+
+3.)
+
+render in a bigger font the '<span id="bb-filter-count">' (also add a tooltip for the meaning of the numbers) and make the '<div id="bb-filter-input-wrap">' a little bigger and larger
+
+*** also apply the filter highlight for the newly matched elements
+
+also apply the filter highlight for the newly matched elements
+
+
+** TODO on YEAR pages make the event title rows collapsible
+
+On YEAR pages highlight each event name line with a "light grey" background color and make the whole event collapsable
+when clicking the part of the line after the "bb-glyph" or when present after the "bb-event-alias"
+
+First click should collapse, second should uncollapse again.
+"Ctrl"-clicking an event line should collapse/uncollapse all events on the YEAR page. Also add proper tooltips on the part of the line where the toggle collapse functionality will work  
+
+** bug
+
+The toggle is there now. Initially for an event
+
+#+begin_example
+<span class="bb-event-collapse-toggle" title="Click to collapse · Ctrl+Click to collapse all events"> ▾</span>
+#+end_example
+
+and after clicking
+
+#+begin_example
+<span class="bb-event-collapse-toggle" title="Click to expand · Ctrl+Click to expand all events"> ▸</span>
+#+end_example
+
+but the actual collapsing/uncollapsing doesn't work
+
+** bug
+
+The toggle is there, but it stays in the initial state even after clicking and nothing happens
+@debug/toggle.html
 
 * question
 ** initial
