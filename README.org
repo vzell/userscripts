@@ -2488,13 +2488,12 @@ when panels have been uncollapsed by clicking on icons in the event icon row or 
 or one of the '<div class="bb-song-tab-row">' and then collapsing the event, the panels stay open
 
 ** TODO add mammoth api to filter field
-
 ** doc .md adjustments
 
 The following files are found in the `doc` folder and should be updated after code changes whenever relevant information
 should be noted
 
-** plan: relation (artist) support
+** DONE plan: relation (artist) support
 *** initial
 
 On the YEAR pages implement support for the involved "persons/artists" and/or "bands/groups" (each is called a RELATION
@@ -2684,39 +2683,11 @@ relation list entries in list view currently render like this
 
 There shouldn't be any ordered list here and the "bb-rel-member" should be rendered indented
 
-** fixes
-
-2.)
-
-for recording sessions also put the relation inside a box
-
-4.)
-
-rendering the different blocks is bugy with multiple render setlists and reations in list view - http://brucebase.wikidot.com/2026#170126
+** TODO fixes
 
 7.)
 
 add VENUE, RELATION caching in indexedDB
-
-8.) "Error: cannot read properties of undefined (reading 'localCompare')" in the tooltipü
-
-http://brucebase.wikidot.com/gig:1965-00-00b-elks-lodge-freehold-nj
-
-9.)
-
-render "•" symbol in "grey"
-
-10.)
-
-CHIMES OF FREEDOMSet details may be inaccurate. at 2026-03-26 - OCEAN GROVE YOUTH TEMPLE, OCEAN GROVE, NJ (rehearsal) ✅ — Closed Rehearsal
-
-11.)
-
-12.)
-
-events with NO setlist render the relation list e.g. http://brucebase.wikidot.com/2026#010226
-
-BUT it should be renderd afte the "Schedule" line
 
 13.)
 
@@ -2726,9 +2697,9 @@ Tags missing: "6" => "06"
 
 14.)
 
-"Bruce Springsteen" has empty tab "Documents" should be falled as being there BUT empty
+"Bruce Springsteen" has empty tab "Documents" should be failed as being there BUT empty
 
-** act
+** DONE act
 
 1.)
 
@@ -2742,26 +2713,117 @@ when clicking the "•" and "◦" symbols, the button row label should actually 
 
 events with NO setlist but relations should still render the relation list e.g. http://brucebase.wikidot.com/2026#010226
 
-** bugs
+** DONE bugs - event with NO setlist
 
-http://brucebase.wikidot.com/2026#010226
+for events like e.g. http://brucebase.wikidot.com/2026#010226 which do not have a setlist,
+render the artist list after the '<div class="bb-scheduled">' line
 
-in such a case after the line
-
-#+begin_example
-<div class="bb-scheduled">Scheduled: ??:?? | Local Start Time ??:?? / End Time ??:?? at <strong style="font-size: 1.1em;"><em><a href="http://brucebase.wikidot.com/venue:crypto-com-arena-los-angeles-ca" target="_blank" rel="noopener noreferrer">Crypto.com Arena, Los Angeles, CA</a></em></strong><span class="bb-glyph" style="cursor: help;"> ✅</span></div>
-#+end_example
-
-** plan: global relation toggle button
+** DONE plan: global relation toggle button
 
 add a global toggle "Hide Relations"/"Show Relations" button at the sticky top button row, when clicked hide all the
 relation list(s) related information (inclusive label), when clicked again, show the relation lists again
 
-** add also an event specific "Hide Relations"/"Show Relations" button
+** DONE add also an event specific "Hide Relations"/"Show Relations" button
 
 add also an event specific "Hide Relations"/"Show Relations" button in the '<div class="bb-section-controls">' container
 
 
+** DONE bugs
+
+1.)
+
+On YEAR pages render "•" symbol in "grey"
+
+2.)
+
+on http://brucebase.wikidot.com/2026#260326 the text "Set details may be inaccurate." is rendered directly behind the last setlist entry in list view mode
+
+#+begin_example
+<li><a href="/song:chimes-of-freedom" class="bb-song-num" title="CHIMES OF FREEDOM — click to load song page tabs">10.</a><a href="/song:chimes-of-freedom" class="bb-song-match">CHIMES OF FREEDOM</a><br><sup><em>Set details may be inaccurate.</em></sup></li>
+#+end_example
+
+instead of the next line
+
+** DONE bug
+
+@debug/multi-setlist.html
+
+At http://brucebase.wikidot.com/2026#170126
+The last "Relationships" block in "List View" mode should be rendered before the "with Joe Grushecky & The Houserockers: ⚠️" block
+
+** DONE nice
+
+OK, but could be made more beautiful @debug/nice.html
+
+1.)
+
+remove the double blank line between
+
+#+begin_example
+• Bruce Springsteen (Guest)
+#+end_example
+
+and
+
+#+begin_example
+with Willie Nile: ⚠️
+#+end_example
+
+2.)
+
+render a "<hr>"
+
+before the next
+
+#+begin_example
+Relations:
+#+end_example
+
+** TODO spacing
+
+on e.g. http://brucebase.wikidot.com/2026#300126 there should be a little more space between relationblock and show
+
+** DONE bug
+
+On http://brucebase.wikidot.com/1965 I get the following console output
+
+#+begin_example
+[BruceBase]   Response 200 for http://brucebase.wikidot.com/venue:caprioni-residence-freehold-nj
+index.js:65 [BruceBase]   Failed to process "1965-00-00 - CAPRIONI RESIDENCE, FREEHOLD, NJ": Cannot read properties of undefined (reading 'localeCompare')
+logErr @ index.js:65
+(anonymous) @ index.js:65
+await in (anonymous)
+(anonymous) @ index.js:65
+processYearEvents @ index.js:65
+(anonymous) @ index.js:65
+index.js:65 [BruceBase]   Response 200 for http://brucebase.wikidot.com/venue:elks-lodge-freehold-nj
+index.js:65 [BruceBase]   Failed to process "1965-00-00 - FREEHOLD ELKS LODGE, FREEHOLD, NJ": Cannot read properties of undefined (reading 'localeCompare')
+logErr @ index.js:65
+(anonymous) @ index.js:65
+await in (anonymous)
+(anonymous) @ index.js:65
+processYearEvents @ index.js:65
+(anonymous) @ index.js:65
+index.js:65 [BruceBase]   Response 200 for http://brucebase.wikidot.com/venue:knights-of-columbus-freehold-nj
+index.js:65 [BruceBase]   Failed to process "1965-00-00 - KNIGHTS OF COLUMBUS, FREEHOLD, NJ": Cannot read properties of undefined (reading 'localeCompare')
+logErr @ index.js:65
+(anonymous) @ index.js:65
+await in (anonymous)
+(anonymous) @ index.js:65
+processYearEvents @ index.js:65
+(anonymous) @ index.js:65
+index.js:65 
+#+end_example
+
+** DONE no setlist
+
+When there is NO setlist @debug/no-setlist.html e.g in http://brucebase.wikidot.com/1965#000065a
+and trying to switch to "List View" mode currently the relations are not rendered as a relation list. Actually nothing happens
+
+** DONE blockquote
+
+for recording sessions e.g. at http://brucebase.wikidot.com/1987#000287a @debug/recording-session.html
+render the relations also inside a "blockquote" container
 
 * question
 ** initial
