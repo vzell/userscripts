@@ -1,5 +1,44 @@
 [
     {
+        "version": "2.29",
+        "date": "2026-06-30",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: icons whose content cannot be extracted (empty dynamic tab, no extractable links, etc.) are now reliably greyed out (opacity 0.45) by applying the dim unconditionally in the !content branch, rather than depending on sorryTab / list-pages-box heuristics that could silently fall through."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.28",
+        "date": "2026-06-30",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: News icon whose tab contains only an empty dynamic list-pages block is now greyed out (opacity 0.45) instead of showing a warning glyph, signalling it is non-interactive without implying a data error.",
+                    "Ticket icon: images with 'pass' in their URL path (e.g. files:pass-2008) are now included alongside ticket images when clicking the Ticket icon on the YEAR page.",
+                    "RELATION page: empty or 'Sorry, no…' tabs in the YUI tab navigation are now annotated with a ⚠️ glyph and hover tooltip directly on the tab label."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.27",
+        "date": "2026-06-30",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: News icon with a dynamic wikidot list-pages block (content loaded via JS) now shows a ⚠️ warning glyph with tooltip instead of a clickable icon that opens an empty panel.",
+                    "YEAR page: empty or 'Sorry, no…' relation page tabs (e.g. Documents on Bruce Springsteen's relation page) are now rendered as disabled ⚠️-flagged buttons in the bb-relation-tab-row instead of being silently omitted."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.26",
         "date": "2026-06-29",
         "sections": [

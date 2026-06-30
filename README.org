@@ -2257,16 +2257,37 @@ also on the SONG and RELATION pages
 adjust the relevant @doc files, commit and push
 
 ** TODO collapse section from tabs and remove retail banner icons
-** TODO empty "News" panel on
+** DONE empty "News" panel on
+
+1.)
+
+Why is the "News" panel on
 
 http://brucebase.wikidot.com/2008#020308
+
+when clicking the "News" icon rendered empty
 
 #+begin_example
 <div class="bb-icon-panel" style=""><div class="bb-icon-panel-header"><span>News</span><button class="bb-icon-panel-close">✕</button></div><div class="bb-icon-panel-body"><div class="list-pages-box">    
 </div></div></div>
 #+end_example
 
-http://brucebase.wikidot.com/gig:2008-03-02-bell-centre-montreal-qc
+DETAIL page - http://brucebase.wikidot.com/gig:2008-03-02-bell-centre-montreal-qc
+
+In such a case the icon should be flagged with a warning icon and a tooltip explaining the fact
+
+2.)
+
+On http://brucebase.wikidot.com/relation:bruce-springsteen
+"Bruce Springsteen" has an empty tab "Documents"
+
+When such a relation is rendered on an event on a YEAR page in the "bb-relation-tab-row"
+
+#+begin_example
+<div class="bb-relation-tab-row"><span class="bb-tab-row-label">Bruce Springsteen:</span><button class="bb-relation-tab-btn" title="Relation page tab — click to expand/collapse: Performances / Appearances">Performances / Appearances</button><button class="bb-relation-tab-btn" title="Relation page tab — click to expand/collapse: Recordings">Recordings</button><button class="bb-relation-tab-btn" title="Relation page tab — click to expand/collapse: Bands">Bands</button><button class="bb-relation-tab-btn" title="Relation page tab — click to expand/collapse: News/Facts">News/Facts</button><button class="bb-relation-tab-btn" title="Relation page tab — click to expand/collapse: Gallery">Gallery</button></div>
+#+end_example
+
+it also should be rendered as a button but flagged with a warning icon and a tooltip explaining the fact
 
 ** DONE remove the '<div class="list-pages-box">' from the '<div id="bb-pre-events">' container
 
@@ -2285,7 +2306,7 @@ when pressing the button
 on an EVENT DETAIL page e.g. http://brucebase.wikidot.com/gig:2008-03-02-bell-centre-montreal-qc, not only show the
 initial state of the setlist under the "Setlist" tab, but also remove/hide all the match/mismatch artefacts like "bb-glyph", "bb-anchor-match", "bb-tags-warn-box" and "Setlist"-tab decoration 
 
-** what are the strange diff symbols in the tooltip
+** TODO what are the strange diff symbols in the tooltip
 
 #+begin_example
 <li><a href="/1973#160273">1973-02-16 - BOYLAN GYMNASIUM, MONMOUTH COLLEGE, WEST LONG BRANCH, NJ</a><span class="bb-glyph"> ❌</span></li>
@@ -2695,10 +2716,6 @@ http://brucebase.wikidot.com/nogig:2026-06-06-center-for-american-music-west-lon
 
 Tags missing: "6" => "06"
 
-14.)
-
-"Bruce Springsteen" has empty tab "Documents" should be failed as being there BUT empty
-
 ** DONE act
 
 1.)
@@ -2726,7 +2743,6 @@ relation list(s) related information (inclusive label), when clicked again, show
 ** DONE add also an event specific "Hide Relations"/"Show Relations" button
 
 add also an event specific "Hide Relations"/"Show Relations" button in the '<div class="bb-section-controls">' container
-
 
 ** DONE bugs
 
@@ -2781,7 +2797,7 @@ Relations:
 
 ** TODO spacing
 
-on e.g. http://brucebase.wikidot.com/2026#300126 there should be a little more space between relationblock and show
+on e.g. http://brucebase.wikidot.com/2026#300126 there should be a little more space between relation block and show
 
 ** DONE bug
 
@@ -2824,6 +2840,55 @@ and trying to switch to "List View" mode currently the relations are not rendere
 
 for recording sessions e.g. at http://brucebase.wikidot.com/1987#000287a @debug/recording-session.html
 render the relations also inside a "blockquote" container
+
+** honour empty line between relation and guest artists - 
+** compare song title - adjust for ", The" in http://brucebase.wikidot.com/relation:the-e-street-band
+
+E Street Band, The
+
+** TODO soundcheck tag flagged although soundcheck present in event lists
+
+http://brucebase.wikidot.com/1999#190599
+
+** DONE images on DETAIL pages with "Pass" in their name should be shown when the "Ticket" icon is clicked
+
+1.)
+
+Actually the "News" icon is now rendered like this, NO warning icon and no "click to expand hint" in the tooltip
+
+#+begin_example
+<img src="http://brucebase.wdfiles.com/local--files/content:files/00News-32.png" title="News" alt="00News-32.png" class="image">
+#+end_example
+
+This actually looks better to me than rendering the warning icon. But implement in this case that the icon is greyed out
+so it's immediately obvious that you can't click it
+
+2.)
+
+The '"Bruce Springsteen" has an empty tab "Documents"' feature now works correctly on a YEAR page in the "bb-relation-tab-row".
+
+Also display the warning icon on the empty tab of RELATION page http://brucebase.wikidot.com/relation:bruce-springsteen itself for such cases 
+
+3.)
+
+Images on the "News/Memorabilia" tab on DETAIL pages
+e.g. http://brucebase.wikidot.com/gig:2008-03-06-blue-cross-arena-rochester-ny with "Pass" in their name should also be
+shown when the "Ticket" icon on the YEAR page is clicked
+
+#+begin_example
+<a href="http://brucebase.wdfiles.com/local--files/files:pass-2008/20080306_Pass_01.jpg" class="with-lb"><img src="http://brucebase.wdfiles.com/local--resized-images/files:pass-2008/20080306_Pass_01.jpg/thumbnail.jpg" alt="" class="gallery-image-size-thumbnail"></a>
+#+end_example
+
+** DONE the "News" icon for the bug 1.) in the last session is still NOT greyed out
+
+the "News" icon for the bug 1.) in the last session is still NOT greyed out
+
+** TODO flag each "PAGE-TYPE" title line with a warning symbol and tooltip as long as there are some title mismatches/warning icons on other parts of the page
+
+#+begin_example
+<div id="page-title">Springsteen, Bruce</div>
+#+end_example
+
 
 * question
 ** initial
@@ -3005,3 +3070,24 @@ git remote add origin https://github.com/vzell/userscripts.git
 git push -u origin master
 #+end_src
 
+* TODO danny
+
+Two questions:
+
+1.)
+
+The following YEAR PAGE event entry http://brucebase.wikidot.com/2008#020308 has the "Ticket", "Setlist", "News" and
+"Memorabilia" icons set, probably because there ARE "Ticket", "Setlist" and other "Memorabilia" images on the
+"News/Memorabilia" tab on the EVENT DETAIL page http://brucebase.wikidot.com/gig:2008-03-02-bell-centre-montreal-qc
+
+But there is no other news or links section present on the DETAIL page, so why is the "News" icon set ?
+
+2.)
+
+On the other hand the following YEAR page entry http://brucebase.wikidot.com/2008#030308 has ONLY the "Ticket" and
+"Setlist" icon set and I can see only these kind of images on the "News/Memorabilia" tab on the EVENT DETAIL page at
+http://brucebase.wikidot.com/gig:2008-03-03-copps-coliseum-hamilton-on
+
+This looks kind of inconsisten to me. What are/should the actual conventions be here.
+
+Btw I'm working on an interactive browser userscript version of my BruceBase parser script which I will release shortly.

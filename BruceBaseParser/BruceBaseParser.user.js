@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.26
+// @version      2.29
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -3131,6 +3131,7 @@
     const originalHtml = content.innerHTML;
 
     annotateRelationPageTags();
+    annotateEmptyRelationTabs();
 
     const globalBtn = document.createElement('button');
     globalBtn.id        = 'bb-global-toggle';
@@ -4669,7 +4670,7 @@
     const tab = getNewsMemTab(doc, tabMap);
     if (!tab) return null;
     const items = [...tab.querySelectorAll('img')].filter(img =>
-      /ticket/i.test(img.src)
+      /ticket/i.test(img.src) || /\/(?:files:)?pass/i.test(img.src)
     ).map(img => ({
       thumbUrl: img.src,
       fullUrl:  img.closest('a[href]')?.href || img.src,
@@ -4699,6 +4700,11 @@
       clone.querySelectorAll('.list-pages-item').forEach(item => {
         if (!item.textContent.trim()) item.remove();
       });
+      // list-pages content is loaded dynamically by wikidot JS; a static fetch
+      // yields an empty box. Check the boxes specifically — preamble text outside
+      // the boxes (e.g. an introductory paragraph) must not be counted as content.
+      const boxes = [...clone.querySelectorAll('.list-pages-box')];
+      if (boxes.length > 0 && boxes.every(box => !box.textContent.trim())) return null;
       return { type: 'html', caption: 'News', html: clone.innerHTML };
     }
     const items = [...tab.querySelectorAll('a[href]')].filter(a => {
@@ -5369,7 +5375,7 @@
       expected.add('news');
       if (tabMap.has('News/Memorabilia')) expected.add('memorabilia');
       const imgs = [...newsMemTab.querySelectorAll('img')];
-      if (imgs.some(img => /ticket/i.test(img.src))) expected.add('ticket');
+      if (imgs.some(img => /ticket/i.test(img.src) || /\/(?:files:)?pass/i.test(img.src))) expected.add('ticket');
       const setlistImgs = imgs.filter(img => /setlist/i.test(img.src) && !/ticket/i.test(img.src));
       if (setlistImgs.length > 0) {
         expected.add('setlist');
@@ -5838,28 +5844,49 @@
 
     for (const [label] of tabMap) {
       const tab = getTabEl(relDoc, tabMap, label);
-      if (!tab) continue;
-      const text = tab.textContent.trim();
-      if (!text || SORRY_RE.test(text)) continue;
-
-      const html = tab.innerHTML
-        .replace(/href="\//g, `href="${location.protocol}//${location.host}/`);
-      const content = { type: 'html', caption: `${relName}: ${label}`, html };
       const btn = document.createElement('button');
       btn.className = 'bb-relation-tab-btn';
       btn.textContent = label;
-      btn.title = `Relation page tab — click to expand/collapse: ${label}`;
 
-      btn.addEventListener('click', () => {
-        if (!btn._bbPanel) {
-          btn._bbPanel = buildIconPanel(content);
-          btn._bbPanel._bbIcon = btn;
-          section.appendChild(btn._bbPanel);
-        }
-        const open = btn._bbPanel.style.display !== 'none';
-        btn._bbPanel.style.display = open ? 'none' : '';
-        btn.classList.toggle('bb-icon-active', !open);
-      });
+      // Wikidot sometimes omits the content panel (#wiki-tab-0-N) entirely for
+      // empty tabs — only the nav label is present. Treat a null panel the same
+      // as an empty one: render a flagged, non-interactive button.
+      const text   = tab ? tab.textContent.trim() : '';
+      const lBoxes = tab ? [...tab.querySelectorAll('.list-pages-box')] : [];
+      const isEmpty = !tab || !text || SORRY_RE.test(text) ||
+        (lBoxes.length > 0 && lBoxes.every(box => !box.textContent.trim()));
+
+      if (isEmpty) {
+        // Empty or "Sorry, no…" tabs are still rendered as buttons but flagged.
+        btn.classList.add('bb-relation-tab-empty');
+        const msg = !tab
+          ? `Tab "${label}" has no content (panel not rendered by server).`
+          : SORRY_RE.test(text)
+            ? `Tab "${label}" reports no content available.`
+            : `Tab "${label}" is empty.`;
+        btn.dataset.msg = msg;
+        btn.title = msg;
+        const warnSpan = document.createElement('span');
+        warnSpan.textContent = ' ⚠️';
+        btn.appendChild(warnSpan);
+        btn.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+        btn.addEventListener('mouseleave', hideTooltip);
+      } else {
+        const html = tab.innerHTML
+          .replace(/href="\//g, `href="${location.protocol}//${location.host}/`);
+        const content = { type: 'html', caption: `${relName}: ${label}`, html };
+        btn.title = `Relation page tab — click to expand/collapse: ${label}`;
+        btn.addEventListener('click', () => {
+          if (!btn._bbPanel) {
+            btn._bbPanel = buildIconPanel(content);
+            btn._bbPanel._bbIcon = btn;
+            section.appendChild(btn._bbPanel);
+          }
+          const open = btn._bbPanel.style.display !== 'none';
+          btn._bbPanel.style.display = open ? 'none' : '';
+          btn.classList.toggle('bb-icon-active', !open);
+        });
+      }
 
       row.appendChild(btn);
     }
@@ -6220,6 +6247,38 @@
    * No-op when all expected tags are present, no spurious managed tags exist,
    * or when no determinate tab ("Bands" / "Members") is found.
    */
+  /**
+   * Scans the YUI tabs on the live RELATION page and appends a ⚠️ to the nav
+   * label of any tab whose content panel is absent or effectively empty.
+   */
+  function annotateEmptyRelationTabs() {
+    const tabMap = buildTabMap(document);
+    if (!tabMap.size) return;
+    const navEms = [...document.querySelectorAll('.yui-nav em')];
+    for (const [label, idx] of tabMap) {
+      const em  = navEms[idx];
+      if (!em) continue;
+      const tab     = document.getElementById(`wiki-tab-0-${idx}`);
+      const text    = tab ? tab.textContent.trim() : '';
+      const lBoxes  = tab ? [...tab.querySelectorAll('.list-pages-box')] : [];
+      const isEmpty = !tab || !text || SORRY_RE.test(text) ||
+        (lBoxes.length > 0 && lBoxes.every(box => !box.textContent.trim()));
+      if (!isEmpty) continue;
+      const msg = !tab
+        ? `Tab "${label}" has no content (panel not rendered by server).`
+        : SORRY_RE.test(text)
+          ? `Tab "${label}" reports no content available.`
+          : `Tab "${label}" is empty.`;
+      const warn = document.createElement('span');
+      warn.textContent = ' ⚠️';
+      warn.title = msg;
+      warn.style.cursor = 'help';
+      warn.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+      warn.addEventListener('mouseleave', hideTooltip);
+      em.appendChild(warn);
+    }
+  }
+
   function annotateRelationPageTags() {
     const tagsContainer = document.querySelector('.page-tags');
     if (!tagsContainer) return;
@@ -6292,7 +6351,10 @@
       }
       const content = extractIconContent(doc, canonical, tabMap);
       if (!content) {
-        // Flag icons whose DETAIL tab explicitly says "Sorry, no X available"
+        // Always grey out icons whose content couldn't be extracted — the icon is
+        // present but non-interactive, so dim it to make that immediately obvious.
+        icon.style.opacity = '0.45';
+        // Additionally flag icons whose tab explicitly says "Sorry, no X available".
         const tabLabel = CANONICAL_TAB_LABEL[canonical];
         if (tabLabel) {
           const sorryTab = tabLabel === 'News/Memorabilia'
@@ -6306,7 +6368,6 @@
             warn.addEventListener('mouseenter', e => showErrorTooltip(e, warn.dataset.msg));
             warn.addEventListener('mouseleave', hideTooltip);
             icon.after(warn);
-            icon.style.opacity = '0.45';
           }
         }
         continue;
@@ -6866,6 +6927,8 @@
       .bb-relation-tab-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0; }
       .bb-relation-tab-btn { font-size: 0.8em; padding: 1px 6px; cursor: pointer; border: 1px solid #999; border-radius: 3px; background: #f5f5f5; }
       .bb-relation-tab-btn:hover, .bb-relation-tab-btn.bb-icon-active { background: #dce8ff; border-color: #66a; }
+      .bb-relation-tab-btn.bb-relation-tab-empty { opacity: 0.55; cursor: default; color: #888; }
+      .bb-relation-tab-btn.bb-relation-tab-empty:hover { background: #f5f5f5; border-color: #999; }
       ol.bb-list-view + p.bb-list-label { margin-top: 0.5em; }
       /* Global "Hide Relations" sticky-bar toggle */
       body.bb-relations-hidden .bb-relations-flat,
