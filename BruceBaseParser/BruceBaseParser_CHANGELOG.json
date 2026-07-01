@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.46",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page event title warning: tag issues (missing/spurious) detected for an event now appear in the ⚠️ tooltip on the event title line. addTagsButton sets data-msg on the Tags button when issues exist; collectSectionWarnings now queries button.bb-event-tab-btn[data-msg] to include them."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.45",
         "date": "2026-07-01",
         "sections": [

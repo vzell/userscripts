@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.45
+// @version      2.46
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -5621,6 +5621,7 @@
     btn.title = issueParts.length > 0
       ? `Tags panel — issues detected: ${issueParts.join(', ')}`
       : 'Click to expand/collapse the Tags panel';
+    if (issueParts.length > 0) btn.dataset.msg = `Tag issues: ${issueParts.join(', ')}`;
     if (missingTags.length > 0)      btn.style.color = 'red';
     else if (spuriousCount > 0)      btn.style.color = 'darkorange';
 
@@ -6818,6 +6819,9 @@
       add(el.dataset.msg || el.title)
     );
     processedDiv.querySelectorAll('.bb-glyph.bb-icon-sorry[data-msg]').forEach(el =>
+      add(el.dataset.msg)
+    );
+    processedDiv.querySelectorAll('button.bb-event-tab-btn[data-msg]').forEach(el =>
       add(el.dataset.msg)
     );
     if (processedDiv.querySelector('.bb-song-year-only'))   add('Year page song(s) not found in DETAIL setlist');

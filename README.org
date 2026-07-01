@@ -3072,6 +3072,11 @@ On YEAR pages in the flat view songlist songs which are marked DETAIL page only 
 ** DONE mark event titles with a yellow OK check mark when differing only in Earl/Late etc
 ** DONE Mark venue name with middle name with a yellow OK check mark when differing only middle name
 
+** tags
+
+On YEAR pages tag issues on specific events do not show up in the warning icon tooltip of the event title
+@debug/tag-warnings.html
+
 
 * question
 ** initial
