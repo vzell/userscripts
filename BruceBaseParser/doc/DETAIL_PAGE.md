@@ -78,6 +78,12 @@ h. **Setlist comparison** — when `hasSetlist` is true:
     `buildCharDiffHtml(yearSong, detailSong)`.
   - `year-only` → inserts a new `<li>` or `<p>` with `.bb-song-year-only`.
   - After each element on paragraph-based pages: `addParaStructureWarning(el)`.
+- After all items are inserted (list-based pages only): iterates every `<ol>`
+  in the container and assigns explicit `value` attributes to each
+  non-year-only `<li>`, counting only those items. This prevents year-only
+  inserted rows (styled as `list-style-type: disc`) from consuming counter
+  slots, so subsequent songs display correct numbers regardless of browser
+  CSS counter behaviour.
 
 ---
 
@@ -99,9 +105,28 @@ counting how many rendered `<li>` items belong to each section. The original
 ## `annotateSetlistTab`
 
 Finds the `<em>` whose text is exactly `"Setlist"` in the YUI navigation
-(works whether the tab is active or not). On mismatch: appends ` ⚠️`. On full
-match: sets `color: #2a2; font-weight: bold` inline (to override wikidot CSS
-specificity).
+(works whether the tab is active or not). On mismatch: appends
+`<span class="bb-setlist-tab-ann"> ⚠️</span>` with `dataset.msg` set to a
+human-readable description (`"Event name mismatch between YEAR and DETAIL page"`
+and/or `"Setlist has differences between YEAR and DETAIL page"`). The
+`dataset.msg` is required so `collectPageWarnings()` can include the setlist
+issue in the `#page-title` warning annotation. On full match: adds
+`.bb-setlist-tab-match` to the `<em>` (green + bold via CSS class).
+
+---
+
+## Page title warning annotation
+
+After `runDetailProcessing()` completes, `annotatePageTitleWithWarnings()` is
+called. It collects all warning messages from the live DOM via
+`collectPageWarnings()`:
+- `.bb-tag-missing`, `.bb-tag-spurious`, `.bb-anchor-warn`, `.bb-venue-warn`,
+  `.bb-para-warn` → `dataset.msg || title`
+- `.yui-nav em span[data-msg]` → `dataset.msg` (covers `bb-setlist-tab-ann`)
+
+When any messages exist, appends `<span class="bb-page-title-warn"> ⚠️</span>`
+to `#page-title`. Hovering shows a numbered rich tooltip listing every issue in
+document order.
 
 ---
 

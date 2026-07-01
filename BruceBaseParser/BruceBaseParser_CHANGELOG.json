@@ -1,5 +1,195 @@
 [
     {
+        "version": "2.45",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page flat view: detail-only songs no longer increment the songNum counter in renderSetlistElement. Matches the same fix applied to the list view (v2.44) and DETAIL page (v2.40) — the counter now skips detail-only bullets so subsequent songs are numbered correctly."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.44",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page list view (☰ List): detail-only songs now show '•' and do not increment the counter, mirroring the flat-view fix (v2.39) and the DETAIL page fix (v2.40). The song href is captured from the bb-song-num anchor before it is stripped, so the bullet remains a clickable link with the same song-tab-row handler."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.43",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Renamed '⚡ Mismatches' button to '⚡ Issues' on YEAR, LIST, and HOME pages. Updated tooltips: YEAR/LIST now reads 'Filter to show only events with detected issues (name mismatches, setlist differences, anchor/venue warnings, etc.)'; HOME reads 'Filter to show only events or year sections with detected issues'."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.42",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page: each event title line now gets a ⚠️ warning glyph (bb-event-title-warn) appended after the bb-glyph when any problems are detected within that event's bb-section-processed container. Hovering shows a rich tooltip listing all issues: anchor mismatches, venue mismatches, section-label warnings, icon-sorry flags, and synthetic messages for setlist diffs (year-only / detail-only / char-diff songs)."
+                ]
+            },
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: renderVenueInfo was not setting dataset.msg on the venue glyph span, so venue mismatch warnings were invisible to collectSectionWarnings."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.41",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "DETAIL page: page-title warning icon (v2.37) now fires when the Setlist tab carries a mismatch warning. annotateSetlistTab was not setting data-msg on the warning span, so collectPageWarnings() (which queries .yui-nav em span[data-msg]) silently missed it."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.40",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page setlist: detail-only songs now show '•' (bullet) instead of a sequential integer index. The bullet is still a hyperlink with the same click handler.",
+                    "DETAIL page setlist: year-only <li> entries no longer consume a counter slot in the <ol>. Explicit `value` attributes are now set on all non-year-only <li> elements after insertion, so subsequent songs are numbered correctly regardless of browser CSS counter behaviour."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.38",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page: added 'Hide Buttons'/'Show Buttons' toggle to bb-section-controls for each event. Clicking hides or shows all tab button rows (.bb-event-tab-row, .bb-venue-tab-row, .bb-song-tab-row, .bb-relation-tab-row) within that event's processed container."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.37",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "DETAIL / VENUE / SONG / RELATION pages: a ⚠️ glyph is now appended to #page-title whenever any warning elements are present on the page. Hovering shows a comprehensive rich-HTML tooltip listing all issues (tag mismatches, anchor mismatches, venue mismatches, section-label warnings, empty relation tabs) in document order — making problems at the bottom of long pages visible without scrolling.",
+                    "addVenueGlyphDetail and annotateEmptyRelationTabs now store data-msg on their warning spans so collectPageWarnings() can retrieve the message uniformly."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.36",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page: VENUE, SONG, and RELATION tab rows now show a 'Notes' button (first after the label) when the fetched page has free-text content before its first tab navset. Clicking opens a panel with that preamble content (bio, description, address block, etc.)."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.35",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "RELATION page: removed the native browser tooltip (title attribute) from empty-tab ⚠️ warning spans — the rich HTML tooltip via showErrorTooltip already provides the message, so the native tooltip was redundant."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.34",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "YEAR page: added 'Fetch Songs' button to bb-section-controls for each event. Clicking it sequentially loads song page tabs for all unloaded bb-song-num links in that event.",
+                    "YEAR page: added 'Fetch Relations' button to bb-section-controls for each event. Clicking it sequentially loads relation tab rows for all unloaded bb-rel-bullet participants in that event (deduplicated by href)."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.33",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Tag checks: 'soundcheck' tag is no longer spuriously flagged when a Soundcheck section is present. The standard DETAIL page format uses a <p><strong>Soundcheck</strong></p> header (no colon); the old regex required 'Soundcheck:' which never appears in the raw DETAIL page HTML."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.32",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Tag checks: expected day-of-month tag is now zero-padded (e.g. '06' instead of '6') in both computeExpectedTags and computeExpectedRetailTags. isTagPresent already accepts both forms, so actual tags stored without padding continue to be recognised."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.31",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Retail icon panel: top-level list-pages-box containers (Wikidot dynamic discography navigators) are now stripped from the fetched retail page content — they rendered as meaningless release icons in the panel context."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.30",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Retail icon panel: the retail page title (e.g. 'Magic Tour Highlights [EP]') is now rendered as a bold section heading above the page content, replacing the structureless bb-retail-tabs wrapper div.",
+                    "Retail icon panel: all tab-label sections (Audio, Video, Artwork, Personnel, etc.) now render with a grey background and start collapsed; clicking a label expands/collapses its content."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.29",
         "date": "2026-06-30",
         "sections": [

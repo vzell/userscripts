@@ -135,14 +135,24 @@ Same colour classes applied to `<li>` / `<p>` / `<a>` elements:
 - `char-diff` → `.bb-song-char-diff` + `buildCharDiffHtml` replaces `<a>` innerHTML.
 - `year-only` → new `<li>` or `<p>` inserted with `.bb-song-year-only`.
 
+After all items are inserted, `renderDetailSetlist` sets explicit `value`
+attributes on every non-year-only `<li>` inside each `<ol>`. This prevents
+year-only items (which use `list-style-type: disc`) from consuming a counter
+slot in the ordered list, so subsequent songs are numbered correctly regardless
+of browser CSS counter behaviour.
+
 ---
 
 ## Song number rendering (flat view)
 
-`renderSetlistElement` prepends a song number before each song:
-- Clickable `<a href="/song:…" class="bb-song-num" data-sn="…">N.</a>` when a
-  song URL is known (from `item.detailSongUrl`).
-- Plain `<span class="bb-song-num-plain">N.</span>` when no song URL exists.
+`renderSetlistElement` prepends a number or bullet before each song.
+`songNum` is incremented only for non-`detail-only` items (detail-only songs do
+not exist on the YEAR page and must not consume a counter slot).
+
+- `detail-only` → `<a href="/song:…" class="bb-song-num" data-sn="…">•</a>`
+  (bullet, still hyperlinked with the same click handler).
+- All other types with a known song URL → `<a … class="bb-song-num">N.</a>`.
+- No URL available → `<span class="bb-song-num-plain">N.</span>`.
 
 Clicking a `bb-song-num` link calls
 `fetchAndToggleSongTabRow(songHref, songName, section, numLink)`:
@@ -151,6 +161,10 @@ Clicking a `bb-song-num` link calls
   on the song page (using the same `buildIconPanel` infrastructure).
 - Toggles the row open/closed on repeated clicks; the `numLink` gains/loses
   `.bb-icon-active`.
+
+The same rule applies in `buildListDiv` (list view): `detail-only` groups are
+detected before stripping `bb-song-num` elements (to preserve the song href),
+receive a `•` prefix, and do not increment `itemNum`.
 
 ---
 

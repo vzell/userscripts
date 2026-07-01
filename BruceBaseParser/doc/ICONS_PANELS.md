@@ -83,9 +83,16 @@ Scans the Recording tab for `<p>` elements containing `/retail:` links.
 - Found → icon becomes clickable; first click lazily calls
   `buildRetailContent(retailParas, hrefs)`:
   - Fetches each `/retail:…` page.
-  - Strips scripts, footer (disclaimer link + preceding `<hr>`).
-  - Flattens YUI navsets into labeled tab panels (all visible, no JS needed).
+  - Strips scripts, footer (disclaimer link + preceding `<hr>`), and top-level
+    `.list-pages-box` elements (redundant release icon nav).
+  - Reads `#page-title` from the retail page and renders it as
+    `<div class="bb-retail-page-title">` above the content.
+  - Flattens each YUI navset into `<p><strong class="bb-retail-tab-label">LABEL</strong></p>`
+    + `<div>content</div>` pairs using a `DocumentFragment` (no wrapper div).
   - Returns `{ type:'html', caption:'Retail', html }`.
+- After the panel is appended to the DOM, `wirePanelCollapsibles(panel)` wires
+  each `.bb-retail-tab-label` as a collapse toggle for the `<div>` immediately
+  following its `<p>` parent. All sections start collapsed.
 - Subsequent clicks toggle the panel open/closed.
 
 ---
@@ -137,6 +144,47 @@ Clicking uses the same `buildIconPanel` + `_bbIcon` mechanism as icon handlers.
 
 ---
 
+## Notes button (`buildNotesButton`)
+
+For VENUE, SONG, and RELATION pages, a **Notes** button is appended to the
+first tab button row when the page has introductory free text before the first
+`.yui-navset`.
+
+`extractPageNotes(doc)` collects all children of `#page-content` that precede
+the first `.yui-navset`, strips `<script>` elements, and rewrites relative hrefs
+to absolute URLs. Returns `null` when only whitespace is found.
+
+`buildNotesButton(doc, caption, btnClass, section)` builds a toggle button that
+lazily constructs a `buildIconPanel({ type:'html', … })` panel on first click.
+Subsequent clicks toggle the panel open/closed.
+
+---
+
+## Page title / event title warnings
+
+### `annotatePageTitleWithWarnings()`
+
+Called at the end of `runDetailPage`, `runVenuePage`, `runSongPage`, and
+`runRelationPage`. Collects messages from the live DOM via `collectPageWarnings()`
+(`.bb-tag-missing`, `.bb-tag-spurious`, `.bb-anchor-warn`, `.bb-venue-warn`,
+`.bb-para-warn`, `.yui-nav em span[data-msg]`). When any exist, appends
+`<span class="bb-page-title-warn"> ⚠️</span>` to `#page-title` with a rich
+numbered tooltip listing all issues.
+
+### `annotateEventTitleWithWarnings(element, processedDiv)` — YEAR pages
+
+Called at the end of `processOneYearEvent` after all checks complete. Collects
+messages from within the event's `bb-section-processed` via
+`collectSectionWarnings(processedDiv)`. When any exist, inserts
+`<span class="bb-event-title-warn"> ⚠️</span>` after the last
+`bb-glyph` / `bb-event-type` / `bb-event-alias` sibling of the event link,
+with the same rich tooltip format.
+
+`renderVenueInfo` sets `glyph.dataset.msg` on the venue warning span so it is
+visible to both collectors.
+
+---
+
 ## Venue-tab buttons (`addVenueTabButtons`)
 
 Called from `processOneYearEvent` when the venue page was successfully fetched
@@ -179,6 +227,9 @@ At the end, `addVenueTagsButton(venueDoc, venueName, section, row)` appends a
 | `#bb-lightbox` | Full-screen thumbnail grid overlay |
 | `#bb-lightbox-viewer` | Full-screen single-image viewer overlay |
 | `.bb-retail-refs` | Wrapper div for retail reference paragraphs in Retail panel |
-| `.bb-retail-tabs` | Wrapper for flattened YUI navset in Retail panel |
-| `.bb-retail-tab-label` | Label for each flattened retail tab |
+| `.bb-retail-page-title` | Bold heading showing the retail page's `#page-title` text |
+| `.bb-retail-tab-label` | Collapsible label `<strong>` for each flattened retail tab section |
+| `.bb-retail-tab-open` | Added to `.bb-retail-tab-label` when the section is expanded |
+| `.bb-page-title-warn` | ⚠️ span appended to `#page-title` on DETAIL/VENUE/SONG/RELATION pages |
+| `.bb-event-title-warn` | ⚠️ span appended to event title line on YEAR pages |
 | `.bb-cache-retry` | ⟳ button added to sections after a cache load |

@@ -148,6 +148,22 @@ hidden and `.bb-relations-list` visible, showing the original nested hierarchy.
 `checkYearAnchorConsistency(doc, anchorName, anchorEl, eventDate)` — see
 [ANCHORS.md](ANCHORS.md).
 
+### 9. Event title warning annotation
+
+`annotateEventTitleWithWarnings(element, processedDiv)` — called after all
+checks complete. Collects warning messages from within `processedDiv` via
+`collectSectionWarnings(processedDiv)`:
+- `.bb-anchor-warn`, `.bb-venue-warn`, `.bb-para-warn` → `dataset.msg || title`
+- `.bb-glyph.bb-icon-sorry[data-msg]` → `dataset.msg`
+- `.bb-song-year-only` present → synthetic "Year page song(s) not found in DETAIL setlist"
+- `.bb-song-detail-only` present → synthetic "DETAIL page song(s) not found in YEAR setlist"
+- `.bb-song-char-diff` present → synthetic "Song name character differences between YEAR and DETAIL page"
+
+When any messages exist, inserts `<span class="bb-event-title-warn"> ⚠️</span>`
+after the last of the `bb-glyph` / `bb-event-type` / `bb-event-alias` siblings
+that immediately follow the event link. Hovering shows a rich tooltip listing
+all issues.
+
 ---
 
 ## Collapsible event heading lines
@@ -192,8 +208,8 @@ elements and calls `setEventCollapsed` on each.
 
 ## Per-section controls (`insertSectionToggle`)
 
-Inserts `<div class="bb-section-controls">` with two buttons immediately after
-the `<hr>`:
+Inserts `<div class="bb-section-controls">` with the following buttons
+immediately after the `<hr>`:
 
 - **⇄ Original / ⇄ Processed** — toggles between `bb-section-original` and
   `bb-section-processed` divs.
@@ -202,10 +218,22 @@ the `<hr>`:
   the event title, scheduled block, icons, and descriptive text remain visible.
   `buildListDiv(setlistEls, section)` constructs the list:
   - Each source element contributes a label paragraph and an `<ol>`.
-  - Song numbers are rendered as clickable `<a class="bb-song-num">` links when
-    a `/song:` URL is known; clicking fetches the song page and toggles a
-    `bb-song-tab-row` via `fetchAndToggleSongTabRow`.
-  - Plain `<span class="bb-song-num-plain">` for songs with no song page.
+  - `detail-only` groups show `•` (bullet) and do not increment the counter;
+    their song href is captured from the flat-view `bb-song-num` anchor before
+    it is stripped, keeping the click handler intact.
+  - Other songs: clickable `<a class="bb-song-num">N.</a>` when a `/song:` URL
+    is known; `<span class="bb-song-num-plain">N.</span>` otherwise.
+- **Hide Relations / Show Relations** — (only present when the event has
+  relation blocks) toggles `.bb-rel-hidden` on `processedDiv`.
+- **Hide Buttons / Show Buttons** — hides or shows all tab button rows
+  (`.bb-event-tab-row`, `.bb-venue-tab-row`, `.bb-song-tab-row`,
+  `.bb-relation-tab-row`) within the event's `processedDiv`.
+- **Fetch Songs** — (only present when `a.bb-song-num` links exist) iterates
+  every unloaded song link in the event and calls `fetchAndToggleSongTabRow`
+  sequentially, loading all song tab rows in one click.
+- **Fetch Relations** — (only present when `.bb-rel-bullet[data-rel-href]`
+  elements exist) iterates every unique relation href and calls
+  `fetchAndToggleRelationTabRow` sequentially.
 
 Three mutually exclusive `viewState` values: `'flat'` (default), `'original'`,
 `'list'`.
@@ -222,9 +250,9 @@ Three mutually exclusive `viewState` values: `'flat'` (default), `'original'`,
 - **⇄ Original Page** — `setupGlobalToggle`; alternates `#page-content` /
   `#bb-page-original`. The original div is created after processing so no event
   listeners on the processed content are lost.
-- **⚡ Mismatches (N)** — `setupMismatchFilter`; calls `applyMismatchFilter`.
-  Button label shows count. Toggling between "⚡ Mismatches (N)" and
-  "⚡ All Events (N)". A section is a mismatch when it contains a `.bb-glyph`
+- **⚡ Issues (N)** — `setupMismatchFilter`; calls `applyMismatchFilter`.
+  Button label shows count. Toggles between "⚡ Issues (N)" and
+  "⚡ All Events (N)". A section has issues when it contains a `.bb-glyph`
   with ❌/⚠️/❓, or a `.bb-song-year-only`, `.bb-song-detail-only`,
   `.bb-song-char-diff`, `.bb-para-warn`, or `.bb-anchor-warn` element.
 - **SmartTable trigger** (optional) — moved from the SmartTable host into

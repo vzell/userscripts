@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.29
+// @version      2.45
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -91,7 +91,7 @@
     setlist:     'No setlist images found in News/Memorabilia tab',
     handwritten: 'No handwritten setlist images found in News/Memorabilia tab',
     printed:     'No printed setlist images found in News/Memorabilia tab',
-    soundcheck:  'No "Soundcheck:" section label found in event content',
+    soundcheck:  'No "Soundcheck" section header found in setlist content',
     storyteller: 'Storyteller tab is empty or unavailable',
   };
 
@@ -236,8 +236,8 @@
     const filterBtn = document.createElement('button');
     filterBtn.id = 'bb-mismatch-toggle';
     filterBtn.className = 'bb-toggle-btn';
-    filterBtn.textContent = '⚡ Mismatches';
-    filterBtn.title = 'Filter to show only events or year sections with mismatches';
+    filterBtn.textContent = '⚡ Issues';
+    filterBtn.title = 'Filter to show only events or year sections with detected issues';
     filterBtn.disabled = true;
 
     const btnContainer = document.createElement('div');
@@ -333,7 +333,7 @@
       homeFilterState.applyFn = null;
       homeFilterBar.setCount(0);
       homeFilterBar.setTotal(0);
-      filterBtn.textContent = '⚡ Mismatches';
+      filterBtn.textContent = '⚡ Issues';
       // Disable the other fetch button while this one is running.
       fetchBtns.forEach(b => { if (b !== activeBtn) b.disabled = true; });
       activeBtn.textContent = stopLabel;
@@ -402,7 +402,7 @@
       const total        = allUnits.length;
       const mismatchCount = allUnits.filter(isMismatchFn).length;
 
-      filterBtn.textContent = `⚡ Mismatches (${mismatchCount})`;
+      filterBtn.textContent = `⚡ Issues (${mismatchCount})`;
       homeFilterBar.setTotal(total);
 
       homeFilterState.applyFn = () => {
@@ -410,7 +410,7 @@
         homeFilterBar.setCount(count);
         filterBtn.textContent = homeFilterState.mismatchActive
           ? `⚡ All Events (${total})`
-          : `⚡ Mismatches (${mismatchCount})`;
+          : `⚡ Issues (${mismatchCount})`;
       };
       homeFilterState.applyFn();
       homeSaveBtn.disabled = false;
@@ -733,8 +733,8 @@
     let mismatchBtn = document.createElement('button');
     mismatchBtn.id = 'bb-mismatch-toggle';
     mismatchBtn.className = 'bb-toggle-btn';
-    mismatchBtn.textContent = '⚡ Mismatches';
-    mismatchBtn.title = 'Filter to show only events with name or setlist mismatches';
+    mismatchBtn.textContent = '⚡ Issues';
+    mismatchBtn.title = 'Filter to show only events with detected issues (name mismatches, setlist differences, anchor/venue warnings, etc.)';
     mismatchBtn.disabled = true;
 
     let relToggleBtn = document.createElement('button');
@@ -1483,6 +1483,60 @@
       controls.append(relBtn);
     }
 
+    // Hide Buttons: toggle all tab-button rows for this event.
+    const hideButtonsBtn = document.createElement('button');
+    hideButtonsBtn.className = 'bb-toggle-btn bb-hide-buttons-toggle';
+    hideButtonsBtn.textContent = 'Hide Buttons';
+    hideButtonsBtn.title = 'Hide or show all tab button rows for this event';
+    hideButtonsBtn.addEventListener('click', () => {
+      const hiding = hideButtonsBtn.textContent === 'Hide Buttons';
+      processedDiv.querySelectorAll(
+        '.bb-event-tab-row, .bb-venue-tab-row, .bb-song-tab-row, .bb-relation-tab-row'
+      ).forEach(row => { row.style.display = hiding ? 'none' : ''; });
+      hideButtonsBtn.textContent = hiding ? 'Show Buttons' : 'Hide Buttons';
+    });
+    controls.append(hideButtonsBtn);
+
+    // Fetch Songs: load song page tabs for every unloaded bb-song-num link.
+    if (processedDiv.querySelector('a.bb-song-num')) {
+      const fetchSongsBtn = document.createElement('button');
+      fetchSongsBtn.className = 'bb-toggle-btn bb-fetch-songs-btn';
+      fetchSongsBtn.textContent = 'Fetch Songs';
+      fetchSongsBtn.title = 'Load song page tabs for all songs in this event';
+      fetchSongsBtn.addEventListener('click', async () => {
+        fetchSongsBtn.disabled = true;
+        for (const link of processedDiv.querySelectorAll('a.bb-song-num')) {
+          const href = link.getAttribute('href');
+          if (!href || link.classList.contains('bb-song-loading') ||
+              processedDiv._bbSongRows?.has(href)) continue;
+          await fetchAndToggleSongTabRow(href, link.dataset.sn || '', processedDiv, link);
+        }
+        fetchSongsBtn.disabled = false;
+      });
+      controls.append(fetchSongsBtn);
+    }
+
+    // Fetch Relations: load relation tab rows for every unloaded bullet, one per unique href.
+    if (processedDiv.querySelector('.bb-rel-bullet[data-rel-href]')) {
+      const fetchRelsBtn = document.createElement('button');
+      fetchRelsBtn.className = 'bb-toggle-btn bb-fetch-rels-btn';
+      fetchRelsBtn.textContent = 'Fetch Relations';
+      fetchRelsBtn.title = 'Load relation page tab rows for all participants in this event';
+      fetchRelsBtn.addEventListener('click', async () => {
+        fetchRelsBtn.disabled = true;
+        const seen = new Set();
+        for (const bullet of processedDiv.querySelectorAll('.bb-rel-bullet[data-rel-href]')) {
+          const href = bullet.dataset.relHref;
+          if (!href || seen.has(href) || bullet.classList.contains('bb-rel-loading') ||
+              processedDiv._bbRelRows?.has(href)) continue;
+          seen.add(href);
+          await fetchAndToggleRelationTabRow(href, bullet.dataset.relName || '', processedDiv, bullet);
+        }
+        fetchRelsBtn.disabled = false;
+      });
+      controls.append(fetchRelsBtn);
+    }
+
     controlAnchor.after(controls);
   }
 
@@ -1556,36 +1610,66 @@
         ol.className = 'bb-list-view';
         let itemNum = 0;
         for (const group of validGroups) {
-          itemNum++;
           const li = document.createElement('li');
           li.innerHTML = group.join('');
+
+          // Detect detail-only before stripping the num link (we need its href).
+          const isDetailOnly = !!li.querySelector('.bb-song-detail-only');
+          const detailNumLink = isDetailOnly
+            ? li.querySelector('a.bb-song-num[href^="/song:"]') : null;
+          const detailSongHref = detailNumLink?.getAttribute('href') ?? null;
+          const detailSongName = detailNumLink?.dataset.sn
+            ?? li.querySelector('.bb-song-detail-only')?.dataset.detailSong ?? '';
 
           // The flat-view renderer (renderSetlistElement) already injects bb-song-num
           // elements into each processed <p>/<blockquote>. Strip them before we
           // prepend the list-view's own number to avoid duplicates.
           li.querySelectorAll('a.bb-song-num, span.bb-song-num-plain').forEach(el => el.remove());
 
-          // Prepend clickable number if a /song: link exists, else plain number.
-          const songAnchor = li.querySelector('a[href^="/song:"]');
-          const songHref   = songAnchor?.getAttribute('href') ?? null;
-          const songName   = songAnchor?.textContent.trim() ?? '';
-
-          if (songHref && section) {
-            const numLink = document.createElement('a');
-            numLink.href      = songHref;
-            numLink.className = 'bb-song-num';
-            numLink.textContent = `${itemNum}.`;
-            numLink.title = `${songName} — click to load song page tabs`;
-            numLink.addEventListener('click', e => {
-              e.preventDefault();
-              fetchAndToggleSongTabRow(songHref, songName, section, numLink);
-            });
-            li.prepend(numLink);
+          if (isDetailOnly) {
+            // Detail-only songs don't exist on the YEAR page: show • without
+            // consuming a counter slot, mirroring the flat-view and DETAIL-page fix.
+            if (detailSongHref && section) {
+              const numLink = document.createElement('a');
+              numLink.href      = detailSongHref;
+              numLink.className = 'bb-song-num';
+              numLink.textContent = '•';
+              numLink.title = `${detailSongName} — click to load song page tabs`;
+              numLink.addEventListener('click', e => {
+                e.preventDefault();
+                fetchAndToggleSongTabRow(detailSongHref, detailSongName, section, numLink);
+              });
+              li.prepend(numLink);
+            } else {
+              const numSpan = document.createElement('span');
+              numSpan.className   = 'bb-song-num-plain';
+              numSpan.textContent = '•';
+              li.prepend(numSpan);
+            }
           } else {
-            const numSpan = document.createElement('span');
-            numSpan.className   = 'bb-song-num-plain';
-            numSpan.textContent = `${itemNum}.`;
-            li.prepend(numSpan);
+            // Prepend clickable number if a /song: link exists, else plain number.
+            itemNum++;
+            const songAnchor = li.querySelector('a[href^="/song:"]');
+            const songHref   = songAnchor?.getAttribute('href') ?? null;
+            const songName   = songAnchor?.textContent.trim() ?? '';
+
+            if (songHref && section) {
+              const numLink = document.createElement('a');
+              numLink.href      = songHref;
+              numLink.className = 'bb-song-num';
+              numLink.textContent = `${itemNum}.`;
+              numLink.title = `${songName} — click to load song page tabs`;
+              numLink.addEventListener('click', e => {
+                e.preventDefault();
+                fetchAndToggleSongTabRow(songHref, songName, section, numLink);
+              });
+              li.prepend(numLink);
+            } else {
+              const numSpan = document.createElement('span');
+              numSpan.className   = 'bb-song-num-plain';
+              numSpan.textContent = `${itemNum}.`;
+              li.prepend(numSpan);
+            }
           }
 
           ol.appendChild(li);
@@ -1620,14 +1704,14 @@
     const totalEvents = eventCount;
     const mismatchCount = sections.filter(div => isYearMismatch(div)).length;
 
-    btn.textContent = `⚡ Mismatches (${mismatchCount})`;
+    btn.textContent = `⚡ Issues (${mismatchCount})`;
 
     let filterActive = false;
     btn.addEventListener('click', () => {
       filterActive = !filterActive;
       btn.textContent = filterActive
         ? `⚡ All Events (${totalEvents})`
-        : `⚡ Mismatches (${mismatchCount})`;
+        : `⚡ Issues (${mismatchCount})`;
       if (state) state.mismatchActive = filterActive;
       if (applyFn) applyFn(); else applyMismatchFilter(filterActive);
     });
@@ -1653,14 +1737,14 @@
   function setupListMismatchFilter(btn, listEvents, state = null, applyFn = null) {
     const mismatchCount = listEvents.filter(({ element }) => isListMismatch(element)).length;
 
-    btn.textContent = `⚡ Mismatches (${mismatchCount})`;
+    btn.textContent = `⚡ Issues (${mismatchCount})`;
 
     let filterActive = false;
     btn.addEventListener('click', () => {
       filterActive = !filterActive;
       btn.textContent = filterActive
         ? `⚡ All Events (${listEvents.length})`
-        : `⚡ Mismatches (${mismatchCount})`;
+        : `⚡ Issues (${mismatchCount})`;
       if (state) state.mismatchActive = filterActive;
       if (applyFn) {
         applyFn();
@@ -2271,6 +2355,10 @@
       const warnSpan = document.createElement('span');
       warnSpan.className = 'bb-setlist-tab-ann';
       warnSpan.textContent = ' ⚠️';
+      const warnParts = [];
+      if (!nameMatch) warnParts.push('Event name mismatch between YEAR and DETAIL page');
+      if (hasSetlistMismatch) warnParts.push('Setlist has differences between YEAR and DETAIL page');
+      warnSpan.dataset.msg = warnParts.join('; ');
       em.appendChild(warnSpan);
     } else {
       // Class-based so the toggle can revert it without touching inline styles.
@@ -2608,6 +2696,10 @@
       if (anchorEl && anchorName) {
         checkYearAnchorConsistency(doc, anchorName, anchorEl, eventDate);
       }
+
+      // ── Event title warning annotation ───────────────────────────────────
+      const processedDivForWarn = element.closest('.bb-section-processed');
+      if (processedDivForWarn) annotateEventTitleWithWarnings(element, processedDivForWarn);
     } catch (e) {
       logErr(`  Failed to process "${yearName}":`, e.message);
       addWarningGlyph(element, e.message, eventType);
@@ -2694,13 +2786,17 @@
     for (const item of items) {
       if (!isFirst) html += '<span class="bb-sep"> / </span>';
       isFirst = false;
-      songNum++;
+      // detail-only songs don't exist on the YEAR page and must not consume a
+      // counter slot — the same principle as the DETAIL page fix (v2.40).
+      if (item.type !== 'detail-only') songNum++;
 
       // Song number: clickable when a song page URL is known, plain otherwise.
+      // detail-only songs show a bullet (•) rather than a sequential index.
       const numSongHref = item.detailSongUrl ?? null;
       const numSongName = item.yearSong ?? item.detailSong ?? '';
       if (numSongHref) {
-        html += `<a href="${esc(numSongHref)}" class="bb-song-num" data-sn="${esc(numSongName)}">${songNum}.</a>`;
+        const numLabel = item.type === 'detail-only' ? '•' : `${songNum}.`;
+        html += `<a href="${esc(numSongHref)}" class="bb-song-num" data-sn="${esc(numSongName)}">${numLabel}</a>`;
       } else {
         html += `<span class="bb-song-num-plain">${songNum}.</span>`;
       }
@@ -2972,6 +3068,7 @@
 
     // Auto-process on page load.
     await runDetailProcessing();
+    annotatePageTitleWithWarnings();
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -3021,6 +3118,7 @@
     log('[DBG] runVenuePage: pageTitle.nextElementSibling =', pageTitle.nextElementSibling);
 
     setupGlobalToggle(globalBtn, content, originalHtml);
+    annotatePageTitleWithWarnings();
     log('[DBG] runVenuePage: done');
   }
 
@@ -3111,6 +3209,7 @@
     pageTitle.after(btnContainer);
 
     setupGlobalToggle(globalBtn, content, originalHtml);
+    annotatePageTitleWithWarnings();
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -3151,6 +3250,7 @@
     pageTitle.after(btnContainer);
 
     setupGlobalToggle(globalBtn, content, originalHtml);
+    annotatePageTitleWithWarnings();
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -3493,6 +3593,21 @@
         }
       }
     }
+
+    // Year-only <li> items must not consume a counter slot in the <ol>.
+    // Setting explicit `value` attributes on every non-year-only <li> is the
+    // most reliable cross-browser approach (CSS counter-increment override is
+    // not honoured for the built-in list-item counter in all browsers).
+    if (!isParagraphBased) {
+      td.querySelectorAll('ol').forEach(ol => {
+        let counter = 0;
+        ol.querySelectorAll(':scope > li').forEach(li => {
+          if (!li.classList.contains('bb-song-year-only')) {
+            li.value = ++counter;
+          }
+        });
+      });
+    }
   }
 
   function addParaStructureWarning(el) {
@@ -3697,8 +3812,8 @@
     const mismatchBtn = document.createElement('button');
     mismatchBtn.id = 'bb-mismatch-toggle';
     mismatchBtn.className = 'bb-toggle-btn';
-    mismatchBtn.textContent = '⚡ Mismatches';
-    mismatchBtn.title = 'Filter to show only events with name or setlist mismatches';
+    mismatchBtn.textContent = '⚡ Issues';
+    mismatchBtn.title = 'Filter to show only events with detected issues (name mismatches, setlist differences, anchor/venue warnings, etc.)';
     mismatchBtn.disabled = true;
 
     const [listSaveBtn, listLoadBtn] = makeSaveLoadBtns(
@@ -4602,6 +4717,7 @@
     glyph.className = match ? 'bb-glyph' : 'bb-glyph bb-venue-warn';
     glyph.textContent = match ? ' ✅' : ' ⚠️';
     glyph.style.cursor = 'help';
+    glyph.dataset.msg = msg;
     glyph.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
     glyph.addEventListener('mouseleave', hideTooltip);
     container.appendChild(glyph);
@@ -5086,8 +5202,9 @@
 
     for (const href of retailHrefs) {
       try {
-        const retailDoc = await fetchPage('http://brucebase.wikidot.com' + href);
-        const content   = retailDoc.querySelector('#page-content');
+        const retailDoc   = await fetchPage('http://brucebase.wikidot.com' + href);
+        const retailTitle = retailDoc.querySelector('#page-title')?.textContent.trim() || '';
+        const content     = retailDoc.querySelector('#page-content');
         if (content) {
           const clone = content.cloneNode(true);
 
@@ -5107,32 +5224,60 @@
             footerEl.remove();
           }
 
-          // Flatten each YUI navset into labeled tab panels so tab content is visible.
+          // Strip top-level list-pages-box containers (Wikidot dynamic discography
+          // navigators) — they render as meaningless release icons in this context.
+          clone.querySelectorAll(':scope > .list-pages-box').forEach(el => el.remove());
+
+          // Flatten each YUI navset into labeled collapsible sections. A
+          // DocumentFragment unwraps the content flat — no bb-retail-tabs wrapper
+          // div — so wirePanelCollapsibles can wire each label as a toggle.
           clone.querySelectorAll('.yui-navset').forEach(navset => {
             const labels = [...navset.querySelectorAll('ul.yui-nav li')]
               .map(li => li.querySelector('em')?.textContent.trim() ?? li.textContent.trim());
             const panels = [...(navset.querySelector('div.yui-content')?.children ?? [])];
-            const wrapper = document.createElement('div');
-            wrapper.className = 'bb-retail-tabs';
+            const frag   = document.createDocumentFragment();
             panels.forEach((panel, i) => {
               if (labels[i]) {
                 const lbl = document.createElement('p');
                 lbl.innerHTML = `<strong class="bb-retail-tab-label">${esc(labels[i])}</strong>`;
-                wrapper.appendChild(lbl);
+                frag.appendChild(lbl);
               }
               panel.style.removeProperty('display');
-              wrapper.appendChild(panel.cloneNode(true));
+              frag.appendChild(panel.cloneNode(true));
             });
-            navset.replaceWith(wrapper);
+            navset.replaceWith(frag);
           });
 
-          html += '<hr style="margin:8px 0;">' + clone.innerHTML;
+          const titleHtml = retailTitle
+            ? `<div class="bb-retail-page-title">${esc(retailTitle)}</div>` : '';
+          html += `<hr style="margin:8px 0;">${titleHtml}${clone.innerHTML}`;
         }
       } catch (e) {
         html += `<p style="color:#c00">Failed to fetch ${esc(href)}: ${esc(e.message)}</p>`;
       }
     }
     return { type: 'html', caption: 'Retail', html };
+  }
+
+  /**
+   * Wires each .bb-retail-tab-label <strong> inside panel as a collapse toggle
+   * for the <div> immediately following its <p> parent. All sections start
+   * collapsed; clicking a label expands/collapses its content and toggles the
+   * bb-retail-tab-open class for visual feedback.
+   * @param {HTMLElement} panel  The bb-icon-panel element just inserted into the DOM.
+   */
+  function wirePanelCollapsibles(panel) {
+    panel.querySelectorAll('.bb-retail-tab-label').forEach(strong => {
+      const p = strong.closest('p');
+      const contentDiv = p?.nextElementSibling;
+      if (!contentDiv || contentDiv.tagName !== 'DIV') return;
+      contentDiv.style.display = 'none';
+      strong.addEventListener('click', () => {
+        const open = contentDiv.style.display !== 'none';
+        contentDiv.style.display = open ? 'none' : '';
+        strong.classList.toggle('bb-retail-tab-open', !open);
+      });
+    });
   }
 
   /**
@@ -5193,6 +5338,7 @@
         icon._bbPanel    = buildIconPanel(content);
         icon._bbPanel._bbIcon = icon;
         section.appendChild(icon._bbPanel);
+        wirePanelCollapsibles(icon._bbPanel);
         icon._bbPanel.style.display = '';
       } catch (e) {
         logWarn('  Retail panel build failed:', e.message);
@@ -5350,7 +5496,7 @@
       expected.add(yr);
       if (moNum > 0) expected.add(MONTH_NAMES[moNum - 1]);
       if (ddNum > 0) {
-        expected.add(String(ddNum));
+        expected.add(dd);
         if (moNum > 0) {
           const d = new Date(parseInt(yr, 10), moNum - 1, ddNum);
           if (!isNaN(d.getTime())) expected.add(DAY_NAMES[d.getDay()]);
@@ -5384,9 +5530,18 @@
       }
     }
 
-    // Soundcheck section label in page content.
+    // Soundcheck section: the standard DETAIL page format is a
+    // <p><strong>Soundcheck</strong></p> header (no colon) in the setlist
+    // container. Also accept the older "Soundcheck:" text label as a fallback.
+    const setlistContainer = getSetlistContainer(doc);
     const pageContent = doc.querySelector('#page-content') || doc.body;
-    if (/\bsoundcheck\s*:/i.test(pageContent.textContent)) expected.add('soundcheck');
+    const hasSoundcheckHeader = setlistContainer
+      ? [...setlistContainer.querySelectorAll('p strong')]
+          .some(s => /^soundcheck$/i.test(s.textContent.trim()))
+      : false;
+    if (hasSoundcheckHeader || /\bsoundcheck\s*:/i.test(pageContent.textContent)) {
+      expected.add('soundcheck');
+    }
 
     // Storyteller tab.
     const storytellerTab = getTabEl(doc, tabMap, 'Storyteller');
@@ -5507,6 +5662,58 @@
   }
 
   /**
+   * Extracts the free-text preamble from a fetched page's #page-content —
+   * all direct children before the first .yui-navset, with relative hrefs
+   * absolutised and <script> tags stripped.
+   * @param {Document} doc
+   * @returns {string|null}  HTML string, or null when the preamble is empty.
+   */
+  function extractPageNotes(doc) {
+    const pageContent = doc.querySelector('#page-content');
+    if (!pageContent) return null;
+    const wrapper = document.createElement('div');
+    for (const child of pageContent.children) {
+      if (child.classList.contains('yui-navset')) break;
+      const cl = child.cloneNode(true);
+      cl.querySelectorAll('script').forEach(s => s.remove());
+      wrapper.appendChild(cl);
+    }
+    if (!wrapper.textContent.trim()) return null;
+    return wrapper.innerHTML
+      .replace(/href="\//g, `href="${location.protocol}//${location.host}/`);
+  }
+
+  /**
+   * Builds a "Notes" toggle button that opens a panel with the preamble content
+   * from extractPageNotes. Returns null when the preamble is empty.
+   * @param {Document}    doc      - Parsed page document.
+   * @param {string}      caption  - Panel header (e.g. "Venue: Notes").
+   * @param {string}      btnClass - CSS class for the button.
+   * @param {HTMLElement} section  - .bb-section-processed container (panel host).
+   * @returns {HTMLButtonElement|null}
+   */
+  function buildNotesButton(doc, caption, btnClass, section) {
+    const notesHtml = extractPageNotes(doc);
+    if (!notesHtml) return null;
+    const content = { type: 'html', caption, html: notesHtml };
+    const btn = document.createElement('button');
+    btn.className = btnClass;
+    btn.textContent = 'Notes';
+    btn.title = 'Page introduction — click to expand/collapse';
+    btn.addEventListener('click', () => {
+      if (!btn._bbPanel) {
+        btn._bbPanel = buildIconPanel(content);
+        btn._bbPanel._bbIcon = btn;
+        section.appendChild(btn._bbPanel);
+      }
+      const open = btn._bbPanel.style.display !== 'none';
+      btn._bbPanel.style.display = open ? 'none' : '';
+      btn.classList.toggle('bb-icon-active', !open);
+    });
+    return btn;
+  }
+
+  /**
    * Appends a row of buttons (.bb-venue-tab-row) for the venue page tabs,
    * plus a "Tags" button with consistency checks for the venue page tags.
    * Called after wireIconHandlers so the venue row appears after the event row.
@@ -5520,6 +5727,9 @@
     const row = document.createElement('div');
     row.className = 'bb-venue-tab-row';
     row.appendChild(makeTabRowLabel('Venue:'));
+
+    const venueNotesBtn = buildNotesButton(venueDoc, 'Venue: Notes', 'bb-venue-tab-btn', section);
+    if (venueNotesBtn) row.appendChild(venueNotesBtn);
 
     for (const [label] of venueTabMap) {
       const tab = getTabEl(venueDoc, venueTabMap, label);
@@ -5752,6 +5962,9 @@
     label.title = songName;
     row.appendChild(label);
 
+    const songNotesBtn = buildNotesButton(songDoc, `${songName} — Notes`, 'bb-song-tab-btn', section);
+    if (songNotesBtn) row.appendChild(songNotesBtn);
+
     for (const [tabLabel] of songTabMap) {
       const tab = getTabEl(songDoc, songTabMap, tabLabel);
       if (!tab) continue;
@@ -5841,6 +6054,9 @@
     const row = document.createElement('div');
     row.className = 'bb-relation-tab-row';
     row.appendChild(makeTabRowLabel(relName + ':'));
+
+    const relNotesBtn = buildNotesButton(relDoc, `${relName}: Notes`, 'bb-relation-tab-btn', section);
+    if (relNotesBtn) row.appendChild(relNotesBtn);
 
     for (const [label] of tabMap) {
       const tab = getTabEl(relDoc, tabMap, label);
@@ -6048,7 +6264,7 @@
    * Always expects "retail" + first-letter index tag.
    * When a "Commercially Released: Month DD, YYYY" line is found in a
    * <div class="code"><pre><code>…</code></pre></div> block, also expects
-   * the lowercase month name, the day-of-month (no leading zero), and the year.
+   * the lowercase month name, the zero-padded day-of-month, and the year.
    * @param {string}   retailName - Text from the retail page's #page-title.
    * @param {Document} [doc]      - Defaults to the live document.
    * @returns {Set<string>}
@@ -6066,7 +6282,7 @@
         if (m) {
           const monthIdx = MONTH_NAMES.indexOf(m[1].toLowerCase());
           if (monthIdx !== -1) expected.add(MONTH_NAMES[monthIdx]);
-          expected.add(String(parseInt(m[2], 10)));
+          expected.add(m[2].padStart(2, '0'));
           expected.add(m[3]);
           break;
         }
@@ -6271,7 +6487,7 @@
           : `Tab "${label}" is empty.`;
       const warn = document.createElement('span');
       warn.textContent = ' ⚠️';
-      warn.title = msg;
+      warn.dataset.msg = msg;
       warn.style.cursor = 'help';
       warn.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
       warn.addEventListener('mouseleave', hideTooltip);
@@ -6494,6 +6710,7 @@
     const span = document.createElement('span');
     span.className = match ? 'bb-anchor-match' : 'bb-venue-warn';
     span.textContent = match ? ' ✅' : ' ⚠️';
+    span.dataset.msg = msg;
     span.style.cursor = 'help';
     span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
     span.addEventListener('mouseleave', hideTooltip);
@@ -6581,6 +6798,139 @@
       </table>`;
     positionTooltip(tip, evt);
     tip.style.display = 'block';
+  }
+
+  /**
+   * Returns all warning messages found within a single .bb-section-processed div,
+   * in DOM order, deduplicated. Covers anchor, venue, para, icon-sorry, and
+   * synthetic setlist-diff messages.
+   * @param {HTMLElement} processedDiv
+   * @returns {string[]}
+   */
+  function collectSectionWarnings(processedDiv) {
+    const seen = new Set();
+    const msgs = [];
+    const add = msg => {
+      const t = (msg || '').trim();
+      if (t && !seen.has(t)) { seen.add(t); msgs.push(t); }
+    };
+    processedDiv.querySelectorAll('.bb-anchor-warn, .bb-venue-warn, .bb-para-warn').forEach(el =>
+      add(el.dataset.msg || el.title)
+    );
+    processedDiv.querySelectorAll('.bb-glyph.bb-icon-sorry[data-msg]').forEach(el =>
+      add(el.dataset.msg)
+    );
+    if (processedDiv.querySelector('.bb-song-year-only'))   add('Year page song(s) not found in DETAIL setlist');
+    if (processedDiv.querySelector('.bb-song-detail-only')) add('DETAIL page song(s) not found in YEAR setlist');
+    if (processedDiv.querySelector('.bb-song-char-diff'))   add('Song name character differences between YEAR and DETAIL page');
+    return msgs;
+  }
+
+  /**
+   * Appends a ⚠️ glyph to the event title line inside a .bb-section-processed div
+   * when any warning elements exist within it. Inserted after the last of the
+   * bb-glyph / bb-event-type / bb-event-alias siblings that immediately follow
+   * the event link element. Hovering shows a rich tooltip listing all issues.
+   * No-op when there are no warnings.
+   * @param {HTMLElement} element      The event <a> link element on the YEAR page
+   * @param {HTMLElement} processedDiv The .bb-section-processed container
+   */
+  function annotateEventTitleWithWarnings(element, processedDiv) {
+    const msgs = collectSectionWarnings(processedDiv);
+    if (msgs.length === 0) return;
+
+    // Walk forward from element to find the last glyph/type/alias sibling.
+    let insertAfter = element;
+    let sib = element.nextSibling;
+    while (sib) {
+      if (sib.nodeType === Node.ELEMENT_NODE &&
+          (sib.classList.contains('bb-event-type') ||
+           sib.classList.contains('bb-glyph') ||
+           sib.classList.contains('bb-event-alias'))) {
+        insertAfter = sib;
+      } else {
+        break;
+      }
+      sib = sib.nextSibling;
+    }
+
+    const n = msgs.length;
+    const listItems = msgs.map(m => `<li>${esc(m).replace(/\n/g, '<br>')}</li>`).join('');
+    const tipHtml =
+      `<div style="max-width:460px">` +
+      `<strong>⚠️ ${n} issue${n > 1 ? 's' : ''} found for this event:</strong>` +
+      `<ol style="margin:6px 0 0;padding-left:18px;white-space:normal;">${listItems}</ol>` +
+      `</div>`;
+
+    const warn = document.createElement('span');
+    warn.className = 'bb-event-title-warn';
+    warn.textContent = ' ⚠️';
+    warn.style.cursor = 'help';
+    warn.addEventListener('mouseenter', e => {
+      const tip = document.getElementById('bb-tooltip');
+      if (!tip) return;
+      tip.innerHTML = tipHtml;
+      positionTooltip(tip, e);
+      tip.style.display = 'block';
+    });
+    warn.addEventListener('mouseleave', hideTooltip);
+    insertAfter.after(warn);
+  }
+
+  /**
+   * Returns all warning messages found in the live page DOM, in document order,
+   * deduplicated. Covers tag, anchor, venue, para, and empty-tab warnings.
+   * @returns {string[]}
+   */
+  function collectPageWarnings() {
+    const seen = new Set();
+    const msgs = [];
+    const add = msg => {
+      const t = (msg || '').trim();
+      if (t && !seen.has(t)) { seen.add(t); msgs.push(t); }
+    };
+    document.querySelectorAll(
+      '.bb-tag-missing, .bb-tag-spurious, .bb-anchor-warn, .bb-venue-warn, .bb-para-warn'
+    ).forEach(el => add(el.dataset.msg || el.title));
+    // Empty-tab warning spans injected by annotateEmptyRelationTabs
+    document.querySelectorAll('.yui-nav em span[data-msg]').forEach(el => add(el.dataset.msg));
+    return msgs;
+  }
+
+  /**
+   * Appends a ⚠️ warning glyph to #page-title when any warning elements exist on
+   * the page. Hovering over the glyph shows a rich HTML tooltip listing every
+   * problem in document order, so issues at the bottom of a long page are always
+   * visible without scrolling.
+   * No-op when there are no warnings.
+   */
+  function annotatePageTitleWithWarnings() {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+    const msgs = collectPageWarnings();
+    if (msgs.length === 0) return;
+    const n = msgs.length;
+    const listItems = msgs
+      .map(m => `<li>${esc(m).replace(/\n/g, '<br>')}</li>`)
+      .join('');
+    const tipHtml =
+      `<div style="max-width:460px">` +
+      `<strong>⚠️ ${n} issue${n > 1 ? 's' : ''} found on this page:</strong>` +
+      `<ol style="margin:6px 0 0;padding-left:18px;white-space:normal;">${listItems}</ol>` +
+      `</div>`;
+    const warn = document.createElement('span');
+    warn.className = 'bb-page-title-warn';
+    warn.textContent = ' ⚠️';
+    warn.style.cursor = 'help';
+    warn.addEventListener('mouseenter', e => {
+      const tip = document.getElementById('bb-tooltip');
+      if (!tip) return;
+      tip.innerHTML = tipHtml;
+      positionTooltip(tip, e);
+      tip.style.display = 'block';
+    });
+    warn.addEventListener('mouseleave', hideTooltip);
+    pageTitle.appendChild(warn);
   }
 
   function showSongTooltip(evt, el) {
@@ -6704,6 +7054,7 @@
       .bb-event-type-detail { font-size: 0.6em; font-weight: normal; color: #666; font-style: italic; vertical-align: middle; }
       .bb-event-alias       { font-style: italic; font-weight: bold; color: #555; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }
+      .bb-event-title-warn { cursor: help; font-style: normal; margin-left: 2px; }
       .bb-scheduled { font-size: 0.9em; font-family: monospace; color: #555; margin: 1px 0 3px; }
       .bb-event-heading { background: #f0f0f0; border-radius: 2px; padding: 1px 4px; }
       .bb-event-collapse-toggle { display: inline-block; cursor: pointer; user-select: none; padding: 0 10px 0 6px; color: #999; font-size: 0.9em; font-style: normal; }
@@ -6867,8 +7218,10 @@
       .bb-event-tab-btn:hover, .bb-venue-tab-btn:hover { background: #d4d4d4; }
       .bb-event-tab-btn.bb-icon-active, .bb-venue-tab-btn.bb-icon-active { background: #4a90d9; color: #fff; border-color: #357abd; }
       .bb-tab-row-label { min-width: 3.5em; flex-shrink: 0; font-size: 0.78em; color: #888; font-style: italic; }
-      .bb-retail-tabs { margin: 6px 0; }
-      .bb-retail-tab-label { font-size: 0.82em; color: #555; display: block; margin: 8px 0 2px; }
+      .bb-retail-page-title { font-weight: bold; font-size: 0.95em; color: #333; border-bottom: 1px solid #ccc; margin: 6px 0 4px; padding: 2px 0; }
+      .bb-retail-tab-label { font-size: 0.82em; color: #444; display: block; margin: 6px 0 0; padding: 3px 8px; background: #e8e8e8; border-radius: 2px; cursor: pointer; user-select: none; }
+      .bb-retail-tab-label:hover { background: #dce8ff; }
+      .bb-retail-tab-open { background: #c8daf0 !important; }
       .bb-cache-retry { font-size: 0.9em; padding: 1px 5px; opacity: 0.75; }
       .bb-cache-retry:hover { opacity: 1; }
 

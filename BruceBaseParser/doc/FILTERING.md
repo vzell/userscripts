@@ -95,25 +95,25 @@ loops in highlighting). It returns `null` for empty query or invalid regex.
 
 ---
 
-## Composability with the Mismatch Filter
+## Composability with the Issues Filter
 
-Each page maintains a plain `filterState` object shared between the mismatch toggle and the text
+Each page maintains a plain `filterState` object shared between the issues toggle and the text
 filter bar:
 
 ```js
 const filterState = {
-    mismatchActive: false,  // controlled by mismatch button
+    mismatchActive: false,  // controlled by issues button (⚡ Issues)
     textMatcher:    null,   // compiled by buildFilterMatcher(); null = inactive
     filterQuery:    '',     // raw string used by highlightEventName / highlightSectionContent
     filterOptions:  { caseSensitive, useRegex, exclude, fullText },
 };
 ```
 
-Both the mismatch button and the filter bar's `onChange` update `filterState` and then call the
+Both the issues button and the filter bar's `onChange` update `filterState` and then call the
 same `applyFn` closure, which performs a **single DOM pass** checking all conditions per event:
 
 ```
-Mismatch button click  →  filterState.mismatchActive = …  →  applyFn()
+Issues button click     →  filterState.mismatchActive = …  →  applyFn()
 Filter bar onChange    →  filterState.textMatcher = …     →  applyFn()
 ```
 

@@ -2040,7 +2040,7 @@ a paragraph which has a retail reference '"<a href="/retail:"' in it, e.g.
 
 2.)
 
-show the corresponding paragraph plus the content from the RETAIL page except th thwo containers '<ul class="yui-nav">' and '<div class="yui-content">' like the other clickable icons do
+show the corresponding paragraph plus the content from the RETAIL page except the thwo containers '<ul class="yui-nav">' and '<div class="yui-content">' like the other clickable icons do
 
 3.)
 
@@ -2256,7 +2256,106 @@ also on the SONG and RELATION pages
 
 adjust the relevant @doc files, commit and push
 
-** TODO collapse section from tabs and remove retail banner icons
+** DONE collapse section from tabs and remove retail banner icons
+
+Load and parse the following RETAIL page http://brucebase.wikidot.com/retail:magic-tour-highlights and read @debug/RETAIL.html what gets
+currently rendered from that page on an event in a YEAR page e.g. http://brucebase.wikidot.com/2008#200308 when clicking on the "Retail" icon
+
+#+begin_example
+<img src="http://brucebase.wdfiles.com/local--files/content:files/00Retail-32.png" title="Retail — click to expand" alt="00Retail-32.png" class="image bb-icon-active" style="cursor: pointer;">
+#+end_example
+
+Implement the following:
+
+1.) remove the container 
+
+#+begin_example
+<div class="bb-retail-tabs">
+#+end_example
+
+from the rendered content when the "Retail" icon is clicked
+but instead render the "page-title" line from the RETAIL page in its place
+
+#+begin_example
+<div id="page-title">Magic Tour Highlights [EP]</div>
+#+end_example
+
+2.)
+
+After the h1 header
+
+#+begin_example
+<h1 id="toc2"><span>Additional Information</span></h1>
+#+end_example
+
+initially make all the "<strong>" lines e.g 
+
+#+begin_example
+<p><strong class="bb-retail-tab-label">Audio - Magic Tour Highlights</strong></p>
+#+end_example
+
+collapsable (also render them with a grey backgound). The "<div>" container after each "<strong>" should be rendered
+collapsed. That information is actually coming from a RETAIL tab with it's content-
+
+When the user clicks the "<strong>" container it should uncollapse, and with the next click collapse again, and so on
+
+** DONE act on the @debug/retail.todo
+
+act on the @debug/retail.todo
+
+** DONE bug
+
+Actually completely remove/hide the '<div class="list-pages-box">' container right after the '<div class="bb-retail-page-title">' container 
+it only shows meaningless release icons in this context
+
+** DONE add the free text form venue, SONG, and Artist as a special "Notes" button
+
+For VENUE, SONG and RELATION pages
+add the free text starting after the
+
+#+begin_example
+<div id="page-content">
+#+end_example
+
+container, up to but NOT including the 'class="yui-navset' container
+
+#+begin_example
+<div id="wiki-tabview-f0b354ec46953c72e62980178f95158e" class="yui-navset yui-navset-top">
+#+end_example
+
+as a special "Notes" button and panel when clicked in the corresponding containers
+
+#+begin_example
+VENUE - <div class="bb-venue-tab-row">
+SONG - <div class="bb-song-tab-row">
+RELATION - <div class="bb-relation-tab-row">
+#+end_example
+
+on each event on the YEAR pages
+
+** DONE on relation pages, the native tooltip should be removed, when there is a rich HTML version available
+
+on RELATION pages, the native warning tooltip should be removed, when there is a rich HTML version available, eg. on
+http://brucebase.wikidot.com/relation:bruce-springsteen on the "Documents" tab
+
+** DONE event detail button on YEAR page to fetch ALL songs, ALL relations to present in button rows
+
+On YEAR pages for each event add two new buttons "Fetch Songs" and "Fetch Relations" in the '<div class="bb-section-controls">' container.
+
+1.)
+
+When clicked, the "Fetch Songs" button should emulate a click on each hyperlinked 'class="bb-song-num"' integer e.g.
+
+#+begin_example
+<a href="/song:land-of-hope-and-dreams" class="bb-song-num" data-sn="LAND OF HOPE AND DREAMS">1.</a>
+#+end_example
+
+inside the event specific processed container to render all SONG buttons 
+
+2.)
+
+When clicked, the "Fetch Relations" button should emulate a click on each "•" and "◦" (when present) inside the event specific processed container to render all RELATION buttons
+
 ** DONE empty "News" panel on
 
 1.)
@@ -2704,17 +2803,17 @@ relation list entries in list view currently render like this
 
 There shouldn't be any ordered list here and the "bb-rel-member" should be rendered indented
 
-** TODO fixes
-
-7.)
+** TODO indexedDB
 
 add VENUE, RELATION caching in indexedDB
 
-13.)
+** DONE Tags missing: "6" => "06"
 
-http://brucebase.wikidot.com/nogig:2026-06-06-center-for-american-music-west-long-branch
+On e.g. http://brucebase.wikidot.com/nogig:2026-06-06-center-for-american-music-west-long-branch
+the tags are rendered like @debug/day.tag
 
-Tags missing: "6" => "06"
+The tooltip says '"6" expected based on event data but not present', but it should actually say "06" instead of just "6"
+The check rule should be, if the parsed integer day (prefixe with a "0" for day 1 to 9) from the date event is not present or wrong, display it in a tooltip
 
 ** DONE act
 
@@ -2795,10 +2894,6 @@ before the next
 Relations:
 #+end_example
 
-** TODO spacing
-
-on e.g. http://brucebase.wikidot.com/2026#300126 there should be a little more space between relation block and show
-
 ** DONE bug
 
 On http://brucebase.wikidot.com/1965 I get the following console output
@@ -2841,14 +2936,19 @@ and trying to switch to "List View" mode currently the relations are not rendere
 for recording sessions e.g. at http://brucebase.wikidot.com/1987#000287a @debug/recording-session.html
 render the relations also inside a "blockquote" container
 
-** honour empty line between relation and guest artists - 
-** compare song title - adjust for ", The" in http://brucebase.wikidot.com/relation:the-e-street-band
+** TODO honour empty line between relation and guest artists - 
+** TODO spacing
+
+on e.g. http://brucebase.wikidot.com/2026#300126 there should be a little more space between relation block and show
+
+** TODO compare song title - adjust for ", The" in http://brucebase.wikidot.com/relation:the-e-street-band
 
 E Street Band, The
 
-** TODO soundcheck tag flagged although soundcheck present in event lists
+** DONE soundcheck tag flagged although soundcheck present in event lists
 
-http://brucebase.wikidot.com/1999#190599
+On http://brucebase.wikidot.com/1999#19059
+"soundcheck" tag is flagged although "Soundcheck:" is present in event lists @debug/soundcheck.debug
 
 ** DONE images on DETAIL pages with "Pass" in their name should be shown when the "Ticket" icon is clicked
 
@@ -2883,11 +2983,94 @@ shown when the "Ticket" icon on the YEAR page is clicked
 
 the "News" icon for the bug 1.) in the last session is still NOT greyed out
 
-** TODO flag each "PAGE-TYPE" title line with a warning symbol and tooltip as long as there are some title mismatches/warning icons on other parts of the page
+** DONE flag each "PAGE-TYPE" title line with a warning symbol and tooltip as long as there are some title mismatches/warning icons on other parts of the page
+
+For EVENT DETAIL, VENUE, SONG and RELATION pages
+flag each "page-title" line, e.g
 
 #+begin_example
 <div id="page-title">Springsteen, Bruce</div>
 #+end_example
+
+with a warning symbol at the and a comprehensive tooltip as long as there are title mismatches/warning icons on other parts of the page
+
+The rich HTML tooltip should tell all mismatches/problems on the page in order, even if not yet in focus, for example
+for long pages where problems specifically in tag values at the bottom of the page are not directly visible without first
+scrolling
+
+** TODO "Pass" images on DETAIL page at http://brucebase.wikidot.com/nogig:2026-06-06-center-for-american-music-west-long-branch
+
+but not shown on YEAR page "Memorabilia" Icon greyed out
+
+** DONE add a new toggle button "Hide Buttons"/"Show Buttons"
+
+On YEAR pages for each event add a new toggle button "Hide Buttons"/"Show Buttons" in the '<div class="bb-section-controls">' container after the toggle button "Hide Relations"/"Show Relations"
+When clicked, all the following container should either hide or show
+
+#+begin_example
+EVENT - <div class="bb-event-tab-row">
+VENUE - <div class="bb-venue-tab-row">
+SONG - <div class="bb-song-tab-row">
+RELATION - <div class="bb-relation-tab-row">
+#+end_example
+
+** DONE do not create hyperlink glyphs or add artificial song numbers to songs only on DETAIL pages on the YEAR page setlists per evetn
+
+1.)
+
+read @debug/year-detail.debug
+
+On the YEAR pages e.g. http://brucebase.wikidot.com/1972#260272, the song entries which are marked to exist ONLY on
+DETAIL pages should get the "•" symbol rendered (still being hyperlinked with the click handler to render the button row
+for the specific song) instead of having an artificial integer index in front of the song name
+
+2.)
+
+On the DEATIL page, e.g http://brucebase.wikidot.com/gig:1972-02-26-back-door-richmond-va @debug/DETAIL-setlist.debug
+songs which are marked as existing ONLY on YEAR pages right now still get an invisible integer song count number, so
+songs after these kind of songs are marked with the wrong integer song number.
+
+** DONE bug
+
+@debug/setlist-detail.debug
+On the DETAIL page e.g.http://brucebase.wikidot.com/gig:1972-02-26-back-door-richmond-va
+
+songs which are marked as YEAR only still have the "<li>" container and count as belonging to the real setlist
+
+#+begin_example
+<li class="bb-song-year-only" data-year-song="ALL I WANT TO DO IS DANCE #2">ALL I WANT TO DO IS DANCE #2</li>
+#+end_example
+
+** DONE event-detail page still missing the title warning symbol
+
+The fix we implemented in version "2.37" doesn't work on the EVENT DETAIL page e.g. http://brucebase.wikidot.com/gig:1972-02-26-back-door-richmond-va
+This page has a problem detected in the "Setlist" tab but the '<div id="page-title">' doesn't show any warning icon 
+
+** DONE same treatment
+
+On YEAR pages each '<div class="bb-section-processed">' for each event, the event title line should get the same treatment.
+
+A warning symbol with a comprehensive tooltip should be rendered after the '<span class="bb-glyph">' as long as there
+are any problems detected for that specific event. THe same what we implemented for other PAGE-TYPES
+
+** DONE fix "Mismatches" button name and tooltip
+
+Now rename the "Mismatches" button on the top of each YEAR page to "Issues" and fix the tooltip
+
+** DONE apply
+
+apply the "DETAIL page setlist:" fix from version "2.40" also to the YEAR page list and don't consume a counter slot for songs marked ONLY on DETAIL pages 
+
+** DONE bug
+
+On YEAR pages in the flat view songlist songs which are marked DETAIL page only still internally count as belonging to the actual songlist
+@debug/flat-view.debug
+
+"MAGIC KIND OF LOVING" should get the song number "9" instead of "11"
+
+** adjust the @doc files with what is new/has changed, commit and push
+** DONE mark event titles with a yellow OK check mark when differing only in Earl/Late etc
+** DONE Mark venue name with middle name with a yellow OK check mark when differing only middle name
 
 
 * question
@@ -3091,3 +3274,24 @@ http://brucebase.wikidot.com/gig:2008-03-03-copps-coliseum-hamilton-on
 This looks kind of inconsisten to me. What are/should the actual conventions be here.
 
 Btw I'm working on an interactive browser userscript version of my BruceBase parser script which I will release shortly.
+
+Files:
+yyyymmdd_Article_#, yyyymmdd_News_#, yyyymmdd_Ticket_#, and yyyymmdd_Setlist_#
+
+Should probably read:
+
+"News" icon present on the YEAR page:
+yyyymmdd_Article_#, yyyymmdd_News_#  present under the "News/Memorabilia" tab on the DETAIL page
+
+
+"Ticket" icon present on the YEAR page:
+yyyymmdd_Ticket_#, yyyymmdd_Pass_#    present under the "News/Memorabilia" tab on the DETAIL page
+
+
+"Setlist" icon present on the YEAR page:
+yyyymmdd_Setlist_#     present under the "News/Memorabilia" tab on the DETAIL page
+
+
+Is this the right mapping ? Are there any others ?
+
+

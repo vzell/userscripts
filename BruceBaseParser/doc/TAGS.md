@@ -34,7 +34,7 @@ Tag consistency checks run in four contexts:
 |---|---|
 | `YYYY` (year) | From event date |
 | Month name | From event date (0-indexed into `MONTH_NAMES`) |
-| Day number (stripped) | `parseInt(dd, 10)` — `"07"` → stored as `"7"`; `isTagPresent` accepts both forms |
+| Day number | Zero-padded two-digit string from event date (e.g. `"07"`); `isTagPresent` also accepts the unpadded form `"7"` |
 | Weekday name | `new Date(yr, mo-1, dd).getDay()`; skipped when day = 0 (unknown) |
 | Event type | `eventType.toLowerCase()` |
 | `bootleg` | Recording tab has non-Sorry content AND is not purely a LiveDL (i.e. `!isLiveDLSplit(recTab)` OR `recTab.querySelector('hr')` exists) |
@@ -45,7 +45,7 @@ Tag consistency checks run in four contexts:
 | `setlist` | News/Memorabilia tab has `<img>` with `"setlist"` in `src`, excl. `"ticket"` |
 | `handwritten` | Setlist images with `"handwritten"` in `src` |
 | `printed` | Setlist images with `"printed"` in `src` |
-| `soundcheck` | `#page-content` text matches `/\bsoundcheck\s*:/i` |
+| `soundcheck` | `<p><strong>Soundcheck</strong></p>` header found in the setlist container, OR `#page-content` text matches `/\bsoundcheck\s*:/i` |
 | `storyteller` | Storyteller tab has non-Sorry content |
 
 `getNewsMemTab(doc, tabMap)` tries both `"News/Memorabilia"` and `"News"` tab
