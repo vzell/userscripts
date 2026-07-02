@@ -1,5 +1,55 @@
 [
     {
+        "version": "2.67",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "computeExpectedTags now always expects the 2-digit day tag (e.g. \"00\") even when the event day is unknown (\"00\"), not just for real days 1-31 — previously the \"day is 00\" case added no day tag at all. isManagedTag widened to accept \"00\" as a managed day-of-month tag (parseInt range now 0-31, was 1-31) so it gets the same green/spurious coloring as any other day tag.",
+                    "New extractEventDaySuffix(hrefOrPath) helper parses the single-letter day-suffix (a/b/c/…) that BruceBase appends to the URL slug's day part to distinguish multiple same-day events, e.g. \"b\" from \"rehearsal:1976-12-00b-telegraph-hill-studio-holmdel-nj\". computeExpectedTags takes a new optional daySuffix parameter and, when set, always expects it as its own tag. Wired into addTagsButton (via the YEAR page event link's href) and annotateDetailPageTags (via the live page's own path). isManagedTag widened to accept any single lowercase letter (mirroring isManagedRetailTag's identical existing rule) so day-suffix tags get the same green/spurious/missing treatment as other date tags; spuriousTagMsg/passingTagMsg given a dedicated day-suffix tooltip case."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.66",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "ALIAS_SUBSTRING_TAGS (see 2.65's alias-substring tag check) is now keyed by tag -> one-or-more alias substrings, instead of a flat tag list matched against its own name, so a tag can be verified by wording that differs from the tag itself: added \"private\" (verified by either \"private\" or \"closed\" in the event alias, e.g. \"Closed Rehearsal\"). checkAliasSubstringTags updated accordingly; still fully generic across all event types and tabs, and never flags a missing tag."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.65",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "checkOnStageRelationTags now also runs for \"nogig\" DETAIL pages that have an \"On Audio\" tab (same relation-name/tag matching rules as \"On Stage\"/\"In Studio\"), via RELATION_TAB_CONFIGS['On Audio'] with fixedTag: null (no tag is always-expected just because the tab exists, unlike \"onstage\"/\"studio\").",
+                    "New generic alias-substring tag check (ALIAS_SUBSTRING_TAGS = ['award', 'grammy'], checkAliasSubstringTags): a tag in that list is rendered green with a \"verified\" tooltip whenever it's both present on a DETAIL page AND a case-insensitive substring of the event alias (extractEventAlias's <strong> header before the relation list, e.g. \"grammy\"/\"award\" matched by \"68th Annual Grammy Awards Ceremony\"). Not tied to any event type or tab; absence is never flagged as missing. Wired into both annotateDetailPageTags (DETAIL page) and addTagsButton (YEAR page's nested Tags button)."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.64",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "checkOnStageRelationTags now also runs for \"recording\" DETAIL pages that have an \"In Studio\" tab (same relation-name/tag matching rules as the \"On Stage\" tab), and expects the tag \"studio\" to always be present whenever that tab exists — analogous to \"onstage\" always being expected for the \"On Stage\" tab. Generalized via a new RELATION_TAB_CONFIGS map ('On Stage' -> 'onstage', 'In Studio' -> 'studio') and a relationMethodLabel(method, tabLabel) helper replacing the old ON_STAGE_RELATION_METHOD_LABEL constant."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.63",
         "date": "2026-07-02",
         "sections": [

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.63
+// @version      2.67
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -184,38 +184,78 @@
   };
 
   /**
-   * User-editable relation name -> tag overrides for the "On Stage" tab
-   * relation tag check (see checkOnStageRelationTags). Add an entry only
-   * when neither the exact match, the "The "-stripped, the suffix-stripped
-   * (Jr./Sr./II/III/IV), nor the nickname-stripped (quoted substring removed)
-   * form matches BruceBase's real tag — e.g. a plain typo/irregularity in
-   * the real tag itself, like "jake.clemons" (with a stray period) instead
-   * of the expected "jakeclemons". Keyed by the lowercase, trimmed relation
-   * name (as it appears in extractOnStageRelationNames's output).
+   * User-editable relation name -> tag overrides for the "On Stage"/"In
+   * Studio" tab relation tag check (see checkOnStageRelationTags). Add an
+   * entry only when neither the exact match, the "The "-stripped, the
+   * suffix-stripped (Jr./Sr./II/III/IV), nor the nickname-stripped (quoted
+   * substring removed) form matches BruceBase's real tag — e.g. a plain
+   * typo/irregularity in the real tag itself, like "jake.clemons" (with a
+   * stray period) instead of the expected "jakeclemons". Keyed by the
+   * lowercase, trimmed relation name (as it appears in
+   * extractOnStageRelationNames's output).
    */
   const RELATION_TAG_ALIAS_OVERRIDES = {
     'jake clemons': 'jake.clemons',
   };
 
   /**
-   * Human-readable explanation per checkOnStageRelationTags `method`, for
-   * tag tooltips. Must be declared here (top-level, before the boot dispatch
-   * below awaits into run*Page()) rather than near checkOnStageRelationTags
-   * itself — `const` bindings are not hoisted with a value like `function`
-   * declarations are, so a `const` placed later in the file would still be
-   * in its temporal dead zone the first time a run*Page() function (already
-   * running via the dispatch below) tries to read it.
+   * Relation-listing tab label -> config for checkOnStageRelationTags. A
+   * page has at most one of these tabs (it's always tab index 0 — see
+   * extractRelations). `fixedTag`, when set, is a tag that's always
+   * expected whenever that tab is present, independent of any relation
+   * name listed there (e.g. "onstage" for gig/rehearsal's "On Stage" tab,
+   * "studio" for recording's "In Studio" tab). `fixedTag: null` means the
+   * tab only drives the per-relation-name checks, with no such fixed tag
+   * (e.g. nogig's "On Audio" tab).
    */
-  const ON_STAGE_RELATION_METHOD_LABEL = {
-    fixed: 'always expected because this page has an "On Stage" tab',
-    guest: 'always expected because Bruce Springsteen is listed under the "On Stage" tab marked "(Guest)"',
-    exact: 'matches a relation listed under the "On Stage" tab (lowercase, whitespace/punctuation stripped)',
-    'the-stripped': 'matches a relation listed under the "On Stage" tab (leading "The " stripped, lowercase, whitespace/punctuation stripped)',
-    'suffix-stripped': 'matches a relation listed under the "On Stage" tab (trailing Jr./Sr./II/III/IV stripped, lowercase, whitespace/punctuation stripped)',
-    'nickname-stripped': 'matches a relation listed under the "On Stage" tab (quoted nickname removed, lowercase, whitespace/punctuation stripped)',
-    override: 'matches a manual override for a relation listed under the "On Stage" tab (RELATION_TAG_ALIAS_OVERRIDES)',
-    'ampersand-combined': 'matches a relation listed under the "On Stage" tab (combined name with "&" removed, lowercase, whitespace/punctuation stripped)',
+  const RELATION_TAB_CONFIGS = {
+    'On Stage': { fixedTag: 'onstage' },
+    'In Studio': { fixedTag: 'studio' },
+    'On Audio': { fixedTag: null },
   };
+
+  /**
+   * Generic tags whose presence is verified against the event alias (the
+   * `<strong>` header before a DETAIL page's relation list — see
+   * extractEventAlias / makeAliasSpan's ".bb-event-alias") rather than any
+   * per-event-type rule. Not tied to any specific event type or tab: a tag
+   * is "verified" (rendered green) whenever it's both present on the page
+   * AND at least one of its configured substrings occurs case-insensitively
+   * in the alias, e.g. tag "grammy" (substring "grammy") matches alias
+   * "68th Annual Grammy Awards Ceremony", or tag "private" (substrings
+   * "private"/"closed") matches alias "Closed Rehearsal". A substring list
+   * need not equal the tag itself — "private" is verified by either of two
+   * different words that both imply a non-public event. Absence is not
+   * flagged as missing — this only upgrades an already-present tag to
+   * "verified", it never requires the tag to exist.
+   */
+  const ALIAS_SUBSTRING_TAGS = {
+    award: ['award'],
+    grammy: ['grammy'],
+    private: ['private', 'closed'],
+  };
+
+  /**
+   * Human-readable explanation per checkOnStageRelationTags `method`, for
+   * tag tooltips. `tabLabel` is the relation tab that produced the match
+   * (e.g. "On Stage" or "In Studio" — see RELATION_TAB_CONFIGS).
+   * @param {string} method
+   * @param {string} tabLabel
+   * @returns {string}
+   */
+  function relationMethodLabel(method, tabLabel) {
+    const labels = {
+      fixed: `always expected because this page has a "${tabLabel}" tab`,
+      guest: `always expected because Bruce Springsteen is listed under the "${tabLabel}" tab marked "(Guest)"`,
+      exact: `matches a relation listed under the "${tabLabel}" tab (lowercase, whitespace/punctuation stripped)`,
+      'the-stripped': `matches a relation listed under the "${tabLabel}" tab (leading "The " stripped, lowercase, whitespace/punctuation stripped)`,
+      'suffix-stripped': `matches a relation listed under the "${tabLabel}" tab (trailing Jr./Sr./II/III/IV stripped, lowercase, whitespace/punctuation stripped)`,
+      'nickname-stripped': `matches a relation listed under the "${tabLabel}" tab (quoted nickname removed, lowercase, whitespace/punctuation stripped)`,
+      override: `matches a manual override for a relation listed under the "${tabLabel}" tab (RELATION_TAG_ALIAS_OVERRIDES)`,
+      'ampersand-combined': `matches a relation listed under the "${tabLabel}" tab (combined name with "&" removed, lowercase, whitespace/punctuation stripped)`,
+    };
+    return labels[method];
+  }
 
   /** SmartTable column definitions for YEAR OVERVIEW (list) pages. */
   const LIST_SMARTTABLE_COLUMNS = [
@@ -4579,6 +4619,33 @@
     return span;
   }
 
+  /**
+   * Checks ALIAS_SUBSTRING_TAGS against the event alias (see
+   * extractEventAlias). A tag is "verified" only when it's both present on
+   * the page AND at least one of its configured substrings occurs
+   * case-insensitively in `alias` — e.g. tag "grammy" verified by alias
+   * "68th Annual Grammy Awards Ceremony" (substring "grammy"), or tag
+   * "private" verified by alias "Closed Rehearsal" (substring "closed").
+   * Tags that don't match are simply omitted (never reported as missing —
+   * see ALIAS_SUBSTRING_TAGS doc).
+   * @param {string|null} alias
+   * @param {Set<string>} actualTags
+   * @returns {{tag: string, label: string}[]}
+   */
+  function checkAliasSubstringTags(alias, actualTags) {
+    if (!alias) return [];
+    const aliasLower = alias.toLowerCase();
+    const results = [];
+    for (const [tag, substrings] of Object.entries(ALIAS_SUBSTRING_TAGS)) {
+      if (!isTagPresent(tag, actualTags)) continue;
+      const matched = substrings.find(s => aliasLower.includes(s));
+      if (matched) {
+        results.push({ tag, label: `matches event alias "${alias}" (contains "${matched}", case-insensitive)` });
+      }
+    }
+    return results;
+  }
+
   // ── Relation participant extraction and rendering ──────────────────────────
 
   /**
@@ -4750,9 +4817,12 @@
   }
 
   /**
-   * Checks that a DETAIL page's "On Stage" tab relation names each have a
-   * corresponding tag. `"onstage"` is always expected, independent of any
-   * relation name. If Bruce Springsteen himself is listed there marked
+   * Checks that a DETAIL page's "On Stage" (gig/rehearsal), "In Studio"
+   * (recording), or "On Audio" (nogig) tab relation names each have a
+   * corresponding tag. When the matched tab has a `fixedTag` configured
+   * (see RELATION_TAB_CONFIGS — `"onstage"` for "On Stage", `"studio"` for
+   * "In Studio", none for "On Audio"), that tag is always expected,
+   * independent of any relation name. If Bruce Springsteen himself is listed there marked
    * `"(Guest)"` (see `isRelationMarkedGuest`), `"guest"` is also expected.
    * Every other relation name is checked via `checkSingleRelationName` —
    * except a name containing `" & "` (e.g. `"Joe Grushecky & The
@@ -4762,46 +4832,53 @@
    * rule); only when *both* halves fail to match does it fall back to the
    * combined name with `" & "` removed and a leading `"The "` stripped,
    * e.g. `"Hall & Oates"` -> `halloates`.
-   * Returns `[]` when the page has no "On Stage" tab at all.
+   * Returns `[]` when the page has none of RELATION_TAB_CONFIGS's tabs.
    * @param {Document}            doc
    * @param {Map<string, number>} tabMap
    * @param {Set<string>}         actualTags
-   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null}[]}
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null, tabLabel: string}[]}
    */
   function checkOnStageRelationTags(doc, tabMap, actualTags) {
-    if (!tabMap.has('On Stage')) return [];
-    const items = [{
-      label: 'Tab: On Stage',
-      candidateTag: 'onstage',
-      matchedTag: isTagPresent('onstage', actualTags) ? 'onstage' : null,
-      method: 'fixed',
-    }];
+    const tabEntry = Object.entries(RELATION_TAB_CONFIGS).find(([label]) => tabMap.has(label));
+    if (!tabEntry) return [];
+    const [tabLabel, config] = tabEntry;
+    const items = [];
+    if (config.fixedTag) {
+      items.push({
+        label: `Tab: ${tabLabel}`,
+        candidateTag: config.fixedTag,
+        matchedTag: isTagPresent(config.fixedTag, actualTags) ? config.fixedTag : null,
+        method: 'fixed',
+        tabLabel,
+      });
+    }
     if (isRelationMarkedGuest(doc, 'Bruce Springsteen')) {
       items.push({
         label: 'Relation: Bruce Springsteen (Guest)',
         candidateTag: 'guest',
         matchedTag: isTagPresent('guest', actualTags) ? 'guest' : null,
         method: 'guest',
+        tabLabel,
       });
     }
     for (const name of extractOnStageRelationNames(doc)) {
       const ampM = name.match(/^(.+?)\s*&\s*(.+)$/);
       if (ampM) {
-        const partA = checkSingleRelationName(ampM[1].trim(), actualTags);
-        const partB = checkSingleRelationName(ampM[2].trim(), actualTags);
+        const partA = { ...checkSingleRelationName(ampM[1].trim(), actualTags), tabLabel };
+        const partB = { ...checkSingleRelationName(ampM[2].trim(), actualTags), tabLabel };
         if (partA.matchedTag && partB.matchedTag) {
           items.push(partA, partB);
           continue;
         }
         const combinedTag = relationTagSlug(name.replace(/^the\s+/i, '').replace(/\s*&\s*/g, ''));
         if (isTagPresent(combinedTag, actualTags)) {
-          items.push({ label: `Relation: ${name}`, candidateTag: combinedTag, matchedTag: combinedTag, method: 'ampersand-combined' });
+          items.push({ label: `Relation: ${name}`, candidateTag: combinedTag, matchedTag: combinedTag, method: 'ampersand-combined', tabLabel });
           continue;
         }
         items.push(partA, partB);
         continue;
       }
-      items.push(checkSingleRelationName(name, actualTags));
+      items.push({ ...checkSingleRelationName(name, actualTags), tabLabel });
     }
     return items;
   }
@@ -5803,7 +5880,12 @@
     if (MANAGED_CONTENT_TAGS.has(tag)) return true;
     if (MONTH_NAMES.includes(tag) || DAY_NAMES.includes(tag)) return true;
     if (/^\d{4}$/.test(tag)) return true;
-    if (/^\d{1,2}$/.test(tag) && parseInt(tag, 10) >= 1 && parseInt(tag, 10) <= 31) return true;
+    // "00" is BruceBase's convention for an unknown day-of-month, alongside real days 1-31.
+    if (/^\d{1,2}$/.test(tag) && parseInt(tag, 10) >= 0 && parseInt(tag, 10) <= 31) return true;
+    // Single lowercase letter: the day-suffix (a/b/c/…) distinguishing multiple
+    // same-day events (see extractEventDaySuffix), mirroring isManagedRetailTag's
+    // identical rule for retail pages' alphabetical-index tags.
+    if (/^[a-z]$/.test(tag)) return true;
     return false;
   }
 
@@ -5832,6 +5914,12 @@
       const exp = [...expectedTags].find(t => /^\d+$/.test(t) && !/^\d{4}$/.test(t)) || '?';
       return `Day tag "${tag}" present but event day is "${exp}"`;
     }
+    if (/^[a-z]$/.test(tag)) {
+      const exp = [...expectedTags].find(t => /^[a-z]$/.test(t));
+      return exp
+        ? `Day-suffix tag "${tag}" present but the event's URL day-suffix is "${exp}"`
+        : `Day-suffix tag "${tag}" present but the event's URL has no day-suffix letter`;
+    }
     const expType = [...expectedTags].find(t => KNOWN_EVENT_TYPES.has(t));
     if (expType) return `Event-type tag "${tag}" present but event type is "${expType}"`;
     return `Tag "${tag}" is present but its expected condition was not detected`;
@@ -5851,6 +5939,7 @@
     if (DAY_NAMES.includes(tag))   return `Weekday tag "${tag}" verified: matches the event date`;
     if (/^\d{1,2}$/.test(tag) && parseInt(tag, 10) <= 31)
                                     return `Day tag "${tag}" verified: matches the event date`;
+    if (/^[a-z]$/.test(tag))       return `Day-suffix tag "${tag}" verified: matches the event's URL day-suffix (distinguishes multiple same-day events)`;
     if (KNOWN_EVENT_TYPES.has(tag)) return `Event-type tag "${tag}" verified: matches the event type`;
     return `Tag "${tag}" verified: matches its expected condition`;
   }
@@ -6155,7 +6244,35 @@
     return checkParsedLocationTags(parseVenuePageLocation(venueTitle), actualTags);
   }
 
-  function computeExpectedTags(doc, tabMap, eventDate, eventType) {
+  /**
+   * Extracts the single-letter day-suffix from an event type:date-slug href
+   * or path, e.g. `"b"` from `"/rehearsal:1976-12-00b-telegraph-hill-
+   * studio-holmdel-nj"` or `"rehearsal:1976-12-00b-telegraph-hill-studio-
+   * holmdel-nj"`. BruceBase appends this letter (a/b/c/…) to distinguish
+   * multiple events on the same day (or same "00" unknown-day month) —
+   * see computeExpectedTags. Returns `null` when there's no such suffix.
+   * @param {string} hrefOrPath
+   * @returns {string|null}
+   */
+  function extractEventDaySuffix(hrefOrPath) {
+    const m = (hrefOrPath || '').match(/^\/?[a-z]+:\d{4}-\d{2}-\d{2}([a-z])(?:-|$)/);
+    return m ? m[1] : null;
+  }
+
+  /**
+   * Computes the set of tags expected on a DETAIL page, derived from the
+   * event date/type and tab content (Recording, News/Memorabilia, setlist,
+   * Storyteller).
+   * @param {Document}            doc
+   * @param {Map<string,number>}  tabMap
+   * @param {string|null}         eventDate  - "YYYY-MM-DD" (no day-suffix letter).
+   * @param {string}              eventType
+   * @param {string|null}         [daySuffix] - Single-letter day-suffix (see
+   *   extractEventDaySuffix), e.g. "b" for same-day event #2. When present,
+   *   it's always expected as its own tag.
+   * @returns {Set<string>}
+   */
+  function computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix = null) {
     const expected = new Set();
 
     const dm = (eventDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -6165,14 +6282,14 @@
       const ddNum = parseInt(dd, 10);
       expected.add(yr);
       if (moNum > 0) expected.add(MONTH_NAMES[moNum - 1]);
-      if (ddNum > 0) {
-        expected.add(dd);
-        if (moNum > 0) {
-          const d = new Date(parseInt(yr, 10), moNum - 1, ddNum);
-          if (!isNaN(d.getTime())) expected.add(DAY_NAMES[d.getDay()]);
-        }
+      // Always expect the 2-digit day tag, including "00" (unknown day of month).
+      expected.add(dd);
+      if (ddNum > 0 && moNum > 0) {
+        const d = new Date(parseInt(yr, 10), moNum - 1, ddNum);
+        if (!isNaN(d.getTime())) expected.add(DAY_NAMES[d.getDay()]);
       }
     }
+    if (daySuffix) expected.add(daySuffix);
 
     if (eventType) expected.add(eventType.toLowerCase());
 
@@ -6241,6 +6358,7 @@
     const eventType = typeM ? typeM[1] : '';
     const dateM     = eventLink.textContent.trim().match(/^(\d{4}-\d{2}-\d{2})/);
     const eventDate = dateM ? dateM[1] : null;
+    const daySuffix = extractEventDaySuffix(href);
 
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
 
@@ -6251,7 +6369,7 @@
       : [];
     for (const t of onstageAdditionalTags) actualTags.add(t);
 
-    const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType);
+    const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
 
     // Setlist song → tag check: every song in the Setlist tab should have a
@@ -6268,11 +6386,19 @@
     const matchedLocationsByTag = new Map(locationResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
     const unmatchedLocations    = locationResults.filter(r => !r.matchedTag);
 
-    // "On Stage" tab → relation tag check: "onstage" plus every relation
-    // name listed there should each have a corresponding tag.
+    // "On Stage"/"In Studio"/"On Audio" tab → relation tag check: the tab's
+    // fixed tag (if any — "onstage"/"studio") plus every relation name
+    // listed there should each have a corresponding tag.
     const relationResults       = checkOnStageRelationTags(doc, tabMap, actualTags);
     const matchedRelationsByTag = new Map(relationResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
     const unmatchedRelations    = relationResults.filter(r => !r.matchedTag);
+
+    // Alias-substring tag check: generic tags (ALIAS_SUBSTRING_TAGS) that are
+    // present AND a case-insensitive substring of the event alias (e.g.
+    // "grammy" matched by "68th Annual Grammy Awards Ceremony") are verified.
+    const eventAlias           = extractEventAlias(doc);
+    const aliasResults         = checkAliasSubstringTags(eventAlias, actualTags);
+    const matchedAliasByTag    = new Map(aliasResults.map(r => [r.tag, r]));
 
     // Merge existing tag links (with spurious/passing flag) + missing placeholders → sorted.
     const existingItems = tagLinks.map(a => {
@@ -6280,8 +6406,9 @@
       const songMatch     = matchedSongsByTag.get(tag);
       const locationMatch = matchedLocationsByTag.get(tag);
       const relationMatch = matchedRelationsByTag.get(tag);
+      const aliasMatch  = matchedAliasByTag.get(tag);
       const spurious    = isManagedTag(tag) && !isTagPresent(tag, expectedTags) && !relationMatch;
-      const passing     = (isManagedTag(tag) && isTagPresent(tag, expectedTags)) || !!songMatch || !!locationMatch || !!relationMatch;
+      const passing     = (isManagedTag(tag) && isTagPresent(tag, expectedTags)) || !!songMatch || !!locationMatch || !!relationMatch || !!aliasMatch;
       if (passing) {
         a.style.color = '#2a2';
         a.style.fontWeight = 'bold';
@@ -6290,7 +6417,9 @@
           : locationMatch
           ? `Tag "${tag}" verified: matches event ${locationMatch.label}`
           : relationMatch
-          ? `Tag "${tag}" verified: ${relationMatch.label} — ${ON_STAGE_RELATION_METHOD_LABEL[relationMatch.method]}`
+          ? `Tag "${tag}" verified: ${relationMatch.label} — ${relationMethodLabel(relationMatch.method, relationMatch.tabLabel)}`
+          : aliasMatch
+          ? `Tag "${tag}" verified: ${aliasMatch.label}`
           : passingTagMsg(tag, expectedTags);
       }
       return { tag, html: a.outerHTML, missing: false, spurious, tooltip: spurious ? spuriousTagMsg(tag, expectedTags) : '' };
@@ -6322,7 +6451,7 @@
           ? `Tag "${tag}" verified: matches setlist song "${songMatch.song}" (${songMethodLabel[songMatch.method]})`
           : locationMatch
           ? `Tag "${tag}" verified: matches event ${locationMatch.label}`
-          : `Tag "${tag}" verified: ${relationMatch.label} — ${ON_STAGE_RELATION_METHOD_LABEL[relationMatch.method]}`;
+          : `Tag "${tag}" verified: ${relationMatch.label} — ${relationMethodLabel(relationMatch.method, relationMatch.tabLabel)}`;
         return { tag, html: `<a href="/system:page-tags/tag/${esc(tag)}#pages" class="bb-tag-onstage bb-tag-ok" style="color:#2a2; font-weight:bold; cursor:help;" title="${esc(title)}">${esc(tag)}</a>`,
           missing: false, spurious: false, tooltip: '' };
       }
@@ -7121,18 +7250,19 @@
         .forEach(a => tagsSpan.appendChild(a));
     }
 
-    // "On Stage" tab → relation tag check: "onstage" plus every relation
-    // name listed there should each have a corresponding tag. Computed here
-    // (before spurious/passing) because "onstage" is also a member of
-    // MANAGED_CONTENT_TAGS (used on actual /onstage: pages) but is never
-    // added to computeExpectedTags for gig/rehearsal pages — without this
-    // exclusion, the generic spurious-tag check below would incorrectly
-    // flag it orange even while this check marks it green.
+    // "On Stage"/"In Studio" tab → relation tag check: the tab's fixed tag
+    // ("onstage"/"studio") plus every relation name listed there should
+    // each have a corresponding tag. Computed here (before spurious/passing)
+    // because "onstage" is also a member of MANAGED_CONTENT_TAGS (used on
+    // actual /onstage: pages) but is never added to computeExpectedTags for
+    // gig/rehearsal pages — without this exclusion, the generic
+    // spurious-tag check below would incorrectly flag it orange even while
+    // this check marks it green.
     const relationResults    = checkOnStageRelationTags(document, tabMap, actualTags);
     const matchedRelationTagSet = new Set(relationResults.filter(r => r.matchedTag).map(r => r.matchedTag));
     const unmatchedRelations = relationResults.filter(r => !r.matchedTag);
 
-    const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType);
+    const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType, extractEventDaySuffix(path));
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
     const spuriousLinks = tagLinks.filter(a => {
       const tag = a.textContent.trim().toLowerCase();
@@ -7165,10 +7295,20 @@
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches event ${r.label}`);
     }
 
-    // "On Stage" tab relation matches (computed earlier, before spurious/passing).
+    // "On Stage"/"In Studio" tab relation matches (computed earlier, before spurious/passing).
     for (const r of relationResults.filter(res => res.matchedTag)) {
       const a = tagToAnchor.get(r.matchedTag);
-      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label} — ${ON_STAGE_RELATION_METHOD_LABEL[r.method]}`);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label} — ${relationMethodLabel(r.method, r.tabLabel)}`);
+    }
+
+    // Alias-substring tag check: generic tags (ALIAS_SUBSTRING_TAGS) that are
+    // present AND a case-insensitive substring of the event alias (e.g.
+    // "grammy" matched by "68th Annual Grammy Awards Ceremony") are verified.
+    // Never contributes to missingTags — absence is not flagged.
+    const aliasResults = checkAliasSubstringTags(extractEventAlias(document), actualTags);
+    for (const r of aliasResults) {
+      const a = tagToAnchor.get(r.tag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
     }
 
     if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedSongs.length === 0
@@ -7228,8 +7368,8 @@
       span.appendChild(missingSpan);
     }
 
-    // Append one missing-tag span per unmatched "On Stage" tab relation
-    // (or the always-expected "onstage" tag itself).
+    // Append one missing-tag span per unmatched "On Stage"/"In Studio" tab
+    // relation (or the tab's always-expected fixed tag itself).
     for (const r of unmatchedRelations) {
       const missingSpan = document.createElement('span');
       missingSpan.className = 'bb-tag-missing';

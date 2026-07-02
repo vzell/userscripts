@@ -37,8 +37,10 @@ which each get their own separate check independent of
 | `CA_PROVINCE_NAMES` | `{abbr: 'Full Province Name'}` — all 13 Canadian provinces/territories, for the location tag check |
 | `COUNTRY_EXTRA_TAGS` | `{countryName: ['extraTag', …]}` — extra continent/region tags expected alongside a bare country's own slug (e.g. `England` → `unitedkingdom`, `europe`); not exhaustive, user-extendable |
 | `VENUE_TAG_ALIAS_OVERRIDES` | `{venueOrDetailNameLowercase: 'expectedTag' \| null}` — user-editable manual overrides for the location tag check; `null` means "no tag expected for this name at all" (empty by default) |
-| `RELATION_TAG_ALIAS_OVERRIDES` | `{relationNameLowercase: 'expectedTag'}` — user-editable manual overrides for the "On Stage" tab relation tag check, for the rare case where none of the exact/"The "-stripped/suffix-stripped/nickname-stripped derivations match BruceBase's real tag (e.g. a typo like `jake.clemons`) |
-| `ON_STAGE_RELATION_METHOD_LABEL` | `{method: 'human-readable reason'}` for the relation tag check's tooltips — declared in this top block (not near `checkOnStageRelationTags`) since a `const` here would otherwise sit in its temporal dead zone when the boot dispatch reaches it |
+| `RELATION_TAG_ALIAS_OVERRIDES` | `{relationNameLowercase: 'expectedTag'}` — user-editable manual overrides for the "On Stage"/"In Studio" tab relation tag check, for the rare case where none of the exact/"The "-stripped/suffix-stripped/nickname-stripped derivations match BruceBase's real tag (e.g. a typo like `jake.clemons`) |
+| `RELATION_TAB_CONFIGS` | `{'On Stage': {fixedTag: 'onstage'}, 'In Studio': {fixedTag: 'studio'}, 'On Audio': {fixedTag: null}}` — which relation-listing tab (gig/rehearsal, recording, nogig) maps to which always-expected fixed tag (`null` = no fixed tag, only the per-relation-name checks apply), for `checkOnStageRelationTags` |
+| `relationMethodLabel(method, tabLabel)` | Function (not a lookup constant) returning the human-readable reason for the relation tag check's tooltips, parameterized by which tab (`"On Stage"`/`"In Studio"`/`"On Audio"`) produced the match |
+| `ALIAS_SUBSTRING_TAGS` | `{award: ['award'], grammy: ['grammy'], private: ['private', 'closed']}` — generic, event-type-independent tags verified against the event alias (see "Alias-substring tag check" below) rather than any per-event-type rule; each tag maps to one or more alias substrings that verify it (not necessarily equal to the tag itself) |
 
 `MANAGED_CONTENT_TAGS` covers: event types (`gig`, `interview`, `nogig`,
 `offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck`) plus `bootleg`,
@@ -53,8 +55,9 @@ which each get their own separate check independent of
 |---|---|
 | `YYYY` (year) | From event date |
 | Month name | From event date (0-indexed into `MONTH_NAMES`) |
-| Day number | Zero-padded two-digit string from event date (e.g. `"07"`); `isTagPresent` also accepts the unpadded form `"7"` |
+| Day number | Zero-padded two-digit string from event date (e.g. `"07"`), always expected — including `"00"`, BruceBase's convention for an unknown day-of-month; `isTagPresent` also accepts the unpadded form (`"7"`, or `"0"` for `"00"`) |
 | Weekday name | `new Date(yr, mo-1, dd).getDay()`; skipped when day = 0 (unknown) |
+| Day-suffix letter | The single letter (`a`/`b`/`c`/…) BruceBase appends to the URL slug's day part to distinguish multiple same-day events, e.g. `"b"` in `rehearsal:1976-12-00b-…` — see `extractEventDaySuffix`. Passed in as `computeExpectedTags`'s optional `daySuffix` argument (not derived from `eventDate`, which never carries it); only expected when the URL actually has one |
 | Event type | `eventType.toLowerCase()` |
 | `bootleg` | Recording tab has non-Sorry content AND is not purely a LiveDL (i.e. `!isLiveDLSplit(recTab)` OR `recTab.querySelector('hr')` exists) |
 | `livedl` | `isLiveDLSplit(recTab)` is true |
@@ -88,7 +91,10 @@ labels so that events with only a `"News"` tab are still checked.
   after the tag link; hover shows `showErrorTooltip`.
 
 `isManagedTag(tag)` returns true for: `MANAGED_CONTENT_TAGS` members, month
-names, weekday names, 4-digit years, and 1–2 digit day numbers (1–31).
+names, weekday names, 4-digit years, 1–2 digit day numbers (0–31 — `0`/`00`
+included, BruceBase's unknown-day-of-month convention), and single lowercase
+letters (the day-suffix a/b/c/… distinguishing multiple same-day events —
+mirrors `isManagedRetailTag`'s identical rule for retail pages).
 
 **Passing** (present AND condition met):
 - Every context also marks these tags to make correct data visible without
@@ -424,17 +430,23 @@ slug/override/remainder-slug that was expected).
 
 ---
 
-## "On Stage" tab relation tag check (`checkOnStageRelationTags`)
+## "On Stage"/"In Studio"/"On Audio" tab relation tag check (`checkOnStageRelationTags`)
 
-Every relation name listed under a DETAIL page's "On Stage" tab should have
-a corresponding tag, checked on both `annotateDetailPageTags` (live DETAIL
-page) and `addTagsButton` (YEAR page's nested "Tags" button, using the
-fetched `doc`). `checkOnStageRelationTags(doc, tabMap, actualTags)` returns
-`[]` immediately when `tabMap` (from `buildTabMap`) has no `"On Stage"`
-entry; otherwise:
+Every relation name listed under a DETAIL page's "On Stage" tab (gig/
+rehearsal), "In Studio" tab (recording), or "On Audio" tab (nogig) should
+have a corresponding tag, checked on both `annotateDetailPageTags` (live
+DETAIL page) and `addTagsButton` (YEAR page's nested "Tags" button, using
+the fetched `doc`). `checkOnStageRelationTags(doc, tabMap, actualTags)`
+looks up which of `RELATION_TAB_CONFIGS`'s tab labels (`"On Stage"` → fixed
+tag `"onstage"`, `"In Studio"` → fixed tag `"studio"`, `"On Audio"` → no
+fixed tag) is present in `tabMap` (from `buildTabMap`) and returns `[]`
+immediately when none is; otherwise (a page has at most one of these tabs —
+it's always tab index 0, see `extractRelations`):
 
-1. **Fixed tag**: `"onstage"` is always expected, independent of any
-   relation — first item in the result, `method: 'fixed'`.
+1. **Fixed tag** (optional): when the matched tab's configured `fixedTag` is
+   set (`"onstage"` or `"studio"` — `"On Audio"` has none), it's always
+   expected, independent of any relation — first item in the result,
+   `method: 'fixed'`. Skipped entirely for tabs with `fixedTag: null`.
 2. **Guest tag**: if Bruce Springsteen himself is listed under the tab
    marked `"(Guest)"` (`isRelationMarkedGuest(doc, 'Bruce Springsteen')` —
    scans `extractRelations(doc)`'s top-level items *and* band members for a
@@ -487,16 +499,18 @@ fail; no code changes needed elsewhere. This per-name logic lives in
    results are pushed as-is (so the user sees both candidates, and both are
    listed as missing).
 
-Result shape: `{ label, candidateTag, matchedTag, method: 'fixed'|'guest'|'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|'ampersand-combined'|null }[]`,
-mirroring the setlist-song/location checks. A matched tag is colored green
-via `markPassingTagLinks` with a tooltip built from
-`ON_STAGE_RELATION_METHOD_LABEL[method]` (e.g. *"matches a relation listed
-under the 'On Stage' tab (lowercase, whitespace/punctuation stripped)"*). An
-unmatched relation (or a missing `"onstage"` tag itself) is rendered like a
-missing tag, showing `candidateTag` (the *first* candidate's slug, i.e. the
-plain exact-match one, since that's the most literal "expected" form to show
-the user even though a stripped variant might be closer to BruceBase's
-actual convention).
+Result shape: `{ label, candidateTag, matchedTag, method: 'fixed'|'guest'|'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|'ampersand-combined'|null, tabLabel }[]`,
+mirroring the setlist-song/location checks (`tabLabel` — `"On Stage"` or
+`"In Studio"` — carries which tab produced the match, for the tooltip text).
+A matched tag is colored green via `markPassingTagLinks` with a tooltip
+built from `relationMethodLabel(method, tabLabel)` (e.g. *"matches a
+relation listed under the 'On Stage' tab (lowercase, whitespace/punctuation
+stripped)"*, or the "In Studio"/`"studio"` equivalent). An unmatched
+relation (or a missing fixed tag itself) is rendered like a missing tag,
+showing `candidateTag` (the *first* candidate's slug, i.e. the plain
+exact-match one, since that's the most literal "expected" form to show the
+user even though a stripped variant might be closer to BruceBase's actual
+convention).
 
 **Important ordering note**: `"onstage"` is also a member of
 `MANAGED_CONTENT_TAGS` (it's a real event type for actual `/onstage:` pages),
@@ -507,23 +521,21 @@ page — only this check does. Both `annotateDetailPageTags` and
 relation-matched tag from it (`&& !matchedRelationTagSet.has(tag)` /
 `&& !relationMatch`) — otherwise the generic spurious check would flag
 `"onstage"` (present but "not expected" by its own logic) at the same time
-this check marks it green, producing a confusing double-flag.
+this check marks it green, producing a confusing double-flag. `"studio"` is
+*not* a member of `MANAGED_CONTENT_TAGS` (it's not a real event type), so it
+never needs this exclusion — the generic spurious check simply never
+considers it, and this relation check alone drives its missing/matched state.
 
-**`ON_STAGE_RELATION_METHOD_LABEL` placement**: this lookup is declared in
-the top-of-file constants block (near `VENUE_TAG_ALIAS_OVERRIDES`), *not*
-near `checkOnStageRelationTags` itself. The boot dispatch block near the top
-of the file (`await runDetailPage()` etc.) runs before the script's
-sequential execution ever reaches later lines — `function` declarations are
-fully hoisted so this doesn't matter for them, but a `const` is only
-initialized when its declaration line actually executes. A `const` placed
-deep in the function-declaration section (after the dispatch) would still be
-in its temporal dead zone the first time a run\*Page() function (already
-running via that dispatch) tries to read it, throwing `ReferenceError:
-Cannot access '...' before initialization` — which is exactly what happened
-here until it was moved. Every other shared "data table" constant in this
-file (`MANAGED_CONTENT_TAGS`, `US_STATE_NAMES`, `SONG_TAG_ALIAS_OVERRIDES`,
-etc.) already lives in that same top block for this reason — any *new* one
-must go there too, never declared later "near where it's used."
+**`RELATION_TAB_CONFIGS`/`relationMethodLabel` placement**: both are
+declared in the top-of-file constants block (near `VENUE_TAG_ALIAS_OVERRIDES`
+and `RELATION_TAG_ALIAS_OVERRIDES`), for locality with each other rather
+than near `checkOnStageRelationTags` itself. `relationMethodLabel` is a
+`function` declaration (fully hoisted), so — unlike the `const` lookup table
+it replaced — its placement isn't load-bearing for the temporal-dead-zone
+reason that applies to the other top-block constants (`MANAGED_CONTENT_TAGS`,
+`US_STATE_NAMES`, `SONG_TAG_ALIAS_OVERRIDES`, etc., which *do* need to stay
+there since the boot dispatch near the top of the file runs before the
+script's sequential execution reaches a `const` declared later).
 
 **Onstage-companion tag lookup**: a song/location/relation match against a
 tag that only exists via the companion "onstage:" page (i.e. rendered as a
@@ -556,6 +568,53 @@ three rules; it's appended to `makeOnstageTagsGlyphSpan`'s tooltip (see
 "Onstage companion page tags" above) after the list of additional tags found
 on the companion page, since both facts concern the same "On Stage" tab/page
 — visible from a single hover on the 🏷️ glyph on both DETAIL and YEAR pages.
+
+---
+
+## Alias-substring tag check (`checkAliasSubstringTags`)
+
+Unlike every other check in this file, this one is **not** tied to any
+specific event type or tab — it applies wherever a DETAIL page has an event
+alias at all (see `extractEventAlias`: the `<p><strong>…</strong></p>`
+header immediately followed by `<hr>` as the first two children of
+`#wiki-tab-0-0`, e.g. `"68th Annual Grammy Awards Ceremony"` on a `nogig`
+page's "On Audio" tab, or `"Streets Of Minneapolis Recording Session"` on a
+`recording` page's "In Studio" tab).
+
+`ALIAS_SUBSTRING_TAGS` (currently `{award: ['award'], grammy: ['grammy'],
+private: ['private', 'closed']}`) maps generic tags to the alias
+substring(s) that verify them — a substring list need not equal the tag
+itself, e.g. "private" is verified by either "private" *or* "closed" (both
+imply a non-public event). `checkAliasSubstringTags(alias, actualTags)`:
+
+1. Returns `[]` immediately when there's no alias (`extractEventAlias`
+   returned `null`).
+2. Otherwise, for each `tag -> substrings` entry in `ALIAS_SUBSTRING_TAGS`,
+   checks whether the tag is **present** (`isTagPresent(tag, actualTags)`)
+   **and** at least one of its `substrings` occurs case-insensitively in the
+   alias (`alias.toLowerCase().includes(substring)`) — e.g. tag `"grammy"`
+   matches alias `"68th Annual Grammy Awards Ceremony"`, tag `"award"`
+   matches too (it's a substring of `"Awards"`), and tag `"private"` matches
+   alias `"Closed Rehearsal"` on a `rehearsal` page's "On Stage" tab (via its
+   `"closed"` substring, not the tag's own name).
+3. Only matching tags are returned, as `{ tag, label }` (`label` names
+   *which* substring matched); there is no "missing" counterpart — a tag not
+   in this map, or present but not matching any of its substrings, is simply
+   left to whatever other check (or none) already governs it. This check
+   only ever *upgrades* an already-present tag to "verified" (green); it
+   never requires a tag to exist.
+
+Wired into `annotateDetailPageTags` (DETAIL page, via `extractEventAlias(document)`)
+and `addTagsButton` (YEAR page's nested "Tags" button, via `extractEventAlias(doc)`
+— `doc` is the fetched per-event DETAIL page, the same one `processOneYearEvent`
+already calls `extractEventAlias` on for the `.bb-event-alias` span rendered
+next to the event name). A matched tag is colored green via
+`markPassingTagLinks`/inline title-setting with tooltip *`Tag "private"
+verified: matches event alias "Closed Rehearsal" (contains "closed",
+case-insensitive)`*. Because it never contributes a "missing" entry, it also
+never affects `annotateDetailPageTags`'s warn-box early-return check or
+`addTagsButton`'s "N missing" count — it only participates in the
+`passing`/green-coloring branch of the existing-tag loop in both places.
 
 ---
 
