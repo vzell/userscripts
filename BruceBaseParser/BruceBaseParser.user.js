@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.67
+// @version      2.68
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -78,7 +78,7 @@
   const MANAGED_CONTENT_TAGS = new Set([
     'gig', 'interview', 'nogig', 'offstage', 'onstage', 'recording', 'rehearsal', 'soundcheck',
     'bootleg', 'livedl', 'news', 'memorabilia', 'ticket',
-    'setlist', 'handwritten', 'printed', 'storyteller',
+    'setlist', 'handwritten', 'printed', 'storyteller', 'help',
   ]);
 
   /** Human-readable reasons why each managed tag might be present but spurious. */
@@ -93,6 +93,7 @@
     printed:     'No printed setlist images found in News/Memorabilia tab',
     soundcheck:  'No "Soundcheck" section header found in setlist content',
     storyteller: 'Storyteller tab is empty or unavailable',
+    help:        'No "Help Us" call-to-action icon found on the YEAR page for this event',
   };
 
   /** Human-readable reasons why each managed tag is correctly present ("passing"). */
@@ -107,6 +108,7 @@
     printed:     'Printed setlist image(s) found in the News/Memorabilia tab',
     soundcheck:  '"Soundcheck" section header found in the setlist content',
     storyteller: 'Storyteller tab has content',
+    help:        '"Help Us" call-to-action icon found on the YEAR page for this event',
   };
 
   /**
@@ -2641,6 +2643,42 @@
     return result;
   }
 
+  /**
+   * Returns true when a "Help Us" call-to-action icon is present in
+   * `container` — BruceBase's boilerplate note ("If you have any
+   * information ... please get in touch"), rendered as `<img title="Help
+   * Us">`, shown only for events lacking full documentation. Presence
+   * means the "help" tag is expected on the DETAIL page (see
+   * computeExpectedTags). For use with an already-per-event-scoped
+   * container (e.g. `.bb-section-processed`, which wraps exactly one
+   * event) — see eventHasHelpIcon for scanning a multi-event container.
+   * @param {Element} container
+   * @returns {boolean}
+   */
+  function hasHelpIcon(container) {
+    return !!container.querySelector('img.image[title="Help Us"]');
+  }
+
+  /**
+   * Same check as hasHelpIcon, but scoped to the HTML between eventLinkEl
+   * and nextAnchorEl within a multi-event container (e.g. a YEAR page's
+   * `#page-content`, or to the end of `content` when nextAnchorEl is null)
+   * — for use when there's no already-per-event-scoped container at hand
+   * (e.g. the DETAIL page pipeline, which only has the fetched YEAR page's
+   * full content). Mirrors collectSetlistElements's boundary technique.
+   * @param {Element}      eventLinkEl
+   * @param {Element|null} nextAnchorEl
+   * @param {Element}      content
+   * @returns {boolean}
+   */
+  function eventHasHelpIcon(eventLinkEl, nextAnchorEl, content) {
+    return [...content.querySelectorAll('img.image[title="Help Us"]')].some(img => {
+      const afterLink  = eventLinkEl.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING;
+      const beforeNext = !nextAnchorEl || (nextAnchorEl.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_PRECEDING);
+      return afterLink && beforeNext;
+    });
+  }
+
   // Section = { label: string, songs: string[], sourceEl: Element }
   function parseYearSetlist(setlistEls) {
     const sections = [];
@@ -3120,20 +3158,21 @@
       log(`  Result : ${nameMatch ? 'MATCH ✅' : isEarlyLate ? 'EARLY/LATE ⚠️' : 'MISMATCH ❌'}`);
       addDetailTitleAnnotation(detailEventType, yearNameUpper, normalizedDetailName, rawDetailName, nameMatch, isEarlyLate);
 
-      const detailTabMap = buildTabMap(document);
-      const onstageResult = await fetchOnstageCompanionTags(path, detailEventType, detailTabMap);
-      const detailDateM  = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
-      if (detailDateM) {
-        const tagResult = annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType, detailSections, rawDetailName, onstageResult);
-        if (tagResult.additionalTags.length > 0) {
-          addOnstageTagsGlyph(tagResult.additionalTags, tagResult.onstageUrl);
-        }
-      }
-
       const allYearNamedAnchors = [...yearContent.querySelectorAll('a[name]')];
       const nextAnchor = allYearNamedAnchors
         .find(a => eventLink.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
       log(`  Next anchor: ${nextAnchor ? `name="${nextAnchor.getAttribute('name')}"` : 'none (end of page)'}`);
+
+      const detailTabMap = buildTabMap(document);
+      const onstageResult = await fetchOnstageCompanionTags(path, detailEventType, detailTabMap);
+      const detailDateM  = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
+      const detailHasHelp = eventHasHelpIcon(eventLink, nextAnchor, yearContent);
+      if (detailDateM) {
+        const tagResult = annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType, detailSections, rawDetailName, onstageResult, detailHasHelp);
+        if (tagResult.additionalTags.length > 0) {
+          addOnstageTagsGlyph(tagResult.additionalTags, tagResult.onstageUrl);
+        }
+      }
 
       // ── Anchor consistency check on DETAIL page ───────────────────────────
       // Find the named anchor on the YEAR page that precedes this event link.
@@ -6270,9 +6309,12 @@
    * @param {string|null}         [daySuffix] - Single-letter day-suffix (see
    *   extractEventDaySuffix), e.g. "b" for same-day event #2. When present,
    *   it's always expected as its own tag.
+   * @param {boolean}             [hasHelp] - Whether the YEAR page shows a
+   *   "Help Us" call-to-action icon for this event (see hasHelpIcon /
+   *   eventHasHelpIcon). When true, "help" is always expected as a tag.
    * @returns {Set<string>}
    */
-  function computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix = null) {
+  function computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix = null, hasHelp = false) {
     const expected = new Set();
 
     const dm = (eventDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -6290,6 +6332,7 @@
       }
     }
     if (daySuffix) expected.add(daySuffix);
+    if (hasHelp) expected.add('help');
 
     if (eventType) expected.add(eventType.toLowerCase());
 
@@ -6359,6 +6402,7 @@
     const dateM     = eventLink.textContent.trim().match(/^(\d{4}-\d{2}-\d{2})/);
     const eventDate = dateM ? dateM[1] : null;
     const daySuffix = extractEventDaySuffix(href);
+    const hasHelp   = hasHelpIcon(section);
 
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
 
@@ -6369,7 +6413,7 @@
       : [];
     for (const t of onstageAdditionalTags) actualTags.add(t);
 
-    const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix);
+    const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix, hasHelp);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
 
     // Setlist song → tag check: every song in the Setlist tab should have a
@@ -7206,9 +7250,12 @@
    * @param {Section[]}          detailSections - Result of parseDetailSetlist(document).
    * @param {string}             rawDetailName
    * @param {{url: string, tags: Set<string>}|null} [onstageResult] - fetchOnstageCompanionTags result, if any.
+   * @param {boolean}             [hasHelp] - Whether the YEAR page shows a "Help Us"
+   *   call-to-action icon for this event (see eventHasHelpIcon). When true, "help"
+   *   is always expected as a tag.
    * @returns {{additionalTags: string[], onstageUrl: string|null}} Tags found only on the onstage companion page, for addOnstageTagsGlyph.
    */
-  function annotateDetailPageTags(tabMap, eventDate, eventType, detailSections, rawDetailName, onstageResult = null) {
+  function annotateDetailPageTags(tabMap, eventDate, eventType, detailSections, rawDetailName, onstageResult = null, hasHelp = false) {
     const tagsContainer = document.querySelector('.page-tags');
     if (!tagsContainer) return { additionalTags: [], onstageUrl: null };
 
@@ -7262,7 +7309,7 @@
     const matchedRelationTagSet = new Set(relationResults.filter(r => r.matchedTag).map(r => r.matchedTag));
     const unmatchedRelations = relationResults.filter(r => !r.matchedTag);
 
-    const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType, extractEventDaySuffix(path));
+    const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType, extractEventDaySuffix(path), hasHelp);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
     const spuriousLinks = tagLinks.filter(a => {
       const tag = a.textContent.trim().toLowerCase();

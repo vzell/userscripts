@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.68",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "New \"help\" managed tag: when BruceBase's \"Help Us\" call-to-action icon (<img title=\"Help Us\">, the boilerplate \"If you have any information ... please get in touch\" note shown for events lacking full documentation) appears on the YEAR page for an event, the \"help\" tag is now expected on that event's DETAIL page. Added via two new helpers: hasHelpIcon(container) for an already-per-event-scoped container (used in addTagsButton via the YEAR page's .bb-section-processed section), and eventHasHelpIcon(eventLinkEl, nextAnchorEl, content) for boundary-scoped scanning of a multi-event container (used in annotateDetailPageTags via the fetched YEAR page content, since the icon is YEAR-page-only and never appears on the DETAIL page itself). computeExpectedTags takes a new optional hasHelp parameter. \"help\" added to MANAGED_CONTENT_TAGS/SPURIOUS_TAG_REASONS/PASSING_TAG_REASONS for the standard green/red/orange treatment."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.67",
         "date": "2026-07-02",
         "sections": [
