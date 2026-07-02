@@ -3297,9 +3297,16 @@ the first character e.g. "b" of the song title "BORN TO RUN" should be present a
 
 2.) 
 
-the tag value "borntorun" 
+if a tag value like "btr" is present (but it's not a requirement), see our lookup function which get the first char of
+each word in a song title and concatenate them together to form the song alias, then flag it as recognized with "green" rendering as usual
 
 3.)
+
+check if the lowercase blank stripped version of a song title matches with a same named tag value, e.g.
+
+"BORN TO RUN" -> borntorun
+
+4.)
 
 "lyricsheet" as tag value should be present if the "Gallery" tab on the SONG page has "lyricsheet" in the filename
 
@@ -3307,9 +3314,28 @@ the tag value "borntorun"
 <td><a href="http://brucebase.wdfiles.com/local--files/files:song-lyricsheet/lyricsheet_borntorun_early1974.jpg" class="with-lb"><img src="http://brucebase.wdfiles.com/local--resized-images/files:song-lyricsheet/lyricsheet_borntorun_early1974.jpg/thumbnail.jpg" alt="" class="gallery-image-size-thumbnail"></a></td>
 #+end_example
 
+#+begin_example
+5661 +   * Recognizes (but does not require) two additional SONG-page tag
+      5662 +   * conventions: the lowercase, punctuation-stripped song title itself, and
+      5663 +   * the derived first-letter-per-word alias (computeSongTagAlias) — e.g. for
+      5664 +   * "BORN TO RUN": "borntorun" and "btr". Neither is a hard requirement —
+      5665 +   * real SONG pages sometimes use only one, or neither (relying on the
+      5666 +   * simpler first-letter tag instead) — so this never contributes to a
+      5667 +   * missing-tag list; it only reports which of the two happen to already be
+      5668 +   * present, for green "recognized" marking.
+#+end_example
+
+** mention the 'Venue "At The" splitting rule' fact also on the corresponding tag value tooltips
+
+mention the 'Venue "At The" splitting rule' fact also on the corresponding tag value tooltips
 
 ** all hyperlinks in the processed final page should be rendered in a new tab
 
+** http://brucebase.wikidot.com/song:born-to-run add MusicBrainz icon to the song title on SONG pages
+
+** add the following manual overrides to songlist
+
+"TENTH AVENUE FREEZE-OUT" => 10th
 
 * question
 ** initial

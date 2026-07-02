@@ -1,5 +1,18 @@
 [
     {
+        "version": "2.54",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Extended the live SONG page's own tag consistency check (annotateSongPageTags) to match the YEAR page's nested \"Song Tags\" button: computeExpectedSongTags/isManagedSongTag now delegate to computeExpectedYearSongTags/isManagedYearSongTag, so the live SONG page also requires the first-letter-of-title tag (e.g. \"BORN TO RUN\" -> b) and \"lyricsheet\" (when the Gallery tab has an image with \"lyricsheet\" in its filename), not just \"song\".",
+                    "Added checkSongTitleTagRecognition: recognizes (without requiring) two more song-page tag conventions — the exact lowercase/punctuation-stripped title (\"borntorun\") and the derived first-letter-per-word alias (\"btr\", via computeSongTagAlias). Either is marked green when present, but neither is added to the missing-tag list, since real SONG pages sometimes use only one (or neither, relying on the first-letter tag alone). Wired into both annotateSongPageTags and addSongTagsButton."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.53",
         "date": "2026-07-02",
         "sections": [

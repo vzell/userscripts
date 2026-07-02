@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.53
+// @version      2.54
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -3280,7 +3280,9 @@
 
     const originalHtml = content.innerHTML;
 
-    annotateSongPageTags();
+    const songName = pageTitle.textContent.trim();
+    const songTabMap = buildTabMap(document);
+    annotateSongPageTags(songName, songTabMap);
 
     const globalBtn = document.createElement('button');
     globalBtn.id        = 'bb-global-toggle';
@@ -5658,6 +5660,28 @@
   }
 
   /**
+   * Recognizes (but does not require) two additional SONG-page tag
+   * conventions: the lowercase, punctuation-stripped song title itself, and
+   * the derived first-letter-per-word alias (computeSongTagAlias) — e.g. for
+   * "BORN TO RUN": "borntorun" and "btr". Neither is a hard requirement —
+   * real SONG pages sometimes use only one, or neither (relying on the
+   * simpler first-letter tag instead) — so this never contributes to a
+   * missing-tag list; it only reports which of the two happen to already be
+   * present, for green "recognized" marking.
+   * @param {string}      songName   - Text from the song page's #page-title.
+   * @param {Set<string>} actualTags - Lowercase tags present on the page.
+   * @returns {{tag: string, method: 'exact'|'alias'}[]}
+   */
+  function checkSongTitleTagRecognition(songName, actualTags) {
+    const recognized = [];
+    const exactTag = songName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (exactTag && isTagPresent(exactTag, actualTags)) recognized.push({ tag: exactTag, method: 'exact' });
+    const aliasTag = computeSongTagAlias(songName);
+    if (aliasTag && aliasTag !== exactTag && isTagPresent(aliasTag, actualTags)) recognized.push({ tag: aliasTag, method: 'alias' });
+    return recognized;
+  }
+
+  /**
    * Slugifies a venue/city/state name into BruceBase's tag convention: drop a
    * leading/trailing "The"/"Le"/"De" article, lowercase, delete every
    * non-alphanumeric character (no acronym — unlike computeSongTagAlias).
@@ -6253,10 +6277,12 @@
   // ── Song tab rows (triggered from list-view number clicks) ────────────────
 
   /**
-   * Returns the set of lowercase tags expected on a SONG page, as checked from
-   * the YEAR page's nested "Song Tags" button (distinct from the simpler
-   * computeExpectedSongTags() used by the live SONG page's own annotation,
-   * which only knows about the "song" tag).
+   * Returns the set of lowercase tags expected on a SONG page: "song"
+   * (always), the first letter of the song name, and "lyricsheet" when the
+   * Gallery tab has an image whose filename contains "lyricsheet". Used by
+   * the YEAR page's nested "Song Tags" button (against a fetched `songDoc`)
+   * and, via computeExpectedSongTags, by the live SONG page's own annotation
+   * (against the live `document`).
    * @param {Document}           songDoc
    * @param {Map<string,number>} songTabMap
    * @param {string}             songName  - Display name from the <a> text.
@@ -6278,9 +6304,10 @@
   }
 
   /**
-   * Returns true for song-page tags whose presence can be verified, as used
-   * by the YEAR page's nested "Song Tags" button (distinct from the simpler
-   * isManagedSongTag() used by the live SONG page's own annotation).
+   * Returns true for song-page tags whose presence can be verified: "song",
+   * "lyricsheet", and single lowercase letter tags (first-letter index).
+   * Used by the YEAR page's nested "Song Tags" button, and, via
+   * isManagedSongTag, by the live SONG page's own annotation.
    * @param {string} tag
    * @returns {boolean}
    */
@@ -6307,15 +6334,27 @@
     const expectedTags = computeExpectedYearSongTags(songDoc, songTabMap, songName);
     const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
 
+    // Recognize (but don't require) the exact-title-slug / derived-alias tags.
+    const recognizedByTag = new Map(
+      checkSongTitleTagRecognition(songName, actualTags).map(r => [r.tag, r])
+    );
+    const recognitionMethodLabel = {
+      exact: `matches the song name "${songName}" (lowercase, punctuation stripped)`,
+      alias: `matches the derived first-letter-per-word alias of song name "${songName}"`,
+    };
+
     const existingItems = tagLinks.map(a => {
-      const tag      = a.textContent.trim().toLowerCase();
+      const tag        = a.textContent.trim().toLowerCase();
+      const recognized = recognizedByTag.get(tag);
       const spurious = isManagedYearSongTag(tag) && !expectedTags.has(tag);
-      const passing  = isManagedYearSongTag(tag) && expectedTags.has(tag);
+      const passing  = (isManagedYearSongTag(tag) && expectedTags.has(tag)) || !!recognized;
       const tooltip  = spurious ? `Tag "${tag}" is present but not expected for this song` : '';
       if (passing) {
         a.style.color = '#2a2';
         a.style.fontWeight = 'bold';
-        a.title = tag === 'song'
+        a.title = recognized
+          ? `Tag "${tag}" recognized: ${recognitionMethodLabel[recognized.method]}`
+          : tag === 'song'
           ? 'Tag "song" verified: this is a song page'
           : tag === 'lyricsheet'
             ? 'Tag "lyricsheet" verified: Gallery tab has lyricsheet image(s)'
@@ -6976,35 +7015,47 @@
   // ── Song page tag helpers ─────────────────────────────────────────────────
 
   /**
-   * Returns the set of lowercase tags expected on a song page.
-   * Every song page must have the "song" tag.
+   * Returns the set of lowercase tags expected on a song page: "song"
+   * (always), the first letter of the song title, and "lyricsheet" when the
+   * Gallery tab has an image whose filename contains "lyricsheet". Delegates
+   * to computeExpectedYearSongTags (used by the YEAR page's nested "Song
+   * Tags" button) since the rules are identical, just against the live
+   * `document` instead of a fetched one.
+   * @param {string}             songName - Text from the song page's #page-title.
+   * @param {Map<string,number>} tabMap   - buildTabMap(document) result.
    * @returns {Set<string>}
    */
-  function computeExpectedSongTags() {
-    return new Set(['song']);
+  function computeExpectedSongTags(songName, tabMap) {
+    return computeExpectedYearSongTags(document, tabMap, songName);
   }
 
   /**
-   * Returns true for song-page tags whose presence can be verified.
+   * Returns true for song-page tags whose presence can be verified: "song",
+   * "lyricsheet", and single lowercase letter tags (first-letter index).
+   * Delegates to isManagedYearSongTag — see computeExpectedSongTags.
    * @param {string} tag
    * @returns {boolean}
    */
   function isManagedSongTag(tag) {
-    return tag === 'song';
+    return isManagedYearSongTag(tag);
   }
 
   /**
    * On SONG pages: wraps .page-tags in a yellow warning box and annotates
-   * missing / spurious song tags inline on the live page.
+   * missing / spurious song tags inline on the live page. Also recognizes
+   * (without requiring) the exact-title-slug and derived-alias tags via
+   * checkSongTitleTagRecognition, marking them green when present.
    * No-op when all expected tags are present and no spurious managed tags exist.
+   * @param {string}             songName - Text from the song page's #page-title.
+   * @param {Map<string,number>} tabMap   - buildTabMap(document) result.
    */
-  function annotateSongPageTags() {
+  function annotateSongPageTags(songName, tabMap) {
     const tagsContainer = document.querySelector('.page-tags');
     if (!tagsContainer) return;
 
     const tagLinks     = [...tagsContainer.querySelectorAll('a[href]')];
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
-    const expectedTags = computeExpectedSongTags();
+    const expectedTags = computeExpectedSongTags(songName, tabMap);
     const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
     const spuriousLinks = tagLinks.filter(a => {
       const tag = a.textContent.trim().toLowerCase();
@@ -7014,7 +7065,22 @@
       const tag = a.textContent.trim().toLowerCase();
       return isManagedSongTag(tag) && expectedTags.has(tag);
     });
-    markPassingTagLinks(passingLinks, () => 'Tag "song" verified: this is a song page');
+    markPassingTagLinks(passingLinks, tag => tag === 'song'
+      ? 'Tag "song" verified: this is a song page'
+      : tag === 'lyricsheet'
+      ? 'Tag "lyricsheet" verified: Gallery tab has lyricsheet image(s)'
+      : `Tag "${tag}" verified: matches the first letter of song title "${songName}"`);
+
+    // Recognize (but don't require) the exact-title-slug / derived-alias tags.
+    const recognized = checkSongTitleTagRecognition(songName, actualTags);
+    const recognitionMethodLabel = {
+      exact: `matches the song title "${songName}" (lowercase, punctuation stripped)`,
+      alias: `matches the derived first-letter-per-word alias of song title "${songName}"`,
+    };
+    for (const r of recognized) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.tag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" recognized: ${recognitionMethodLabel[r.method]}`);
+    }
 
     if (missingTags.length === 0 && spuriousLinks.length === 0) return;
 

@@ -360,15 +360,34 @@ mirrors this exactly, merging the same location-check results into its
 
 ## SONG page annotation (`annotateSongPageTags`)
 
-Called from `runSongPage`. Rules:
+Called from `runSongPage`, passed `songName` (`#page-title` text) and
+`buildTabMap(document)`. `computeExpectedSongTags(songName, tabMap)` and
+`isManagedSongTag(tag)` delegate to `computeExpectedYearSongTags`/
+`isManagedYearSongTag` (used by the YEAR page's nested "Song Tags" button —
+see above) since the rules are identical, just against the live `document`
+instead of a fetched one:
 
 | Expected tag | Condition |
 |---|---|
 | `song` | Always — every `/song:…` page must carry this tag |
+| First letter of `songName` | Lowercase, e.g. `"BORN TO RUN"` → `b` |
+| `lyricsheet` | Gallery tab has an `<img>` whose `src` contains `"lyricsheet"` |
 
-`isManagedSongTag(tag)` returns true only for `"song"`. (Not to be confused
-with `isManagedYearSongTag(tag)`, used by the YEAR page's nested Song Tags
-button — see above.)
+In addition, `checkSongTitleTagRecognition(songName, actualTags)` checks two
+more tag conventions — but as *recognition only*, never as a requirement
+(real SONG pages sometimes use just one of these, or neither, relying on the
+first-letter tag alone), so neither ever appears in the missing-tag list:
+1. **Exact title match**: `songName.toLowerCase().replace(/[^a-z0-9]/g, '')`
+   — e.g. `"BORN TO RUN"` → `borntorun`.
+2. **Derived alias** (`computeSongTagAlias`, same algorithm as the setlist
+   song tag check) — e.g. `"BORN TO RUN"` → `btr`.
+
+Whichever of these (zero, one, or both) happens to already be present among
+the page's tags is marked green via `markPassingTagLinks`, with a tooltip
+saying "recognized" rather than "verified" (to distinguish an optional match
+from a required one). `addSongTagsButton` (YEAR page's nested "Song Tags"
+button) mirrors this via a `recognizedByTag` map merged into its existing-tag
+pass/tooltip logic.
 
 ---
 
