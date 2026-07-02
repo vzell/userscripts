@@ -435,27 +435,36 @@ entry; otherwise:
 
 1. **Fixed tag**: `"onstage"` is always expected, independent of any
    relation — first item in the result, `method: 'fixed'`.
-2. **Exact match**: for every relation name from
+2. **Guest tag**: if Bruce Springsteen himself is listed under the tab
+   marked `"(Guest)"` (`isRelationMarkedGuest(doc, 'Bruce Springsteen')` —
+   scans `extractRelations(doc)`'s top-level items *and* band members for a
+   name match plus an `extra` string containing `"Guest"`, e.g.
+   `<li><a href="/relation:bruce-springsteen">Bruce Springsteen</a>
+   <span style="font-size:80%;"><em>(Guest)</em></span></li>`), `"guest"` is
+   also always expected — second item, `method: 'guest'`. Not triggered by
+   any *other* relation being marked `"(Guest)"`, only Bruce Springsteen
+   specifically.
+3. **Exact match**: for every relation name from
    `extractOnStageRelationNames(doc)` (flattens `extractRelations(doc)`'s
    groups — top-level entries *and* their band members — into a unique
    name list; `extractRelations` itself always reads `#wiki-tab-0-0`, the
    established convention already used elsewhere in this file for
    relation-participant rendering), the lowercase, punctuation/whitespace-stripped
    form must match a tag, e.g. `"Steven Van Zandt"` → `stevenvanzandt`.
-3. **"The"-stripped fallback**: same slug rule, but with a leading `"The "`
+4. **"The"-stripped fallback**: same slug rule, but with a leading `"The "`
    stripped from the name first, e.g. `"The E Street Band"` → `estreetband`
    (not `theestreetband`).
-4. **Suffix-stripped fallback**: same slug rule, but with a trailing
+5. **Suffix-stripped fallback**: same slug rule, but with a trailing
    generational suffix (`Jr.`/`Sr.`/`II`/`III`/`IV`) stripped first, e.g.
    `"Curtis King Jr."` → `curtisking`.
-5. **Nickname-stripped fallback**: same slug rule, but with a quoted
+6. **Nickname-stripped fallback**: same slug rule, but with a quoted
    nickname substring removed first, e.g. `Steve "Muddy" Shews` →
    `steveshews` (not `stevemuddyshews`).
-6. **Manual override** (`RELATION_TAG_ALIAS_OVERRIDES[name.toLowerCase().trim()]`):
+7. **Manual override** (`RELATION_TAG_ALIAS_OVERRIDES[name.toLowerCase().trim()]`):
    for the rare case where BruceBase's real tag matches none of the above —
    e.g. `"Jake Clemons"` → `jake.clemons` (a stray period in the real tag).
 
-Rules 2-5 are computed as a candidate list and tried in that order — first
+Rules 3-6 are computed as a candidate list and tried in that order — first
 match wins (`checkSingleRelationName`'s inner `seen` Set skips re-checking
 a candidate whose slug happens to be identical to an earlier one, e.g. a
 name with neither "The " nor a suffix nor a nickname just tries the same
@@ -465,7 +474,7 @@ fail; no code changes needed elsewhere. This per-name logic lives in
 `checkOnStageRelationTags` so it can be called twice for a name containing
 `" & "` (see below).
 
-7. **`" & "` splitting**: a relation name containing `" & "` (e.g.
+8. **`" & "` splitting**: a relation name containing `" & "` (e.g.
    `"Joe Grushecky & The Houserockers"`) is first split into two independent
    names, each checked separately via `checkSingleRelationName` — so
    `"Joe Grushecky"` → `joegrushecky` and `"The Houserockers"` →
@@ -478,7 +487,7 @@ fail; no code changes needed elsewhere. This per-name logic lives in
    results are pushed as-is (so the user sees both candidates, and both are
    listed as missing).
 
-Result shape: `{ label, candidateTag, matchedTag, method: 'fixed'|'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|'ampersand-combined'|null }[]`,
+Result shape: `{ label, candidateTag, matchedTag, method: 'fixed'|'guest'|'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|'ampersand-combined'|null }[]`,
 mirroring the setlist-song/location checks. A matched tag is colored green
 via `markPassingTagLinks` with a tooltip built from
 `ON_STAGE_RELATION_METHOD_LABEL[method]` (e.g. *"matches a relation listed

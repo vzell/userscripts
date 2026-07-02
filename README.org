@@ -3330,10 +3330,9 @@ check if the lowercase blank stripped version of a song title matches with a sam
 #+end_example
 
 ** all hyperlinks in the processed final page should be rendered in a new tab
-
 ** http://brucebase.wikidot.com/song:born-to-run add MusicBrainz icon to the song title on SONG pages
 
-** bugs
+** TODO check the "At The" tooltip
 
 1.)
 
@@ -3428,7 +3427,7 @@ It's still not rendering in "green" the matched relation names, and now it's als
 @debug/YEAR-BAD.debug - YEAR page entry has 🏷️ glyph, ONLY "brucespringsteen" tag is "green", tags from the companion URL not
 @debugDETAIL-BAD.debug - DETAIL page is now missing the 🏷️ glyph and the yellow warning box around the tags (whereas both were there in the version before, see @debug/DETAIL-BAD-BEFORE.debug), ONLY "brucespringsteen" tag is "green", tags from the companion URL not
 
-** italic big
+** italic
 
 1.)
 
@@ -3486,6 +3485,16 @@ fallback to the full relation name but remove the " & " first like in "Hall & Oa
 "Hall & Oates" => halloates
 
 for the last case also remove a "The" is present
+
+** (Guest)
+
+Specifically when checking if a tag for the relation "Bruce Springsteen" is present and that relation is also marked as "(Guest)"
+
+#+begin_example
+<li><a href="/relation:bruce-springsteen">Bruce Springsteen</a> <span style="font-size:80%;"><em>(Guest)</em></span></li>
+#+end_example
+
+the tage value "guest" must also be present
 
 ** jake.clemons
 

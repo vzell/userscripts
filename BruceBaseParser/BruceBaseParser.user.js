@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.62
+// @version      2.63
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -208,6 +208,7 @@
    */
   const ON_STAGE_RELATION_METHOD_LABEL = {
     fixed: 'always expected because this page has an "On Stage" tab',
+    guest: 'always expected because Bruce Springsteen is listed under the "On Stage" tab marked "(Guest)"',
     exact: 'matches a relation listed under the "On Stage" tab (lowercase, whitespace/punctuation stripped)',
     'the-stripped': 'matches a relation listed under the "On Stage" tab (leading "The " stripped, lowercase, whitespace/punctuation stripped)',
     'suffix-stripped': 'matches a relation listed under the "On Stage" tab (trailing Jr./Sr./II/III/IV stripped, lowercase, whitespace/punctuation stripped)',
@@ -4670,6 +4671,29 @@
   }
 
   /**
+   * Returns true when extractRelations(doc) contains a relation entry
+   * (top-level or band member) whose name matches `name` (case-insensitive)
+   * and whose "extra" annotation mentions "Guest", e.g.
+   * `<li><a href="/relation:bruce-springsteen">Bruce Springsteen</a>
+   * <span style="font-size:80%;"><em>(Guest)</em></span></li>`.
+   * @param {Document} doc
+   * @param {string}   name
+   * @returns {boolean}
+   */
+  function isRelationMarkedGuest(doc, name) {
+    const target = name.toLowerCase();
+    for (const group of extractRelations(doc)) {
+      for (const item of group.items) {
+        if (item.name.toLowerCase() === target && item.extra && /guest/i.test(item.extra)) return true;
+        for (const m of item.members) {
+          if (m.name.toLowerCase() === target && m.extra && /guest/i.test(m.extra)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
    * Lowercase, punctuation/whitespace-stripped slug for a relation name,
    * e.g. "Steven Van Zandt" -> "stevenvanzandt".
    * @param {string} name
@@ -4728,14 +4752,16 @@
   /**
    * Checks that a DETAIL page's "On Stage" tab relation names each have a
    * corresponding tag. `"onstage"` is always expected, independent of any
-   * relation name. Every other relation name is checked via
-   * `checkSingleRelationName` — except a name containing `" & "` (e.g.
-   * `"Joe Grushecky & The Houserockers"`), which is first split into two
-   * independent names, each checked separately (`"Joe Grushecky"` ->
-   * `joegrushecky`, `"The Houserockers"` -> `houserockers` via the
-   * existing "The "-stripped rule); only when *both* halves fail to match
-   * does it fall back to the combined name with `" & "` removed and a
-   * leading `"The "` stripped, e.g. `"Hall & Oates"` -> `halloates`.
+   * relation name. If Bruce Springsteen himself is listed there marked
+   * `"(Guest)"` (see `isRelationMarkedGuest`), `"guest"` is also expected.
+   * Every other relation name is checked via `checkSingleRelationName` —
+   * except a name containing `" & "` (e.g. `"Joe Grushecky & The
+   * Houserockers"`), which is first split into two independent names, each
+   * checked separately (`"Joe Grushecky"` -> `joegrushecky`, `"The
+   * Houserockers"` -> `houserockers` via the existing "The "-stripped
+   * rule); only when *both* halves fail to match does it fall back to the
+   * combined name with `" & "` removed and a leading `"The "` stripped,
+   * e.g. `"Hall & Oates"` -> `halloates`.
    * Returns `[]` when the page has no "On Stage" tab at all.
    * @param {Document}            doc
    * @param {Map<string, number>} tabMap
@@ -4750,6 +4776,14 @@
       matchedTag: isTagPresent('onstage', actualTags) ? 'onstage' : null,
       method: 'fixed',
     }];
+    if (isRelationMarkedGuest(doc, 'Bruce Springsteen')) {
+      items.push({
+        label: 'Relation: Bruce Springsteen (Guest)',
+        candidateTag: 'guest',
+        matchedTag: isTagPresent('guest', actualTags) ? 'guest' : null,
+        method: 'guest',
+      });
+    }
     for (const name of extractOnStageRelationNames(doc)) {
       const ampM = name.match(/^(.+?)\s*&\s*(.+)$/);
       if (ampM) {

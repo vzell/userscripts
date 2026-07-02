@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.63",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "checkOnStageRelationTags now also expects a \"guest\" tag when Bruce Springsteen himself is listed under the \"On Stage\" tab marked \"(Guest)\" (e.g. <li><a href=\"/relation:bruce-springsteen\">Bruce Springsteen</a> <span style=\"font-size:80%;\"><em>(Guest)</em></span></li>), via a new isRelationMarkedGuest(doc, name) helper that reuses extractRelations's existing \"extra\" annotation extraction."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.62",
         "date": "2026-07-02",
         "sections": [
