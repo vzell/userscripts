@@ -1,5 +1,23 @@
 [
     {
+        "version": "2.61",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Extended checkOnStageRelationTags with two more fallback tiers, tried after the existing exact/\"The \"-stripped checks: suffix-stripped (drops a trailing Jr./Sr./II/III/IV before slugifying, e.g. \"Curtis King Jr.\" -> curtisking) and nickname-stripped (drops a quoted nickname before slugifying, e.g. 'Steve \"Muddy\" Shews' -> steveshews). Added a new RELATION_TAG_ALIAS_OVERRIDES table (same pattern as SONG_TAG_ALIAS_OVERRIDES/VENUE_TAG_ALIAS_OVERRIDES) for the remaining case where BruceBase's real tag doesn't match any derivation at all, seeded with 'jake clemons': 'jake.clemons'."
+                ]
+            },
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "addTagsButton's onstage-companion tag panel entries now keep the bb-tag-onstage class alongside bb-tag-ok when a match is found (previously replaced it entirely), so matched onstage-sourced tags stay italic there too, consistent with the DETAIL page."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.60",
         "date": "2026-07-02",
         "sections": [

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.60
+// @version      2.61
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -184,6 +184,20 @@
   };
 
   /**
+   * User-editable relation name -> tag overrides for the "On Stage" tab
+   * relation tag check (see checkOnStageRelationTags). Add an entry only
+   * when neither the exact match, the "The "-stripped, the suffix-stripped
+   * (Jr./Sr./II/III/IV), nor the nickname-stripped (quoted substring removed)
+   * form matches BruceBase's real tag — e.g. a plain typo/irregularity in
+   * the real tag itself, like "jake.clemons" (with a stray period) instead
+   * of the expected "jakeclemons". Keyed by the lowercase, trimmed relation
+   * name (as it appears in extractOnStageRelationNames's output).
+   */
+  const RELATION_TAG_ALIAS_OVERRIDES = {
+    'jake clemons': 'jake.clemons',
+  };
+
+  /**
    * Human-readable explanation per checkOnStageRelationTags `method`, for
    * tag tooltips. Must be declared here (top-level, before the boot dispatch
    * below awaits into run*Page()) rather than near checkOnStageRelationTags
@@ -196,6 +210,9 @@
     fixed: 'always expected because this page has an "On Stage" tab',
     exact: 'matches a relation listed under the "On Stage" tab (lowercase, whitespace/punctuation stripped)',
     'the-stripped': 'matches a relation listed under the "On Stage" tab (leading "The " stripped, lowercase, whitespace/punctuation stripped)',
+    'suffix-stripped': 'matches a relation listed under the "On Stage" tab (trailing Jr./Sr./II/III/IV stripped, lowercase, whitespace/punctuation stripped)',
+    'nickname-stripped': 'matches a relation listed under the "On Stage" tab (quoted nickname removed, lowercase, whitespace/punctuation stripped)',
+    override: 'matches a manual override for a relation listed under the "On Stage" tab (RELATION_TAG_ALIAS_OVERRIDES)',
   };
 
   /** SmartTable column definitions for YEAR OVERVIEW (list) pages. */
@@ -4652,18 +4669,36 @@
   }
 
   /**
+   * Lowercase, punctuation/whitespace-stripped slug for a relation name,
+   * e.g. "Steven Van Zandt" -> "stevenvanzandt".
+   * @param {string} name
+   * @returns {string}
+   */
+  function relationTagSlug(name) {
+    return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  /**
    * Checks that a DETAIL page's "On Stage" tab relation names each have a
-   * corresponding tag, per three rules:
+   * corresponding tag, per these rules:
    * 1. `"onstage"` is always expected, independent of any relation name.
    * 2. Exact match: lowercase, punctuation/whitespace-stripped relation
    *    name, e.g. `"Steven Van Zandt"` -> `"stevenvanzandt"`.
    * 3. Same as #2, but with a leading `"The "` stripped first, e.g.
-   *    `"The E Street Band"` -> `"estreetband"` (tried only when #2 fails).
-   * Returns `[]` when the page has no "On Stage" tab at all.
+   *    `"The E Street Band"` -> `"estreetband"`.
+   * 4. Same as #2, but with a trailing generational suffix (Jr./Sr./II/
+   *    III/IV) stripped first, e.g. `"Curtis King Jr."` -> `"curtisking"`.
+   * 5. Same as #2, but with a quoted nickname removed first, e.g.
+   *    `Steve "Muddy" Shews` -> `"steveshews"`.
+   * 6. Manual override (`RELATION_TAG_ALIAS_OVERRIDES`) for the rare case
+   *    where BruceBase's real tag matches none of the above, e.g. a typo
+   *    like `"jake.clemons"` (with a stray period).
+   * Rules 2-5 are tried in that order (first match wins); returns `[]` when
+   * the page has no "On Stage" tab at all.
    * @param {Document}            doc
    * @param {Map<string, number>} tabMap
    * @param {Set<string>}         actualTags
-   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: 'fixed'|'exact'|'the-stripped'|null}[]}
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: 'fixed'|'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|null}[]}
    */
   function checkOnStageRelationTags(doc, tabMap, actualTags) {
     if (!tabMap.has('On Stage')) return [];
@@ -4674,18 +4709,32 @@
       method: 'fixed',
     }];
     for (const name of extractOnStageRelationNames(doc)) {
-      const exactTag = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (isTagPresent(exactTag, actualTags)) {
-        items.push({ label: `Relation: ${name}`, candidateTag: exactTag, matchedTag: exactTag, method: 'exact' });
+      const theStripped = name.replace(/^the\s+/i, '');
+      const suffixStripped = name.replace(/\s+(?:Jr\.?|Sr\.?|III|II|IV)$/i, '').trim();
+      const nicknameStripped = name.replace(/\s*"[^"]*"\s*/g, ' ').replace(/\s+/g, ' ').trim();
+      const candidates = [
+        { tag: relationTagSlug(name), method: 'exact' },
+        { tag: relationTagSlug(theStripped), method: 'the-stripped' },
+        { tag: relationTagSlug(suffixStripped), method: 'suffix-stripped' },
+        { tag: relationTagSlug(nicknameStripped), method: 'nickname-stripped' },
+      ];
+      const seen = new Set();
+      let match = null;
+      for (const c of candidates) {
+        if (seen.has(c.tag)) continue;
+        seen.add(c.tag);
+        if (isTagPresent(c.tag, actualTags)) { match = c; break; }
+      }
+      if (match) {
+        items.push({ label: `Relation: ${name}`, candidateTag: match.tag, matchedTag: match.tag, method: match.method });
         continue;
       }
-      const strippedTag = name.replace(/^the\s+/i, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (strippedTag !== exactTag && isTagPresent(strippedTag, actualTags)) {
-        items.push({ label: `Relation: ${name}`, candidateTag: strippedTag, matchedTag: strippedTag, method: 'the-stripped' });
+      const overrideTag = RELATION_TAG_ALIAS_OVERRIDES[name.toLowerCase().trim()];
+      if (overrideTag && isTagPresent(overrideTag, actualTags)) {
+        items.push({ label: `Relation: ${name}`, candidateTag: overrideTag, matchedTag: overrideTag, method: 'override' });
         continue;
       }
-      const candidate = strippedTag !== exactTag ? strippedTag : exactTag;
-      items.push({ label: `Relation: ${name}`, candidateTag: candidate, matchedTag: null, method: null });
+      items.push({ label: `Relation: ${name}`, candidateTag: candidates[0].tag, matchedTag: null, method: null });
     }
     return items;
   }
@@ -6175,7 +6224,7 @@
           : locationMatch
           ? `Tag "${tag}" verified: matches event ${locationMatch.label}`
           : `Tag "${tag}" verified: ${relationMatch.label} — ${ON_STAGE_RELATION_METHOD_LABEL[relationMatch.method]}`;
-        return { tag, html: `<a href="/system:page-tags/tag/${esc(tag)}#pages" class="bb-tag-ok" style="color:#2a2; font-weight:bold; cursor:help;" title="${esc(title)}">${esc(tag)}</a>`,
+        return { tag, html: `<a href="/system:page-tags/tag/${esc(tag)}#pages" class="bb-tag-onstage bb-tag-ok" style="color:#2a2; font-weight:bold; cursor:help;" title="${esc(title)}">${esc(tag)}</a>`,
           missing: false, spurious: false, tooltip: '' };
       }
       return { tag, html: `<a href="/system:page-tags/tag/${esc(tag)}#pages" class="bb-tag-onstage" title="${esc(`Tag "${tag}" found on the companion "On Stage" page (${onstageResult.url})`)}">${esc(tag)}</a>`,

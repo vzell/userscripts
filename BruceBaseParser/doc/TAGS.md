@@ -37,6 +37,8 @@ which each get their own separate check independent of
 | `CA_PROVINCE_NAMES` | `{abbr: 'Full Province Name'}` — all 13 Canadian provinces/territories, for the location tag check |
 | `COUNTRY_EXTRA_TAGS` | `{countryName: ['extraTag', …]}` — extra continent/region tags expected alongside a bare country's own slug (e.g. `England` → `unitedkingdom`, `europe`); not exhaustive, user-extendable |
 | `VENUE_TAG_ALIAS_OVERRIDES` | `{venueOrDetailNameLowercase: 'expectedTag' \| null}` — user-editable manual overrides for the location tag check; `null` means "no tag expected for this name at all" (empty by default) |
+| `RELATION_TAG_ALIAS_OVERRIDES` | `{relationNameLowercase: 'expectedTag'}` — user-editable manual overrides for the "On Stage" tab relation tag check, for the rare case where none of the exact/"The "-stripped/suffix-stripped/nickname-stripped derivations match BruceBase's real tag (e.g. a typo like `jake.clemons`) |
+| `ON_STAGE_RELATION_METHOD_LABEL` | `{method: 'human-readable reason'}` for the relation tag check's tooltips — declared in this top block (not near `checkOnStageRelationTags`) since a `const` here would otherwise sit in its temporal dead zone when the boot dispatch reaches it |
 
 `MANAGED_CONTENT_TAGS` covers: event types (`gig`, `interview`, `nogig`,
 `offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck`) plus `bootleg`,
@@ -434,17 +436,36 @@ entry; otherwise:
    established convention already used elsewhere in this file for
    relation-participant rendering), the lowercase, punctuation/whitespace-stripped
    form must match a tag, e.g. `"Steven Van Zandt"` → `stevenvanzandt`.
-3. **"The"-stripped fallback**: only tried when #2 fails — same slug rule,
-   but with a leading `"The "` stripped from the name first, e.g.
-   `"The E Street Band"` → `estreetband` (not `theestreetband`).
+3. **"The"-stripped fallback**: same slug rule, but with a leading `"The "`
+   stripped from the name first, e.g. `"The E Street Band"` → `estreetband`
+   (not `theestreetband`).
+4. **Suffix-stripped fallback**: same slug rule, but with a trailing
+   generational suffix (`Jr.`/`Sr.`/`II`/`III`/`IV`) stripped first, e.g.
+   `"Curtis King Jr."` → `curtisking`.
+5. **Nickname-stripped fallback**: same slug rule, but with a quoted
+   nickname substring removed first, e.g. `Steve "Muddy" Shews` →
+   `steveshews` (not `stevemuddyshews`).
+6. **Manual override** (`RELATION_TAG_ALIAS_OVERRIDES[name.toLowerCase().trim()]`):
+   for the rare case where BruceBase's real tag matches none of the above —
+   e.g. `"Jake Clemons"` → `jake.clemons` (a stray period in the real tag).
 
-Result shape: `{ label, candidateTag, matchedTag, method: 'fixed'|'exact'|'the-stripped'|null }[]`,
+Rules 2-5 are computed as a candidate list and tried in that order — first
+match wins (`checkOnStageRelationTags`'s inner `seen` Set skips re-checking
+a candidate whose slug happens to be identical to an earlier one, e.g. a
+name with neither "The " nor a suffix nor a nickname just tries the same
+slug once). Add entries to `RELATION_TAG_ALIAS_OVERRIDES` only when all four
+fail; no code changes needed elsewhere.
+
+Result shape: `{ label, candidateTag, matchedTag, method: 'fixed'|'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|null }[]`,
 mirroring the setlist-song/location checks. A matched tag is colored green
 via `markPassingTagLinks` with a tooltip built from
 `ON_STAGE_RELATION_METHOD_LABEL[method]` (e.g. *"matches a relation listed
 under the 'On Stage' tab (lowercase, whitespace/punctuation stripped)"*). An
 unmatched relation (or a missing `"onstage"` tag itself) is rendered like a
-missing tag, showing `candidateTag`.
+missing tag, showing `candidateTag` (the *first* candidate's slug, i.e. the
+plain exact-match one, since that's the most literal "expected" form to show
+the user even though a stripped variant might be closer to BruceBase's
+actual convention).
 
 **Important ordering note**: `"onstage"` is also a member of
 `MANAGED_CONTENT_TAGS` (it's a real event type for actual `/onstage:` pages),
@@ -484,9 +505,13 @@ rendered in, then uses `tagToAnchor.get(matchedTag)` (not
 every matched-tag marking loop. `addTagsButton`'s panel doesn't mutate a
 live DOM the same way, so its `onstageItems` entries instead check
 `matchedSongsByTag`/`matchedLocationsByTag`/`matchedRelationsByTag` directly
-and render green (`bb-tag-ok`) with the verification tooltip when a match
-exists, instead of unconditionally using the plain "found on companion page"
-style.
+and render green (`class="bb-tag-onstage bb-tag-ok"`) with the verification
+tooltip when a match exists, instead of unconditionally using the plain
+"found on companion page" style. Both branches keep the `bb-tag-onstage`
+class even when matched, since `.bb-tag-onstage`'s `font-style: italic`
+(unconditional, no `!important` conflict with `.bb-tag-ok`'s `color`) is
+meant to always distinguish a companion-page-sourced tag regardless of
+whether it also turns green.
 
 `onStageRelationRulesExplanation()` returns a one-line summary of these same
 three rules; it's appended to `makeOnstageTagsGlyphSpan`'s tooltip (see
