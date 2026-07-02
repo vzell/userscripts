@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.78
+// @version      2.84
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -340,14 +340,98 @@
     return /^[a-zA-Z][\w-]*:/.test(firstSegment);
   }
 
+  /** sessionStorage key for rememberActiveTabForPagination/restorePaginatedTab. */
+  const PAGER_TAB_RESTORE_KEY = 'bb-pager-restore-tab';
+
+  /**
+   * Returns the nav label of the currently visible `.yui-content` tab panel
+   * (the one without `display:none`), or null if none is found. Panel
+   * visibility — not a `.selected`/`[title="active"]` marker on the nav
+   * `<li>` — is used because those attributes reflect the page's
+   * server-rendered *default* tab and aren't reliably updated by a client-
+   * side tab switch, whereas panel visibility is the one thing the tab
+   * widget must get right for tab-switching to work at all.
+   * @returns {string|null}
+   */
+  function getVisibleTabLabel() {
+    const visiblePanel = [...document.querySelectorAll('.yui-content > [id^="wiki-tab-0-"]')]
+      .find(div => div.style.display !== 'none');
+    const idx = visiblePanel?.id.match(/^wiki-tab-0-(\d+)$/)?.[1];
+    if (idx === undefined) return null;
+    return [...document.querySelectorAll('.yui-nav em')][idx]?.textContent.trim() || null;
+  }
+
+  /**
+   * Records the currently visible tab's label (see getVisibleTabLabel) and
+   * this page's own path (with any "/p/N" pagination suffix stripped) to
+   * sessionStorage, so restorePaginatedTab() can re-select the same tab
+   * once the paginated page finishes loading. A `.pager` link (see
+   * forceNewTab) is a real same-tab page navigation, and BruceBase's own
+   * tabview always selects the first tab on a fresh page load — without
+   * this, clicking "next page" from e.g. the "Performances" tab would
+   * always land back on the first tab instead.
+   */
+  function rememberActiveTabForPagination() {
+    const label = getVisibleTabLabel();
+    if (!label) return;
+    sessionStorage.setItem(PAGER_TAB_RESTORE_KEY, JSON.stringify({
+      label,
+      path: location.pathname.replace(/\/p\/\d+$/, ''),
+    }));
+  }
+
+  /**
+   * Re-selects the tab recorded by rememberActiveTabForPagination(), if any,
+   * by clicking its nav link (exactly what a real user click would do, so
+   * BruceBase's own tabview switches panels normally). No-op when nothing
+   * was recorded, its path doesn't match the current page's (e.g. the
+   * stored click was abandoned in favor of navigating elsewhere), or the
+   * recorded tab is already the one showing — e.g. it's the page's default
+   * tab, as "Performances" is on a relation page like garry-tallent's.
+   * Re-clicking an already-active tab isn't a no-op: it makes BruceBase's
+   * own tab widget re-fetch/reset that panel back to its own default (page
+   * 1) state, discarding the page-2+ content the "/p/N" navigation already
+   * correctly server-rendered.
+   */
+  function restorePaginatedTab() {
+    const raw = sessionStorage.getItem(PAGER_TAB_RESTORE_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(PAGER_TAB_RESTORE_KEY);
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      return;
+    }
+    if (data.path !== location.pathname.replace(/\/p\/\d+$/, '')) return;
+    if (getVisibleTabLabel() === data.label) return;
+    const targetEm = [...document.querySelectorAll('.yui-nav em')]
+      .find(em => em.textContent.trim() === data.label);
+    targetEm?.closest('a')?.click();
+  }
+
   /**
    * Forces a single <a> element to open in a new tab, but only when it
-   * links to a "<category>:" BruceBase page (see isCategoryPageHref).
+   * links to a "<category>:" BruceBase page (see isCategoryPageHref) and
+   * isn't part of a tab's internal `<div class="pager">` pagination widget
+   * (e.g. a "Performances" tab with many results, linking to "/relation:
+   * garry-tallent/p/2" etc.) — those must keep their normal same-tab
+   * behaviour or the pagination breaks (opens a new, blank tab instead of
+   * advancing to the next page in place). Pager links instead get a
+   * one-time click listener that remembers the active tab so it can be
+   * restored after the page reloads — see rememberActiveTabForPagination.
    * @param {Element} a Anchor element to update.
    */
   function forceNewTab(a) {
     const href = a.getAttribute('href');
     if (!href || !isCategoryPageHref(href)) return;
+    if (a.closest('.pager')) {
+      if (!a.dataset.bbPagerWired) {
+        a.dataset.bbPagerWired = '1';
+        a.addEventListener('click', rememberActiveTabForPagination);
+      }
+      return;
+    }
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
   }
@@ -377,6 +461,7 @@
   addStyles();
   createTooltipElement();
   startNewTabLinkGuard();
+  restorePaginatedTab();
 
   const path        = location.pathname.replace(/^\//, '');
   const isHomePage   = path === '' || path === 'start';
@@ -1230,6 +1315,30 @@
     return result;
   }
 
+  /**
+   * Wires up the "⇄ Original Page" button for VENUE/RETAIL/SONG/RELATION
+   * pages using a pure CSS toggle (body.bb-original-view — see addStyles),
+   * instead of the innerHTML clone-and-swap that setupGlobalToggle uses.
+   * Unlike DETAIL/YEAR pages, these page types' own #page-content isn't
+   * restructured by this script — annotations are only ever appended to
+   * .page-tags (all four) and .yui-nav em (RELATION only), all already
+   * hidden by the .bb-original-view CSS rules — so #page-content is never
+   * hidden or cloned here, which keeps BruceBase's own tab-switching JS
+   * (bound to these exact DOM nodes at page load, where the page has tabs)
+   * working in both toggle states. setupGlobalToggle's clone loses that
+   * binding on its non-live copy, breaking tab clicks whenever that copy
+   * is the one shown.
+   * @param {HTMLButtonElement} btn
+   */
+  function setupAnnotationOnlyToggle(btn) {
+    let showingOriginal = false;
+    btn.addEventListener('click', () => {
+      showingOriginal = !showingOriginal;
+      btn.textContent = showingOriginal ? '⇄ Processed Page' : '⇄ Original Page';
+      document.body.classList.toggle('bb-original-view', showingOriginal);
+    });
+  }
+
   // Wires up the pre-existing #bb-global-toggle button.
   // Creates the hidden original-view div beside #page-content so that all event
   // listeners on the processed content survive toggling.
@@ -1353,6 +1462,13 @@
     if (oldGlobal) {
       if (pageType === 'detail') {
         rewireDetailToggle(contentEl);
+      } else if (pageType === 'venue' || pageType === 'retail' || pageType === 'song' || pageType === 'relation') {
+        document.body.classList.remove('bb-original-view');
+        const freshGlobal = oldGlobal.cloneNode(true);
+        freshGlobal.textContent = '⇄ Original Page';
+        freshGlobal.disabled = false;
+        oldGlobal.replaceWith(freshGlobal);
+        setupAnnotationOnlyToggle(freshGlobal);
       } else {
         document.getElementById('bb-page-original')?.remove();
         const freshGlobal = oldGlobal.cloneNode(true);
@@ -3399,7 +3515,7 @@
     log('[DBG] runVenuePage: #bb-btn-container in DOM =', document.getElementById('bb-btn-container'));
     log('[DBG] runVenuePage: pageTitle.nextElementSibling =', pageTitle.nextElementSibling);
 
-    setupGlobalToggle(globalBtn, content, originalHtml);
+    setupAnnotationOnlyToggle(globalBtn);
     annotatePageTitleWithWarnings();
     log('[DBG] runVenuePage: done');
   }
@@ -3450,7 +3566,7 @@
     log('[DBG] runRetailPage: #bb-btn-container in DOM =', document.getElementById('bb-btn-container'));
     log('[DBG] runRetailPage: pageTitle.nextElementSibling =', pageTitle.nextElementSibling);
 
-    setupGlobalToggle(globalBtn, content, originalHtml);
+    setupAnnotationOnlyToggle(globalBtn);
     log('[DBG] runRetailPage: done');
   }
 
@@ -3492,7 +3608,7 @@
     btnContainer.append(globalBtn, saveBtn, loadBtn);
     pageTitle.after(btnContainer);
 
-    setupGlobalToggle(globalBtn, content, originalHtml);
+    setupAnnotationOnlyToggle(globalBtn);
     annotatePageTitleWithWarnings();
   }
 
@@ -3533,7 +3649,7 @@
     btnContainer.append(globalBtn, saveBtn, loadBtn);
     pageTitle.after(btnContainer);
 
-    setupGlobalToggle(globalBtn, content, originalHtml);
+    setupAnnotationOnlyToggle(globalBtn);
     annotatePageTitleWithWarnings();
   }
 
@@ -8096,6 +8212,7 @@
           ? `Tab "${label}" reports no content available.`
           : `Tab "${label}" is empty.`;
       const warn = document.createElement('span');
+      warn.className = 'bb-relation-tab-warn';
       warn.textContent = ' ⚠️';
       warn.dataset.msg = msg;
       warn.title = msg;
@@ -8882,6 +8999,7 @@
       .bb-original-view .bb-tag-spurious,
       .bb-original-view .bb-tag-onstage,
       .bb-original-view .bb-icon-sorry,
+      .bb-original-view .bb-relation-tab-warn,
       .bb-original-view .bb-setlist-tab-ann { display: none !important; }
       .bb-original-view .bb-tags-warn-box   { border: none !important; background: none !important; padding: 0 !important; }
       .bb-original-view .bb-setlist-tab-match,

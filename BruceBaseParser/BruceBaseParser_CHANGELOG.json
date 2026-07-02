@@ -1,5 +1,77 @@
 [
     {
+        "version": "2.84",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fetching /relation:garry-tallent, /relation:garry-tallent/p/2, /song:the-river, and /song:the-river/p/2 directly showed the server correctly returns page-2 content for every paginated tab on both pages — so v2.83's regression on garry-tallent (\"always the data from the first internal paginated page is shown\") wasn't a detection bug, it was restorePaginatedTab() redundantly re-clicking a tab that was ALREADY showing: garry-tallent's paginated \"Performances\" tab happens to be the page's default (tab index 0), so after the \"/p/2\" reload it's already correctly visible with its own page-2 content — but the unconditional click on its nav link made BruceBase's own tab widget re-fetch/reset that panel back to page 1. restorePaginatedTab() now skips the click when the recorded tab is already the one visible (factored the detection into a shared getVisibleTabLabel() used by both remember and restore). Confirmed /song:the-river's \"Performances\" tab (index 1, not the default \"Credits\") still gets switched to correctly, since that tab genuinely isn't showing yet after reload."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.83",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "rememberActiveTabForPagination (v2.82) detected the active tab via `.yui-nav li.selected em`/`[title=\"active\"]`, but those markers reflect BruceBase's server-rendered *default* tab (e.g. \"Credits\" is always tab 0 on a SONG page) and aren't updated when the user switches tabs client-side — so it silently found nothing whenever the user had actually navigated away from the default tab (e.g. into \"Performances\") before paging, and no tab got restored at all: the page reloaded on the default tab, which — confirmed by directly comparing a fresh fetch of /relation:garry-tallent against /relation:garry-tallent/p/2 — has no relation to the paginated tab's own page-2 content, making it look like pagination was stuck on page 1. Switched detection to the actual, unambiguous signal a tab widget depends on: which `.yui-content` panel has no `display:none` (i.e. is actually visible), not a possibly-stale nav-item class/attribute."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.82",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Clicking a `.pager` pagination link (v2.81 fix) is a real same-tab page navigation to e.g. \"/relation:garry-tallent/p/2\", and BruceBase's own tabview always selects the first tab (e.g. \"Credits\") on that fresh page load — so paging forward from e.g. the \"Performances\" tab lost the user's place, landing back on the first tab instead of staying on \"Performances\". forceNewTab now wires a one-time click listener (rememberActiveTabForPagination) onto `.pager` links that records the currently active tab's label plus the page's path (with \"/p/N\" stripped) to sessionStorage; restorePaginatedTab(), run once at script start on every page, re-selects that tab (by clicking its nav link, same as a real user would) when the path matches, then clears the stored entry either way."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.81",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "forceNewTab (the target=\"_blank\" link guard from v2.71/v2.72) forced a new tab on a tab's internal <div class=\"pager\"> pagination links too (e.g. a \"Performances\" tab with many results linking to \"/relation:garry-tallent/p/2\", \"/song:the-river/p/2\", etc., confirmed via debug/internalPaging.html) since their href still matches the \"<category>:\" pattern — breaking pagination by opening a new, blank browser tab instead of advancing to the next page in place. forceNewTab now skips any anchor inside .pager via a[href].closest('.pager'), leaving that click to behave normally."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.80",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "VENUE, RETAIL, and SONG pages had the same \"⇄ Original Page\" bugs just fixed for RELATION pages in v2.79 (annotateVenuePageTags/annotateRetailPageTags/annotateSongPageTags all wrap the same outside-#page-content .page-tags the identical way, and all three page types render their own BruceBase yui-navset tabs the same way RELATION does): the tag warning box/highlighting never got hidden, and clicking a tab did nothing whenever the non-live innerHTML clone was the one shown. setupRelationOriginalToggle (v2.79) renamed to setupAnnotationOnlyToggle and reused for all four page types — none of them restructure #page-content beyond simple .page-tags/.yui-nav annotations, so the same CSS-only body.bb-original-view toggle (no clone, no hiding #page-content) applies equally. loadPageCache's toggle-rewiring branch extended to match (venue/retail/song/relation all now use setupAnnotationOnlyToggle after a Load)."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.79",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "On RELATION pages, the \"⇄ Original Page\" toggle used the generic setupGlobalToggle: an innerHTML clone of #page-content shown/hidden alongside the live one. This caused two bugs: (1) the .page-tags warning box and green/red tag highlighting live outside #page-content entirely, so toggling never touched them at all; (2) BruceBase's own tab-switching JS (yahooui/tabview-min.js) binds its click handlers to the exact DOM nodes present at page load — the cloned copy has none, so clicking a .yui-nav tab did nothing whenever that non-live clone was the one shown. Added setupRelationOriginalToggle, which instead reuses the DETAIL page's body.bb-original-view CSS-class approach: #page-content is never hidden or cloned (so BruceBase's tab JS, bound once at load, keeps working in both toggle states), and a new .bb-relation-tab-warn class on the empty-tab ⚠️ span lets the existing .bb-original-view CSS rules (already covering .bb-tags-warn-box/.bb-tag-missing/.bb-tag-spurious/.bb-tag-ok) hide every RELATION-page annotation correctly. loadPageCache's relation branch updated to match."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.78",
         "date": "2026-07-03",
         "sections": [
