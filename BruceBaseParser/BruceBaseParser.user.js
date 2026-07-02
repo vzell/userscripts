@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.52
+// @version      2.53
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -125,6 +125,7 @@
    */
   const SONG_TAG_ALIAS_OVERRIDES = {
     // 'incident on 57th street': 'incident57',
+    'rosalita (come out tonight)': 'rosalita',
   };
 
   /** USPS state abbreviation -> full state name, for the event-name/venue-name location tag check. */
@@ -5643,7 +5644,7 @@
   function checkSetlistSongTags(detailSections, actualTags) {
     const uniqueSongs = [...new Set(detailSections.flatMap(s => s.songs))];
     return uniqueSongs.map(song => {
-      const exactTag = song.toLowerCase().replace(/\s+/g, '');
+      const exactTag = song.toLowerCase().replace(/[^a-z0-9]/g, '');
       if (isTagPresent(exactTag, actualTags)) return { song, matchedTag: exactTag, method: 'exact' };
 
       const aliasTag = computeSongTagAlias(song);
@@ -5749,6 +5750,30 @@
   }
 
   /**
+   * Checks a venue name against its expected tag(s). Handles a descriptive
+   * "At The" middle part (e.g. "Blue Cross Arena At The War Memorial") by
+   * splitting into two independently-checked names ("Blue Cross Arena" and
+   * "War Memorial", each expecting its own tag — "bluecrossarena" and
+   * "warmemorial") instead of a single combined-name tag; otherwise falls
+   * back to the plain single-name check (including the city-prefix rule).
+   * @param {string}      name       - Raw venue name text.
+   * @param {string|null} cityHint   - City name, for checkLocationNameTag's city-prefix fallback.
+   * @param {Set<string>} actualTags - Lowercase tags present on the page.
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null}[]}
+   */
+  function checkVenueNameTag(name, cityHint, actualTags) {
+    const atTheM = name.match(/^(.+?)\s+at\s+the\s+(.+)$/i);
+    if (atTheM) {
+      return [
+        checkLocationNameTag('Venue', atTheM[1].trim(), actualTags, cityHint),
+        checkLocationNameTag('Venue', atTheM[2].trim(), actualTags, cityHint),
+      ].filter(Boolean);
+    }
+    const item = checkLocationNameTag('Venue', name, actualTags, cityHint);
+    return item ? [item] : [];
+  }
+
+  /**
    * Checks a parsed location (venue, venue detail, city, state/province,
    * country/region) against actualTags. Shared by the DETAIL-page and
    * VENUE-page location checks; mirrors checkSetlistSongTags's result shape.
@@ -5759,8 +5784,7 @@
   function checkParsedLocationTags(loc, actualTags) {
     if (!loc) return [];
     const items = [];
-    const venueItem = checkLocationNameTag('Venue', loc.venueName, actualTags, loc.city);
-    if (venueItem) items.push(venueItem);
+    items.push(...checkVenueNameTag(loc.venueName, loc.city, actualTags));
     if (loc.venueDetail) {
       const detailItem = checkLocationNameTag('Venue detail', loc.venueDetail, actualTags);
       if (detailItem) items.push(detailItem);
@@ -5932,7 +5956,7 @@
     const missingItems = [
       ...missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' })),
       ...unmatchedSongs.map(r => {
-        const candidate = computeSongTagAlias(r.song) || r.song.toLowerCase().replace(/\s+/g, '');
+        const candidate = computeSongTagAlias(r.song) || r.song.toLowerCase().replace(/[^a-z0-9]/g, '');
         return { tag: candidate, html: null, missing: true, spurious: false,
           tooltip: `No tag found for setlist song "${r.song}" (tried exact match and derived alias "${candidate}")` };
       }),
@@ -6736,7 +6760,7 @@
     // Append one missing-tag span per setlist song with no corresponding tag,
     // showing the derived-alias candidate so it's clear what to look for/add.
     for (const r of unmatchedSongs) {
-      const candidate = computeSongTagAlias(r.song) || r.song.toLowerCase().replace(/\s+/g, '');
+      const candidate = computeSongTagAlias(r.song) || r.song.toLowerCase().replace(/[^a-z0-9]/g, '');
       const missingSpan = document.createElement('span');
       missingSpan.className = 'bb-tag-missing';
       missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';

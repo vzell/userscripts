@@ -211,8 +211,10 @@ song titles across all sections (`detailSections.flatMap(s => s.songs)`) and,
 for each, tries three lookups in order — the first one that matches an
 actual tag wins:
 
-1. **Exact match**: `song.toLowerCase().replace(/\s+/g, '')` — e.g.
-   `"WRECKING BALL"` → `wreckingball`.
+1. **Exact match**: `song.toLowerCase().replace(/[^a-z0-9]/g, '')` — lowercase
+   with every non-alphanumeric character deleted (not just whitespace), e.g.
+   `"WRECKING BALL"` → `wreckingball`, `"LIVIN' IN THE FUTURE"` →
+   `livininthefuture`, `"DEVIL'S ARCADE"` → `devilsarcade`.
 2. **Derived alias** (`computeSongTagAlias(title)`): splits the title on
    whitespace and, per word:
    - a dotted initialism (`^([A-Za-z]\.)+$`, e.g. `"U.S.A."`) contributes ALL
@@ -232,10 +234,12 @@ actual tag wins:
    → `bitusa`, `"BECAUSE THE NIGHT"` → `btn`, `"DARKNESS ON THE EDGE OF TOWN"`
    → `doteot`.
 3. **Manual override** (`SONG_TAG_ALIAS_OVERRIDES[song.toLowerCase().trim()]`):
-   a small, user-editable lookup table (empty by default, see "Constants"
-   above) for the rare case where BruceBase's real tag matches neither of the
-   above — e.g. an idiosyncratic/legacy tag. Add entries here as exceptions
-   are discovered; no code changes needed elsewhere.
+   a small, user-editable lookup table (see "Constants" above) for the rare
+   case where BruceBase's real tag matches neither of the above — e.g.
+   `"ROSALITA (COME OUT TONIGHT)"` → `rosalita` (real tag is just the first
+   word, not the full-title slug `rosalitacomeouttonight` nor an acronym
+   alias). Add entries here as exceptions are discovered; no code changes
+   needed elsewhere.
 
 Result shape: `{ song, matchedTag, method: 'exact'|'alias'|'override'|null }[]`.
 A matched song's tag is colored green via `markPassingTagLinks`/inline
@@ -292,11 +296,22 @@ Tag derivation, per component:
   extra tags from `COUNTRY_EXTRA_TAGS` (`England` → also `unitedkingdom`,
   `europe`; `Finland` → also `europe`, `scandinavia`).
 
-Each venue-name check (`checkLocationNameTag`) first looks up
-`VENUE_TAG_ALIAS_OVERRIDES` (keyed by the lowercase, trimmed name), then
-tries the plain full-name slug, then — only if a `cityHint` was supplied and
-the name begins with it — the slug of just the remainder after the city
-prefix. This handles two real-world cases:
+The venue name is checked by `checkVenueNameTag(name, cityHint, actualTags)`,
+called from `checkParsedLocationTags` instead of a single
+`checkLocationNameTag` call. It first looks for a descriptive `" At The "`
+middle part (case-insensitive, e.g. `"Blue Cross Arena At The War
+Memorial"`); if found, it splits into two independently-checked names —
+`"Blue Cross Arena"` and `"War Memorial"`, each expecting its own tag
+(`bluecrossarena` and `warmemorial`) — instead of a single combined-name
+tag (`bluecrossarenaatthewarmemorial`, which BruceBase never uses). If no
+`" At The "` is found, it falls back to a single `checkLocationNameTag`
+call for the whole name.
+
+`checkLocationNameTag` itself first looks up `VENUE_TAG_ALIAS_OVERRIDES`
+(keyed by the lowercase, trimmed name), then tries the plain full-name slug,
+then — only if a `cityHint` was supplied and the name begins with it — the
+slug of just the remainder after the city prefix. This handles two
+real-world cases:
 - Set an override value to `null` to mean "no tag is expected for this name
   at all" (e.g. a generic building name like `"Spotify HQ"` that BruceBase
   never tags, favoring the more specific venue detail — `"Adelphi (The)"` →

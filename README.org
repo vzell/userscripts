@@ -3213,7 +3213,7 @@ extend the tag checks also to the venue name (in the page title) in VENUE pages 
 
 One pattern here is, the venue detail which is present on EVENT DETAIL pages is never present on the VENUE page itself
 
-** files tag value
+** DONE files tag value
 
 1.)
 
@@ -3253,6 +3253,60 @@ rename the current "Tags"
 #+end_example
 
 in the "Tags"-button panel of '<div class="bb-event-tab-row">' to the complete event name plus " Tags" appended
+
+** some more tag value check rules
+
+On e.g. http://brucebase.wikidot.com/gig:2008-03-06-blue-cross-arena-rochester-ny
+the event name is "2008-03-06 Blue Cross Arena At The War Memorial, Rochester, NY" and the actual
+tag values values are "06 2008 americanland badlands bluecrossarena bootleg brucespringsteen btn btr devilsarcade gig gitsc gypsybiker handwritten jacksoncage livininthefuture lonesomeday looseends ltd lwh magic march memorabilia news newyork(ny) night radionowhere rits rochester rosalita rtb setlist sto storyteller therising thursday ticket tour_mgc tpl usa warmemorial woasd"
+
+Two things here:
+
+1.)
+
+Implement the following additional song title tag value checks
+
+| Song title           | Tag value        |
+|----------------------+------------------|
+| LIVIN' IN THE FUTURE | livininthefuture |
+| DEVIL'S ARCADE       | devilsarcade     |
+|                      |                  |
+
+2.)
+
+If a venue name e.g. "Blue Cross Arena At The War Memorial" has the descriptive middle part "At The" conclude that the
+tag values for the two parts before e.g "Blue Cross Arena" and after "War Memorial" should be present e.g "bluecrossarena" and "warmemorial"
+
+3.)
+
+Add
+
+#+begin_example
+'ROSALITA (COME OUT TONIGHT)': 'rosalita'
+#+end_example
+
+to the SONG_TAG_ALIAS_OVERRIDES variable
+
+** SONG page tag checks
+
+On SONG pages e.g. http://brucebase.wikidot.com/song:born-to-run implement the following additionally tag value checks:
+
+1.)
+
+the first character e.g. "b" of the song title "BORN TO RUN" should be present as tag value
+
+2.) 
+
+the tag value "borntorun" 
+
+3.)
+
+"lyricsheet" as tag value should be present if the "Gallery" tab on the SONG page has "lyricsheet" in the filename
+
+#+begin_example
+<td><a href="http://brucebase.wdfiles.com/local--files/files:song-lyricsheet/lyricsheet_borntorun_early1974.jpg" class="with-lb"><img src="http://brucebase.wdfiles.com/local--resized-images/files:song-lyricsheet/lyricsheet_borntorun_early1974.jpg/thumbnail.jpg" alt="" class="gallery-image-size-thumbnail"></a></td>
+#+end_example
+
 
 ** all hyperlinks in the processed final page should be rendered in a new tab
 

@@ -1,5 +1,19 @@
 [
     {
+        "version": "2.53",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "checkSetlistSongTags's exact-match step now strips all punctuation (not just whitespace) before comparing to a tag, so song titles with apostrophes match correctly, e.g. \"LIVIN' IN THE FUTURE\" -> livininthefuture, \"DEVIL'S ARCADE\" -> devilsarcade.",
+                    "Added a venue-name \"At The\" splitting rule (checkVenueNameTag): a venue name with a descriptive \" At The \" middle part (e.g. \"Blue Cross Arena At The War Memorial\") now expects two separate tags, one per side (\"bluecrossarena\" and \"warmemorial\"), instead of a single combined-name tag. Applies on both DETAIL and VENUE pages via the shared checkParsedLocationTags.",
+                    "Added 'rosalita (come out tonight)': 'rosalita' to SONG_TAG_ALIAS_OVERRIDES for the one real exception found so far where the setlist song title's tag is neither the exact-match nor the derived-alias candidate."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.52",
         "date": "2026-07-02",
         "sections": [
