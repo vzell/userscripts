@@ -3358,13 +3358,44 @@ mention the 'Venue "At The" splitting rule' fact also on the corresponding tag v
 ** onstage, offstage, soundcheck
 *** onstage
 
-If an event type is of type "gig" and the DETAIL page e.g http://brucebase.wikidot.com/gig:2025-10-26-stone-pony-asbury-park-nj
-and has a named "On Stage" tab, additionally fetch the corresponding "onstage" URL e.g. http://brucebase.wikidot.com/onstage:2025-10-26-stone-pony-asbury-park-nj/noredirect/true
-by replacing "gig->onstage" and appending "/noredirect/true" to the original DETAIL URL.
+1.)
+
+If an event type is of type "gig" or "rehearsal" and the DETAIL page e.g http://brucebase.wikidot.com/gig:2025-10-26-stone-pony-asbury-park-nj
+has a named "On Stage" tab, additionally fetch the corresponding "onstage" URL e.g. http://brucebase.wikidot.com/onstage:2025-10-26-stone-pony-asbury-park-nj/noredirect/true
+by replacing "gig/rehearsal->onstage" and appending "/noredirect/true" to the original DETAIL URL.
 
 These types of pages only exist (actually optional) because BruceBase Wiki does not allow unlimited tag values per
 page. To get the complete list of tag values for the original DETAIL page, the tags from the "onstage" version needs to
 be fetched too and appended to the original list
+
+2.)
+
+add a descriptive icon if there are additional tags found on a "onstage" page right after the DETAIL page title '<span class="bb-glyph">'
+
+** relation check on event detail pages
+
+Now extend the event detail pages tag value checks with relation checks.
+
+Every relation name present under the "On Stage" tab of an EVENT DETAIL page must also be present as a tag value. The rules are:
+
+1.)
+
+the tag value "onstage" should always be present
+
+2.)
+
+Check if the lowercase blank stripped version of a relation name matches with a same named tag value, e.g.
+
+"Steven Van Zandt" -> stevenvanzandt
+
+3.)
+
+Strip the "The" from the relation name if it's at the beginning e.g.
+
+"The E Street Band" => estreetband
+
+** jake.clemons
+** 10th doesn't work as alias for "TENTH..."
 
 
 * question

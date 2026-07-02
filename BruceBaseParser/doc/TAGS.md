@@ -177,11 +177,12 @@ differently). Detects `person`/`band` expected tags from `relDoc`'s own
 
 Called from `runDetailPage` right after `addDetailTitleAnnotation`, passed
 the already-parsed `detailSections` (`parseDetailSetlist(document)`, computed
-once at the top of `runDetailPage` to avoid a duplicate parse) and
-`rawDetailName` (the page's raw `#page-title` text, from
-`extractDetailEventName`). It:
+once at the top of `runDetailPage` to avoid a duplicate parse), `rawDetailName`
+(the page's raw `#page-title` text, from `extractDetailEventName`), and
+`onstageResult` (see "Onstage companion page tags" below). It:
 1. Builds `detailTabMap = buildTabMap(document)` from the current page.
-2. Computes expected and actual tags.
+2. Computes actual tags, then merges in any tags found only on the onstage
+   companion page (`onstageResult`), before computing expected tags.
 3. Marks passing tag links green (see "Passing (green) tags").
 4. Runs the setlist song tag check (see below) and marks matched song tags
    green too.
@@ -194,6 +195,48 @@ once at the top of `runDetailPage` to avoid a duplicate parse) and
 8. Appends `<span class="bb-tag-missing">⚠️tag</span>` spans for missing tags,
    one per unmatched setlist song (showing the derived-alias candidate), AND
    one per unmatched location part (showing the expected slug/override tag).
+9. Returns `{ additionalTags, onstageUrl }` — tags found only on the onstage
+   companion page, for the caller to pass to `addOnstageTagsGlyph`.
+
+Merging onstage-only tags into the internal `actualTags` Set (step 2) means
+they correctly suppress false "missing" warnings and satisfy the setlist-song
+/ location checks, but since they have no real `<a>` element in this page's
+own `.page-tags`, they can never be colored green or flagged spurious here —
+`markPassingTagLinks`'s callers already guard with `if (a) ...` before
+calling it, so this degrades silently (no crash, just no green highlight for
+that specific tag on this page).
+
+---
+
+## Onstage companion page tags (`fetchOnstageCompanionTags`, `addOnstageTagsGlyph`)
+
+BruceBase wiki caps the number of tags per page. For "gig"/"rehearsal" DETAIL
+pages, this means some tags spill onto a separate, optional companion page:
+same date-slug, type swapped to `onstage`, with `/noredirect/true` appended
+(e.g. `/gig:2025-10-26-stone-pony-asbury-park-nj` →
+`/onstage:2025-10-26-stone-pony-asbury-park-nj/noredirect/true`). This
+companion page only exists when the DETAIL page itself has an "On Stage" tab.
+
+`fetchOnstageCompanionTags(path, eventType, tabMap)`:
+- Returns `null` immediately when `eventType` isn't `"gig"` or `"rehearsal"`,
+  or when `tabMap` (from `buildTabMap(document)`) has no `"On Stage"` entry.
+- Otherwise builds the companion URL via
+  `path.replace(/^(gig|rehearsal):/, 'onstage:') + '/noredirect/true'`,
+  fetches it with `fetchPage` (same try/catch/`logWarn`-on-failure convention
+  as the existing venue/song/relation page fetches), and returns
+  `{ url, tags }` — `tags` being the lowercase `Set` from the companion
+  page's own `.page-tags`.
+
+Called from `runDetailPage` right after `buildTabMap`, before
+`annotateDetailPageTags` (which needs the result to merge tags in). When
+`annotateDetailPageTags` returns one or more `additionalTags` (present on the
+companion page but not on this one), `addOnstageTagsGlyph(additionalTags,
+onstageUrl)` appends a new `🏷️` glyph (via `makeGlyphSpan`) to `#page-title
+h1`, alongside the existing name-match glyph from `addDetailTitleAnnotation`.
+Since the tooltip content is a variable-length, `\n`-joined list of tag names
+(the "genuinely rich" bucket per the native-title-vs-rich-tooltip convention
+in [UTILITIES.md](UTILITIES.md)), it's wired via `mouseenter` →
+`showErrorTooltip`, not a native `title`.
 
 ---
 

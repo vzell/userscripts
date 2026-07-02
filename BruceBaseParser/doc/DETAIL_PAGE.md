@@ -36,20 +36,31 @@ d. **Event name check** — compare `yearNameUpper` with `normalizedDetailName`.
    - Appends a ✅/⚠️/❌ glyph; hover shows `showYearTooltip` with all four
      name variants (YEAR, raw DETAIL, normalized DETAIL, diff).
 
-e. **Tag annotation** — `annotateDetailPageTags(tabMap, eventDate, eventType)`.
-   See [TAGS.md](TAGS.md).
+e. **Onstage companion page fetch** — `fetchOnstageCompanionTags(path, eventType, tabMap)`:
+   for "gig"/"rehearsal" pages with an "On Stage" tab, fetches the companion
+   `onstage:…/noredirect/true` page (BruceBase caps tags-per-page, so some
+   tags for these events only exist there) and returns its `.page-tags` as a
+   `Set`. Returns `null` when not applicable or the fetch fails.
 
-f. **Anchor consistency check** — find `<a href="/YEAR#FRAGMENT">Info & Setlist</a>`
+f. **Tag annotation** — `annotateDetailPageTags(tabMap, eventDate, eventType,
+   detailSections, rawDetailName, onstageResult)`. Merges any onstage-only
+   tags into its internal tag set before running all consistency checks (see
+   [TAGS.md](TAGS.md)), and returns `{ additionalTags, onstageUrl }`. When
+   `additionalTags.length > 0`, `addOnstageTagsGlyph(additionalTags,
+   onstageUrl)` appends a 🏷️ glyph to `#page-title h1` with a rich tooltip
+   listing the extra tags and linking to the companion page.
+
+g. **Anchor consistency check** — find `<a href="/YEAR#FRAGMENT">Info & Setlist</a>`
    on the current page via `findInfoSetlistLink(document)`. Compare `FRAGMENT`
    with `yearAnchorName`. See [ANCHORS.md](ANCHORS.md).
 
-g. **Venue name check** — `findVenueLink(document)` → fetch venue page →
+h. **Venue name check** — `findVenueLink(document)` → fetch venue page →
    compare venue name with detail venue part.
    `addVenueGlyphDetail(venueLink, venueName, venueMatch, detailVenuePart)`:
    - ✅ (`bb-anchor-match`) or ⚠️ (`bb-venue-warn`) appended after venue link.
    - Comparison is case-sensitive; `(The)` article rewrite NOT applied.
 
-h. **Setlist comparison** — when `hasSetlist` is true:
+i. **Setlist comparison** — when `hasSetlist` is true:
    - `collectSetlistElements(eventLink, nextAnchor, yearContent)` — gathers
      YEAR page setlist elements.
    - `parseYearSetlist(setlistEls)` — parses into `Section[]`.

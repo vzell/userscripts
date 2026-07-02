@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.55
+// @version      2.56
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -3028,9 +3028,13 @@
       addDetailTitleAnnotation(detailEventType, yearNameUpper, normalizedDetailName, rawDetailName, nameMatch, isEarlyLate);
 
       const detailTabMap = buildTabMap(document);
+      const onstageResult = await fetchOnstageCompanionTags(path, detailEventType, detailTabMap);
       const detailDateM  = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
       if (detailDateM) {
-        annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType, detailSections, rawDetailName);
+        const tagResult = annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType, detailSections, rawDetailName, onstageResult);
+        if (tagResult.additionalTags.length > 0) {
+          addOnstageTagsGlyph(tagResult.additionalTags, tagResult.onstageUrl);
+        }
       }
 
       const allYearNamedAnchors = [...yearContent.querySelectorAll('a[name]')];
@@ -4842,6 +4846,35 @@
   function getTabEl(doc, tabMap, label) {
     const idx = tabMap.get(label);
     return idx !== undefined ? doc.getElementById(`wiki-tab-0-${idx}`) : null;
+  }
+
+  /**
+   * For "gig"/"rehearsal" DETAIL pages that have an "On Stage" tab, fetches
+   * the companion "onstage:" page (same date-slug, type swapped to
+   * "onstage", "/noredirect/true" appended) and returns the tags found in
+   * its own .page-tags. BruceBase caps tags-per-page, so some tags for a
+   * gig/rehearsal event only exist on this separate page. Returns null when
+   * not applicable (wrong event type, no "On Stage" tab) or the fetch fails.
+   * @param {string}             path     - Current page's path, no leading slash, e.g. "gig:2025-10-26-stone-pony-asbury-park-nj".
+   * @param {string}             eventType
+   * @param {Map<string,number>} tabMap   - buildTabMap(document) result.
+   * @returns {Promise<{url: string, tags: Set<string>}|null>}
+   */
+  async function fetchOnstageCompanionTags(path, eventType, tabMap) {
+    if (eventType !== 'gig' && eventType !== 'rehearsal') return null;
+    if (!tabMap.has('On Stage')) return null;
+    const onstagePath = path.replace(/^(gig|rehearsal):/, 'onstage:') + '/noredirect/true';
+    const url = `${location.protocol}//${location.host}/${onstagePath}`;
+    try {
+      const onstageDoc = await fetchPage(url);
+      const tagLinks    = [...onstageDoc.querySelectorAll('.page-tags a[href]')];
+      const tags        = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+      log(`  Onstage companion page fetched: ${url} (${tags.size} tags)`);
+      return { url, tags };
+    } catch (e) {
+      logWarn(`  Onstage companion page fetch failed: ${e.message}`);
+      return null;
+    }
   }
 
   // Tries 'News/Memorabilia' first, then the short-form 'News' used on older pages.
@@ -6743,13 +6776,25 @@
    * @param {string}             eventDate      - "YYYY-MM-DD"
    * @param {string}             eventType      - "gig" | "recording" | etc.
    * @param {Section[]}          detailSections - Result of parseDetailSetlist(document).
+   * @param {string}             rawDetailName
+   * @param {{url: string, tags: Set<string>}|null} [onstageResult] - fetchOnstageCompanionTags result, if any.
+   * @returns {{additionalTags: string[], onstageUrl: string|null}} Tags found only on the onstage companion page, for addOnstageTagsGlyph.
    */
-  function annotateDetailPageTags(tabMap, eventDate, eventType, detailSections, rawDetailName) {
+  function annotateDetailPageTags(tabMap, eventDate, eventType, detailSections, rawDetailName, onstageResult = null) {
     const tagsContainer = document.querySelector('.page-tags');
-    if (!tagsContainer) return;
+    if (!tagsContainer) return { additionalTags: [], onstageUrl: null };
 
     const tagLinks     = [...tagsContainer.querySelectorAll('a[href]')];
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+
+    // Merge in tags found on the "onstage:" companion page (BruceBase caps
+    // tags-per-page, so some tags for a gig/rehearsal spill onto that page).
+    const additionalTags = onstageResult
+      ? [...onstageResult.tags].filter(t => !actualTags.has(t))
+      : [];
+    for (const t of additionalTags) actualTags.add(t);
+    const onstageUrl = onstageResult ? onstageResult.url : null;
+
     const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
     const spuriousLinks = tagLinks.filter(a => {
@@ -6783,7 +6828,9 @@
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches event ${r.label}`);
     }
 
-    if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedSongs.length === 0 && unmatchedLocations.length === 0) return;
+    if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedSongs.length === 0 && unmatchedLocations.length === 0) {
+      return { additionalTags, onstageUrl };
+    }
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
@@ -6836,6 +6883,8 @@
       missingSpan.textContent = ` ⚠️${r.candidateTag}`;
       span.appendChild(missingSpan);
     }
+
+    return { additionalTags, onstageUrl };
   }
 
   /**
@@ -7470,6 +7519,25 @@
       n.addEventListener('mouseenter', enter);
       n.addEventListener('mouseleave', hideTooltip);
     });
+  }
+
+  /**
+   * Appends a glyph to the DETAIL page's <h1> (inside #page-title) noting
+   * that additional tags were found on the "onstage:" companion page (see
+   * fetchOnstageCompanionTags), with a rich tooltip listing them.
+   * @param {string[]} additionalTags - Extra tags found on the onstage page, not already on this page.
+   * @param {string}   onstageUrl
+   */
+  function addOnstageTagsGlyph(additionalTags, onstageUrl) {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+    const h1 = pageTitle.querySelector('h1') || pageTitle;
+    const glyphSpan = makeGlyphSpan('🏷️');
+    h1.appendChild(glyphSpan);
+    const count = additionalTags.length;
+    const msg = `${count} additional tag${count === 1 ? '' : 's'} found on the companion "On Stage" page (${onstageUrl}):\n${[...additionalTags].sort().join(', ')}`;
+    glyphSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    glyphSpan.addEventListener('mouseleave', hideTooltip);
   }
 
   // ── Tooltip ───────────────────────────────────────────────────────────────

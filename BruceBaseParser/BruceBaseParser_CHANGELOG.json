@@ -1,5 +1,18 @@
 [
     {
+        "version": "2.56",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added fetchOnstageCompanionTags: for \"gig\"/\"rehearsal\" DETAIL pages with an \"On Stage\" tab, fetches the companion \"onstage:\" page (type swapped, \"/noredirect/true\" appended) and merges its .page-tags into annotateDetailPageTags's tag set, since BruceBase caps tags-per-page and some tags for these events only exist on that separate page. Prevents false-positive missing-tag warnings for tags that genuinely exist, just on the companion page.",
+                    "Added a new 🏷️ glyph (addOnstageTagsGlyph) right after the DETAIL page title when additional tags were found on the companion page, with a rich tooltip listing them and linking to the companion page's URL."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.55",
         "date": "2026-07-02",
         "sections": [
