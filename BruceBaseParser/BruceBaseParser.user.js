@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.68
+// @version      2.69
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -7241,9 +7241,69 @@
   }
 
   /**
+   * Reorganizes a DETAIL page's `.page-tags` `<span>` — which otherwise
+   * renders every tag as one long unbroken line — into multiple lines, one
+   * per group of tags sharing the same lowercase first character (digit-led
+   * tags like "17"/"2026" grouped under "#"), each line prefixed with a
+   * small bold group-letter label (`.bb-tag-group-label`). Runs as a final
+   * layout pass over whatever annotateDetailPageTags has already built:
+   * plain `<a>` tags, `.bb-tag-ok`/`.bb-tag-onstage` matched tags,
+   * `.bb-tag-missing` placeholders (text `" ⚠️tagname"`, no `<a>`), and
+   * `.bb-tag-spurious` warning-icon `<span>`s that immediately follow their
+   * `<a>` (kept attached to it as one group so the icon stays adjacent to
+   * its tag). `.bb-tag-group-line` uses `display: contents` under
+   * `.bb-original-view` (see addStyles) so the "⇄ Original Page" toggle
+   * still shows BruceBase's original single-line flow.
+   * @param {Element} tagsContainer - `.page-tags` element.
+   */
+  function groupTagsIntoLines(tagsContainer) {
+    const span = tagsContainer.querySelector('span') || tagsContainer;
+    const elems = [...span.children];
+    if (elems.length === 0) return;
+
+    const items = [];
+    for (let i = 0; i < elems.length; i++) {
+      const el = elems[i];
+      if (el.tagName === 'SPAN' && el.classList.contains('bb-tag-spurious')) continue;
+      const group = [el];
+      const next = elems[i + 1];
+      if (next && next.tagName === 'SPAN' && next.classList.contains('bb-tag-spurious')) {
+        group.push(next);
+        i++;
+      }
+      const tagText = el.textContent.replace(/^\s*⚠️/, '').trim();
+      const first   = tagText.charAt(0).toLowerCase();
+      const key     = (first >= 'a' && first <= 'z') ? first : '#';
+      items.push({ key, group });
+    }
+    // Stable sort: ties (same first letter) keep their original DOM order.
+    items.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+
+    span.textContent = '';
+    let currentKey = null;
+    let lineDiv     = null;
+    for (const item of items) {
+      if (item.key !== currentKey) {
+        currentKey = item.key;
+        lineDiv = document.createElement('div');
+        lineDiv.className = 'bb-tag-group-line';
+        const label = document.createElement('span');
+        label.className = 'bb-tag-group-label';
+        label.textContent = currentKey.toUpperCase();
+        lineDiv.appendChild(label);
+        span.appendChild(lineDiv);
+      }
+      for (const node of item.group) lineDiv.appendChild(node);
+    }
+  }
+
+  /**
    * On DETAIL pages: wraps .page-tags in a yellow warning box and appends
-   * expected-but-missing tags as bold-red spans inside the tag container.
-   * No-op when all expected tags are present.
+   * expected-but-missing tags as bold-red spans inside the tag container,
+   * then always regroups the tag list into per-letter lines (see
+   * groupTagsIntoLines) regardless of whether any issues were found — the
+   * warning-box wrapping is skipped when all expected tags are present, but
+   * the line-grouping is not.
    * @param {Map<string,number>} tabMap
    * @param {string}             eventDate      - "YYYY-MM-DD"
    * @param {string}             eventType      - "gig" | "recording" | etc.
@@ -7360,6 +7420,7 @@
 
     if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedSongs.length === 0
         && unmatchedLocations.length === 0 && unmatchedRelations.length === 0) {
+      groupTagsIntoLines(tagsContainer);
       return { additionalTags, onstageUrl };
     }
 
@@ -7426,6 +7487,7 @@
       span.appendChild(missingSpan);
     }
 
+    groupTagsIntoLines(tagsContainer);
     return { additionalTags, onstageUrl };
   }
 
@@ -8555,6 +8617,12 @@
          declared later), but keep the italic from .bb-tag-onstage. */
       .bb-tag-onstage.bb-tag-ok { color: #2a2 !important; }
 
+      /* DETAIL page .page-tags regrouped into one line per first-letter
+         group (see groupTagsIntoLines), each prefixed with a small bold
+         group-letter label — instead of one long unbroken line. */
+      .bb-tag-group-line  { display: block; margin: 2px 0; }
+      .bb-tag-group-label { display: inline-block; min-width: 1.2em; margin-right: 6px; font-weight: bold; color: #888; }
+
       /* "Original Page" mode on DETAIL pages — hide all script annotations */
       .bb-original-view .bb-glyph,
       .bb-original-view .bb-anchor-match,
@@ -8568,6 +8636,12 @@
       .bb-original-view .bb-tags-warn-box   { border: none !important; background: none !important; padding: 0 !important; }
       .bb-original-view .bb-setlist-tab-match,
       .bb-original-view .bb-tag-ok { color: inherit !important; font-weight: inherit !important; cursor: inherit !important; }
+      /* Original view: collapse the letter-grouped lines back into
+         BruceBase's original single flowing line (display:contents makes
+         the wrapper divs transparent to layout, keeping only their tag
+         children in flow) and hide the group-letter labels. */
+      .bb-original-view .bb-tag-group-line  { display: contents; }
+      .bb-original-view .bb-tag-group-label { display: none !important; }
 
       /* Year-only <li> rows inserted on detail pages */
       li.bb-song-year-only {

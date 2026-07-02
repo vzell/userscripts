@@ -43,12 +43,15 @@ e. **Onstage companion page fetch** — `fetchOnstageCompanionTags(path, eventTy
    `Set`. Returns `null` when not applicable or the fetch fails.
 
 f. **Tag annotation** — `annotateDetailPageTags(tabMap, eventDate, eventType,
-   detailSections, rawDetailName, onstageResult)`. Merges any onstage-only
-   tags into its internal tag set before running all consistency checks (see
-   [TAGS.md](TAGS.md)), and returns `{ additionalTags, onstageUrl }`. When
-   `additionalTags.length > 0`, `addOnstageTagsGlyph(additionalTags,
-   onstageUrl)` appends a 🏷️ glyph to `#page-title h1` with a rich tooltip
-   listing the extra tags and linking to the companion page.
+   detailSections, rawDetailName, onstageResult, hasHelp)`. Merges any
+   onstage-only tags into its internal tag set before running all
+   consistency checks (see [TAGS.md](TAGS.md)), and returns
+   `{ additionalTags, onstageUrl }`. When `additionalTags.length > 0`,
+   `addOnstageTagsGlyph(additionalTags, onstageUrl)` appends a 🏷️ glyph to
+   `#page-title h1` with a rich tooltip listing the extra tags and linking
+   to the companion page. Always finishes by reorganizing `.page-tags` into
+   per-first-letter lines (`groupTagsIntoLines` — see TAGS.md), regardless
+   of whether any consistency issues were found.
 
 g. **Anchor consistency check** — find `<a href="/YEAR#FRAGMENT">Info & Setlist</a>`
    on the current page via `findInfoSetlistLink(document)`. Compare `FRAGMENT`

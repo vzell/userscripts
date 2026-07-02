@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.69",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "DETAIL page .page-tags — previously one long unbroken line — is now regrouped into multiple lines by groupTagsIntoLines, one line per group of tags sharing the same lowercase first character (digit-led tags like \"17\"/\"2026\" grouped under \"#\"), each line prefixed with a small bold group-letter label (.bb-tag-group-label). Runs as a final pass in annotateDetailPageTags on both the clean (no-issues) and warn-box paths, so it always applies. As a side effect, tags previously appended at the very end regardless of alphabetical position (missing-tag placeholders, unmatched-song/location/relation candidates) now sort into their correct letter group instead of trailing after everything else. The \"⇄ Original Page\" toggle collapses the grouping back to BruceBase's original single-line flow via display:contents on .bb-tag-group-line and hides .bb-tag-group-label, so it stays faithful to the original page."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.68",
         "date": "2026-07-02",
         "sections": [

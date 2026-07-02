@@ -222,7 +222,11 @@ once at the top of `runDetailPage` to avoid a duplicate parse), `rawDetailName`
     itself as real-looking `<a href="/system:page-tags/tag/…">` links (class
     `bb-tag-onstage`), then re-sorts the combined tag list alphabetically —
     see "Onstage companion page tags" below.
-11. Returns `{ additionalTags, onstageUrl }` — tags found only on the onstage
+11. Regroups `.page-tags` into per-first-letter lines (`groupTagsIntoLines` —
+    see "Tag line-grouping" below), on **both** the clean-page early-return
+    path (step 7's "no issues" case) and the warn-box path — unlike steps
+    7-10, this always runs.
+12. Returns `{ additionalTags, onstageUrl }` — tags found only on the onstage
     companion page, for the caller to pass to `addOnstageTagsGlyph`.
 
 Merging onstage-only tags into the internal `actualTags` Set (step 2) means
@@ -663,6 +667,55 @@ argument; when true, `expected.add('help')`.
 
 ---
 
+## Tag line-grouping (`groupTagsIntoLines`)
+
+BruceBase's raw `.page-tags` markup, plus everything every check above adds
+to it, renders as one long unbroken line — hard to scan on events with many
+tags. `groupTagsIntoLines(tagsContainer)` is a final DOM-reorganization pass
+in `annotateDetailPageTags` (DETAIL page only — the YEAR page's nested
+"Tags" button already renders one `<li>` per tag, see "YEAR page Tags
+button" above, so it doesn't need this) that reflows `.page-tags`' `<span>`
+into multiple lines, one per group of tags sharing the same lowercase first
+character:
+
+1. Reads `[...span.children]` (element children only — skips the
+   whitespace text nodes already present in BruceBase's markup).
+2. Walks them building "items": a plain `<a>` or `.bb-tag-onstage` `<a>`
+   starts a new item; an immediately-following `.bb-tag-spurious` `<span>`
+   (BruceBase's ⚠️ icon, always inserted via `a.after(warnSpan)` — see step
+   8 above — so it's guaranteed adjacent) is absorbed into that same item so
+   the icon stays next to its tag. A standalone `.bb-tag-missing` `<span>`
+   (text `" ⚠️tagname"`, no `<a>` — nothing exists to link to) is its own
+   item.
+3. Each item's group key is its tag text's lowercase first character —
+   stripping the `"⚠️"` prefix first for `.bb-tag-missing` items — or `"#"`
+   for anything not `a`-`z` (i.e. the digit-led tags like `"17"`/`"2026"`).
+4. Stable-sorts items by key (`"#"` sorts before letters, matching
+   BruceBase's own convention of digit tags first). Ties keep their
+   original DOM order — since real `<a>` tags were already alphabetically
+   sorted going in, but `.bb-tag-missing` items were appended at the very
+   end regardless of alphabetical position (steps 9 above), this sort has a
+   useful side effect: a missing tag now lands in its correct letter group
+   instead of trailing after every real tag (e.g. a missing `"memorabilia"`
+   now sits right after the real `"memorbilia"` tag in the `M` group,
+   instead of stranded at the very end of the list).
+5. Clears `span` and rebuilds it: one `<div class="bb-tag-group-line">` per
+   distinct key, each starting with a `<span class="bb-tag-group-label">`
+   showing the uppercased key, followed by that group's items in order.
+
+**"⇄ Original Page" compatibility**: unlike every other tag decoration in
+this file (which are pure CSS/attribute annotations left in place, just
+hidden via `.bb-original-view`), this pass restructures the DOM itself —
+wrapping tags in per-letter `<div>`s can't be un-wrapped by a `display:none`
+without also hiding the tags inside. Instead, `.bb-original-view
+.bb-tag-group-line { display: contents; }` makes the wrapper divs invisible
+*to layout only* (their children keep flowing inline as before) while
+`.bb-original-view .bb-tag-group-label { display: none; }` hides the
+letter labels — together reproducing BruceBase's original single-line flow
+without needing to reverse the DOM restructuring.
+
+---
+
 ## VENUE page annotation (`annotateVenuePageTags`)
 
 Called from `runVenuePage`. `computeExpectedVenueTags(venueName)` returns a
@@ -748,3 +801,5 @@ from the live page's `.yui-nav em` elements:
 | `.bb-tag-spurious` | Orange ⚠️ for present-but-unexpected managed tags |
 | `.bb-tag-ok` | Bold green (`#2a2`) for present-and-expected ("passing") managed tags; reset to `inherit` in `.bb-original-view` |
 | `.bb-tags-warn-box` | Gold border, #fffbe6 background wrapper around `.page-tags` when issues found |
+| `.bb-tag-group-line` | Block-level wrapper for one first-letter group of tags (see "Tag line-grouping"); `display: contents` in `.bb-original-view` |
+| `.bb-tag-group-label` | Small bold gray letter label prefixing each `.bb-tag-group-line`; hidden in `.bb-original-view` |
