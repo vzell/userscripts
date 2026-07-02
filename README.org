@@ -3371,7 +3371,7 @@ be fetched too and appended to the original list
 
 add a descriptive icon if there are additional tags found on a "onstage" page right after the DETAIL page title '<span class="bb-glyph">'
 
-** add icon also to YEAR page and YEAR LIST pages after the '<span class="bb-glyph">'
+** DONE add icon also to YEAR page and YEAR LIST pages after the '<span class="bb-glyph">'
 
 1.)
 
@@ -3385,7 +3385,7 @@ render the additional tags from the "onstage" URLs on the DETAIL pages together 
 
 on the YEAR pages the Event "Tags" button when clicked should show ALL tags now
 
-** relation check on event detail pages
+** DONE relation check on event detail pages
 
 Now extend the EVENT DETAIL page tag value checks with relation checks and also display the same when the "Tags" button
 at '<div class="bb-event-tab-row">' is clicked.
@@ -3414,11 +3414,11 @@ Strip the "The" from the relation name if it's at the beginning e.g.
 
 In the tooltip explain these facts. For the current tooltip value for companion "On Stage" derived tags, append these facts.
 
-** bug
+** DONE bug
 
 After the latest changes the tags which represent relation names are not rendered in green when checked according our rules. 
 
-** still buggy
+** DONE still buggy
 
 Take e.g http://brucebase.wikidot.com/rehearsal:2026-03-24-youth-temple-ocean-grove-nj
 
@@ -3427,7 +3427,7 @@ It's still not rendering in "green" the matched relation names, and now it's als
 @debug/YEAR-BAD.debug - YEAR page entry has 🏷️ glyph, ONLY "brucespringsteen" tag is "green", tags from the companion URL not
 @debugDETAIL-BAD.debug - DETAIL page is now missing the 🏷️ glyph and the yellow warning box around the tags (whereas both were there in the version before, see @debug/DETAIL-BAD-BEFORE.debug), ONLY "brucespringsteen" tag is "green", tags from the companion URL not
 
-** italic
+** DONE italic
 
 1.)
 
@@ -3445,11 +3445,11 @@ Now the "green" rendering works on the YEAR pages but NOT on the DETAIL pages,
 
 render the tags from the companien URL always in italic
 
-** act on @debug/not-green.debug
+** DONE act on @debug/not-green.debug
 
 act on @debug/not-green.debug
 
-** same color
+** DONE same color
 
 1.)
 
@@ -3486,7 +3486,7 @@ fallback to the full relation name but remove the " & " first like in "Hall & Oa
 
 for the last case also remove a "The" is present
 
-** (Guest)
+** DONE (Guest)
 
 Specifically when checking if a tag for the relation "Bruce Springsteen" is present and that relation is also marked as "(Guest)"
 
@@ -3496,14 +3496,14 @@ Specifically when checking if a tag for the relation "Bruce Springsteen" is pres
 
 the tage value "guest" must also be present
 
+** DONE 10th doesn't work as alias for "TENTH..."
+
+
 ** jake.clemons
 
 RELATION_TAG_ALIAS_OVERRIDES = {
       197 +    'jake clemons': 'jake.clemons',
       198 +  };
-
-** DONE 10th doesn't work as alias for "TENTH..."
-
 
 * question
 ** initial
