@@ -1,5 +1,25 @@
 [
     {
+        "version": "2.62",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed verified companion-page tags rendering steelblue instead of green: .bb-tag-onstage (steelblue, !important) was declared after .bb-tag-ok (green, !important) in the stylesheet, so with equal specificity it won the cascade regardless of the inline style JS set. Added a .bb-tag-onstage.bb-tag-ok combined-selector rule (higher specificity) to force green while keeping the italic."
+                ]
+            },
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Song tag derivation now strips accents/diacritics before slugifying (stripDiacritics/songTagSlug), e.g. \"JOLÉ BLON\" -> joleblon, matching computeSongTagAlias's acronym derivation too.",
+                    "checkSetlistSongTags now splits a song string on \" - \" (the medley/tribute separator also used by songCompareKey) into independent songs before checking, e.g. \"LIGHT OF DAY - HAPPY BIRTHDAY TO YOU\" now expects two separate tags, lightofday and happybirthdaytoyou.",
+                    "checkOnStageRelationTags now handles a relation name containing \" & \": first splits into two independent names, each checked via the existing exact/\"The \"-stripped/suffix-stripped/nickname-stripped/override pipeline (e.g. \"Joe Grushecky & The Houserockers\" -> joegrushecky + houserockers); only when both halves fail does it fall back to the combined name with \" & \" removed and a leading \"The \" stripped (e.g. \"Hall & Oates\" -> halloates)."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.61",
         "date": "2026-07-02",
         "sections": [

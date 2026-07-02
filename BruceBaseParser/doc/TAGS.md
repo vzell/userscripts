@@ -285,15 +285,21 @@ tags are never in `MANAGED_CONTENT_TAGS`), on both `annotateDetailPageTags`
 using the fetched `doc` — it calls `parseDetailSetlist(doc)` itself since it
 doesn't have an already-parsed `detailSections` at hand).
 
-`checkSetlistSongTags(detailSections, actualTags)` takes the unique set of
-song titles across all sections (`detailSections.flatMap(s => s.songs)`) and,
-for each, tries three lookups in order — the first one that matches an
-actual tag wins:
+`checkSetlistSongTags(detailSections, actualTags)` first flattens
+`detailSections.flatMap(s => s.songs)`, then splits every song string on
+`" - "` (the medley/tribute separator also used by `songCompareKey`, e.g.
+`"LIGHT OF DAY - HAPPY BIRTHDAY TO YOU"` → two independent songs, each
+checked and expected to have its *own* tag: `lightofday` and
+`happybirthdaytoyou`), takes the unique set of resulting song titles, and
+for each, via `checkOneSongTag(song, actualTags)`, tries three lookups in
+order — the first one that matches an actual tag wins:
 
-1. **Exact match**: `song.toLowerCase().replace(/[^a-z0-9]/g, '')` — lowercase
-   with every non-alphanumeric character deleted (not just whitespace), e.g.
+1. **Exact match** (`songTagSlug(song)`): lowercase, with accents/diacritics
+   stripped first (`stripDiacritics`, e.g. `"JOLÉ BLON"` → `"JOLE BLON"`)
+   and every non-alphanumeric character deleted (not just whitespace), e.g.
    `"WRECKING BALL"` → `wreckingball`, `"LIVIN' IN THE FUTURE"` →
-   `livininthefuture`, `"DEVIL'S ARCADE"` → `devilsarcade`.
+   `livininthefuture`, `"DEVIL'S ARCADE"` → `devilsarcade`, `"JOLÉ BLON"` →
+   `joleblon`.
 2. **Derived alias** (`computeSongTagAlias(title)`): splits the title on
    whitespace and, per word:
    - a dotted initialism (`^([A-Za-z]\.)+$`, e.g. `"U.S.A."`) contributes ALL
@@ -450,13 +456,29 @@ entry; otherwise:
    e.g. `"Jake Clemons"` → `jake.clemons` (a stray period in the real tag).
 
 Rules 2-5 are computed as a candidate list and tried in that order — first
-match wins (`checkOnStageRelationTags`'s inner `seen` Set skips re-checking
+match wins (`checkSingleRelationName`'s inner `seen` Set skips re-checking
 a candidate whose slug happens to be identical to an earlier one, e.g. a
 name with neither "The " nor a suffix nor a nickname just tries the same
 slug once). Add entries to `RELATION_TAG_ALIAS_OVERRIDES` only when all four
-fail; no code changes needed elsewhere.
+fail; no code changes needed elsewhere. This per-name logic lives in
+`checkSingleRelationName(name, actualTags)`, extracted out of
+`checkOnStageRelationTags` so it can be called twice for a name containing
+`" & "` (see below).
 
-Result shape: `{ label, candidateTag, matchedTag, method: 'fixed'|'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|null }[]`,
+7. **`" & "` splitting**: a relation name containing `" & "` (e.g.
+   `"Joe Grushecky & The Houserockers"`) is first split into two independent
+   names, each checked separately via `checkSingleRelationName` — so
+   `"Joe Grushecky"` → `joegrushecky` and `"The Houserockers"` →
+   `houserockers` (via the existing "The "-stripped rule, reused
+   automatically) become two separate expected tags. Only when *both*
+   halves fail to match does `checkOnStageRelationTags` fall back to the
+   combined name with `" & "` removed and a leading `"The "` stripped, e.g.
+   `"Hall & Oates"` → `halloates` (`method: 'ampersand-combined'`). If
+   neither the split nor the combined fallback works, both split-part
+   results are pushed as-is (so the user sees both candidates, and both are
+   listed as missing).
+
+Result shape: `{ label, candidateTag, matchedTag, method: 'fixed'|'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|'ampersand-combined'|null }[]`,
 mirroring the setlist-song/location checks. A matched tag is colored green
 via `markPassingTagLinks` with a tooltip built from
 `ON_STAGE_RELATION_METHOD_LABEL[method]` (e.g. *"matches a relation listed
@@ -508,10 +530,17 @@ live DOM the same way, so its `onstageItems` entries instead check
 and render green (`class="bb-tag-onstage bb-tag-ok"`) with the verification
 tooltip when a match exists, instead of unconditionally using the plain
 "found on companion page" style. Both branches keep the `bb-tag-onstage`
-class even when matched, since `.bb-tag-onstage`'s `font-style: italic`
-(unconditional, no `!important` conflict with `.bb-tag-ok`'s `color`) is
-meant to always distinguish a companion-page-sourced tag regardless of
-whether it also turns green.
+class even when matched, so a companion-page-sourced tag stays italic
+regardless of whether it also turns green (`.bb-tag-onstage`'s
+`font-style: italic` is unconditional).
+
+**Color cascade note**: `.bb-tag-ok` and `.bb-tag-onstage` both set `color`
+with `!important`, at equal specificity — CSS resolves that tie by source
+order, and since `.bb-tag-onstage` is declared *after* `.bb-tag-ok` in the
+stylesheet, it would otherwise win, showing a verified companion-page tag as
+steelblue instead of green. A `.bb-tag-onstage.bb-tag-ok` combined-selector
+rule (higher specificity, `0,0,2,0` vs. `0,0,1,0`) forces green whenever
+both classes are present, regardless of declaration order.
 
 `onStageRelationRulesExplanation()` returns a one-line summary of these same
 three rules; it's appended to `makeOnstageTagsGlyphSpan`'s tooltip (see
@@ -558,7 +587,7 @@ instead of a fetched one:
 | `song` | Always — every `/song:…` page must carry this tag |
 | First letter of `songName` | Lowercase, e.g. `"BORN TO RUN"` → `b` |
 | `lyricsheet` | Gallery tab has an `<img>` whose `src` contains `"lyricsheet"` |
-| Exact-title slug (`checkSongExactTitleTag`) | `songName.toLowerCase().replace(/[^a-z0-9]/g, '')` — e.g. `"BORN TO RUN"` → `borntorun` — a hard requirement, flagged missing if absent |
+| Exact-title slug (`checkSongExactTitleTag`) | `songTagSlug(songName)` (accent-stripped, lowercase, punctuation-stripped) — e.g. `"BORN TO RUN"` → `borntorun` — a hard requirement, flagged missing if absent |
 
 In addition, `checkSongAliasTagRecognition(songName, actualTags, exactTag)`
 checks one more tag convention — but as *recognition only*, never as a

@@ -3450,8 +3450,50 @@ render the tags from the companien URL always in italic
 
 act on @debug/not-green.debug
 
+** same color
+
+1.)
+
+verified tags from the companien page should have the same color as verified tags from the original DETAIL page
+
+2.)
+
+For song names with accented characters deduce the tag by replacing with the unaccented version, e.g.
+
+"JOLÉ BLON" -> "JOLE BLON" -> "joleblon" ==> OK
+
+3.)
+
+When song names are separated by " - " like in e.g. "LIGHT OF DAY - HAPPY BIRTHDAY TO YOU", treat them as separate songs for tag name comparison:
+
+"LIGHT OF DAY - HAPPY BIRTHDAY TO YOU" => two tags: lightofday, happybirthdaytoyou 
+
+4.)
+
+For relation names with an " & " in the name e.g. "Joe Grushecky & The Houserockers" treat them
+
+a)
+
+as separate relation names first:
+
+"Joe Grushecky" => joegrushecky
+"The Houserockers" => "Houserockers" (remove "The" in front of the name) => housrockers
+
+b.)
+
+fallback to the full relation name but remove the " & " first like in "Hall & Oates"
+
+"Hall & Oates" => halloates
+
+for the last case also remove a "The" is present
+
 ** jake.clemons
-** 10th doesn't work as alias for "TENTH..."
+
+RELATION_TAG_ALIAS_OVERRIDES = {
+      197 +    'jake clemons': 'jake.clemons',
+      198 +  };
+
+** DONE 10th doesn't work as alias for "TENTH..."
 
 
 * question

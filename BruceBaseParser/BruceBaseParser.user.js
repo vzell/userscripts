@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.61
+// @version      2.62
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -213,6 +213,7 @@
     'suffix-stripped': 'matches a relation listed under the "On Stage" tab (trailing Jr./Sr./II/III/IV stripped, lowercase, whitespace/punctuation stripped)',
     'nickname-stripped': 'matches a relation listed under the "On Stage" tab (quoted nickname removed, lowercase, whitespace/punctuation stripped)',
     override: 'matches a manual override for a relation listed under the "On Stage" tab (RELATION_TAG_ALIAS_OVERRIDES)',
+    'ampersand-combined': 'matches a relation listed under the "On Stage" tab (combined name with "&" removed, lowercase, whitespace/punctuation stripped)',
   };
 
   /** SmartTable column definitions for YEAR OVERVIEW (list) pages. */
@@ -4679,26 +4680,67 @@
   }
 
   /**
-   * Checks that a DETAIL page's "On Stage" tab relation names each have a
-   * corresponding tag, per these rules:
-   * 1. `"onstage"` is always expected, independent of any relation name.
-   * 2. Exact match: lowercase, punctuation/whitespace-stripped relation
+   * Checks a single relation name (no "&") against its expected tag, per
+   * these rules:
+   * 1. Exact match: lowercase, punctuation/whitespace-stripped relation
    *    name, e.g. `"Steven Van Zandt"` -> `"stevenvanzandt"`.
-   * 3. Same as #2, but with a leading `"The "` stripped first, e.g.
+   * 2. Same as #1, but with a leading `"The "` stripped first, e.g.
    *    `"The E Street Band"` -> `"estreetband"`.
-   * 4. Same as #2, but with a trailing generational suffix (Jr./Sr./II/
+   * 3. Same as #1, but with a trailing generational suffix (Jr./Sr./II/
    *    III/IV) stripped first, e.g. `"Curtis King Jr."` -> `"curtisking"`.
-   * 5. Same as #2, but with a quoted nickname removed first, e.g.
+   * 4. Same as #1, but with a quoted nickname removed first, e.g.
    *    `Steve "Muddy" Shews` -> `"steveshews"`.
-   * 6. Manual override (`RELATION_TAG_ALIAS_OVERRIDES`) for the rare case
+   * 5. Manual override (`RELATION_TAG_ALIAS_OVERRIDES`) for the rare case
    *    where BruceBase's real tag matches none of the above, e.g. a typo
    *    like `"jake.clemons"` (with a stray period).
-   * Rules 2-5 are tried in that order (first match wins); returns `[]` when
-   * the page has no "On Stage" tab at all.
+   * Rules 1-4 are tried in that order (first match wins).
+   * @param {string}      name
+   * @param {Set<string>} actualTags
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: 'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|null}}
+   */
+  function checkSingleRelationName(name, actualTags) {
+    const theStripped = name.replace(/^the\s+/i, '');
+    const suffixStripped = name.replace(/\s+(?:Jr\.?|Sr\.?|III|II|IV)$/i, '').trim();
+    const nicknameStripped = name.replace(/\s*"[^"]*"\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    const candidates = [
+      { tag: relationTagSlug(name), method: 'exact' },
+      { tag: relationTagSlug(theStripped), method: 'the-stripped' },
+      { tag: relationTagSlug(suffixStripped), method: 'suffix-stripped' },
+      { tag: relationTagSlug(nicknameStripped), method: 'nickname-stripped' },
+    ];
+    const seen = new Set();
+    let match = null;
+    for (const c of candidates) {
+      if (seen.has(c.tag)) continue;
+      seen.add(c.tag);
+      if (isTagPresent(c.tag, actualTags)) { match = c; break; }
+    }
+    if (match) {
+      return { label: `Relation: ${name}`, candidateTag: match.tag, matchedTag: match.tag, method: match.method };
+    }
+    const overrideTag = RELATION_TAG_ALIAS_OVERRIDES[name.toLowerCase().trim()];
+    if (overrideTag && isTagPresent(overrideTag, actualTags)) {
+      return { label: `Relation: ${name}`, candidateTag: overrideTag, matchedTag: overrideTag, method: 'override' };
+    }
+    return { label: `Relation: ${name}`, candidateTag: candidates[0].tag, matchedTag: null, method: null };
+  }
+
+  /**
+   * Checks that a DETAIL page's "On Stage" tab relation names each have a
+   * corresponding tag. `"onstage"` is always expected, independent of any
+   * relation name. Every other relation name is checked via
+   * `checkSingleRelationName` — except a name containing `" & "` (e.g.
+   * `"Joe Grushecky & The Houserockers"`), which is first split into two
+   * independent names, each checked separately (`"Joe Grushecky"` ->
+   * `joegrushecky`, `"The Houserockers"` -> `houserockers` via the
+   * existing "The "-stripped rule); only when *both* halves fail to match
+   * does it fall back to the combined name with `" & "` removed and a
+   * leading `"The "` stripped, e.g. `"Hall & Oates"` -> `halloates`.
+   * Returns `[]` when the page has no "On Stage" tab at all.
    * @param {Document}            doc
    * @param {Map<string, number>} tabMap
    * @param {Set<string>}         actualTags
-   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: 'fixed'|'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|null}[]}
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null}[]}
    */
   function checkOnStageRelationTags(doc, tabMap, actualTags) {
     if (!tabMap.has('On Stage')) return [];
@@ -4709,32 +4751,23 @@
       method: 'fixed',
     }];
     for (const name of extractOnStageRelationNames(doc)) {
-      const theStripped = name.replace(/^the\s+/i, '');
-      const suffixStripped = name.replace(/\s+(?:Jr\.?|Sr\.?|III|II|IV)$/i, '').trim();
-      const nicknameStripped = name.replace(/\s*"[^"]*"\s*/g, ' ').replace(/\s+/g, ' ').trim();
-      const candidates = [
-        { tag: relationTagSlug(name), method: 'exact' },
-        { tag: relationTagSlug(theStripped), method: 'the-stripped' },
-        { tag: relationTagSlug(suffixStripped), method: 'suffix-stripped' },
-        { tag: relationTagSlug(nicknameStripped), method: 'nickname-stripped' },
-      ];
-      const seen = new Set();
-      let match = null;
-      for (const c of candidates) {
-        if (seen.has(c.tag)) continue;
-        seen.add(c.tag);
-        if (isTagPresent(c.tag, actualTags)) { match = c; break; }
-      }
-      if (match) {
-        items.push({ label: `Relation: ${name}`, candidateTag: match.tag, matchedTag: match.tag, method: match.method });
+      const ampM = name.match(/^(.+?)\s*&\s*(.+)$/);
+      if (ampM) {
+        const partA = checkSingleRelationName(ampM[1].trim(), actualTags);
+        const partB = checkSingleRelationName(ampM[2].trim(), actualTags);
+        if (partA.matchedTag && partB.matchedTag) {
+          items.push(partA, partB);
+          continue;
+        }
+        const combinedTag = relationTagSlug(name.replace(/^the\s+/i, '').replace(/\s*&\s*/g, ''));
+        if (isTagPresent(combinedTag, actualTags)) {
+          items.push({ label: `Relation: ${name}`, candidateTag: combinedTag, matchedTag: combinedTag, method: 'ampersand-combined' });
+          continue;
+        }
+        items.push(partA, partB);
         continue;
       }
-      const overrideTag = RELATION_TAG_ALIAS_OVERRIDES[name.toLowerCase().trim()];
-      if (overrideTag && isTagPresent(overrideTag, actualTags)) {
-        items.push({ label: `Relation: ${name}`, candidateTag: overrideTag, matchedTag: overrideTag, method: 'override' });
-        continue;
-      }
-      items.push({ label: `Relation: ${name}`, candidateTag: candidates[0].tag, matchedTag: null, method: null });
+      items.push(checkSingleRelationName(name, actualTags));
     }
     return items;
   }
@@ -5807,6 +5840,25 @@
   }
 
   /**
+   * Removes accents/diacritics from a string, e.g. "JOLÉ BLON" -> "JOLE BLON".
+   * @param {string} str
+   * @returns {string}
+   */
+  function stripDiacritics(str) {
+    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  /**
+   * Lowercase, punctuation/whitespace-stripped, accent-stripped slug for a
+   * song title, e.g. "JOLÉ BLON" -> "joleblon".
+   * @param {string} title
+   * @returns {string}
+   */
+  function songTagSlug(title) {
+    return stripDiacritics(title).toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  /**
    * Derives a tag alias for a song title using BruceBase's apparent acronym
    * convention. See SONG_TAG_ALIAS_OVERRIDES doc comment for the escape hatch
    * when this doesn't match reality.
@@ -5814,7 +5866,7 @@
    * @returns {string} Lowercase alias, e.g. "AMERICAN SKIN (41 SHOTS)" -> "as41s".
    */
   function computeSongTagAlias(title) {
-    const rawWords = title.trim().split(/\s+/);
+    const rawWords = stripDiacritics(title).trim().split(/\s+/);
     let alias = '';
     for (const raw of rawWords) {
       if (/^([A-Za-z]\.)+$/.test(raw)) {
@@ -5829,27 +5881,40 @@
   }
 
   /**
-   * Checks that every unique setlist song (from an already-parsed
-   * parseDetailSetlist result) has a corresponding tag, trying exact match,
+   * Checks a single song title against its expected tag, trying exact match,
    * then derived alias, then a manual override, in that order.
+   * @param {string}      song       - Song title.
+   * @param {Set<string>} actualTags - Lowercase tags present on the page.
+   * @returns {{song: string, matchedTag: string|null, method: 'exact'|'alias'|'override'|null}}
+   */
+  function checkOneSongTag(song, actualTags) {
+    const exactTag = songTagSlug(song);
+    if (isTagPresent(exactTag, actualTags)) return { song, matchedTag: exactTag, method: 'exact' };
+
+    const aliasTag = computeSongTagAlias(song);
+    if (aliasTag && isTagPresent(aliasTag, actualTags)) return { song, matchedTag: aliasTag, method: 'alias' };
+
+    const overrideTag = SONG_TAG_ALIAS_OVERRIDES[song.toLowerCase().trim()];
+    if (overrideTag && isTagPresent(overrideTag, actualTags)) return { song, matchedTag: overrideTag, method: 'override' };
+
+    return { song, matchedTag: null, method: null };
+  }
+
+  /**
+   * Checks that every unique setlist song (from an already-parsed
+   * parseDetailSetlist result) has a corresponding tag. A song string
+   * containing " - " (e.g. "LIGHT OF DAY - HAPPY BIRTHDAY TO YOU", the
+   * multi-song medley/tribute separator also used by songCompareKey) is
+   * split into independent songs first, each checked on its own — so a
+   * medley entry can require two separate tags, one per song.
    * @param {Section[]}   detailSections - Result of parseDetailSetlist(doc).
    * @param {Set<string>} actualTags     - Lowercase tags present on the page.
    * @returns {{song: string, matchedTag: string|null, method: 'exact'|'alias'|'override'|null}[]}
    */
   function checkSetlistSongTags(detailSections, actualTags) {
-    const uniqueSongs = [...new Set(detailSections.flatMap(s => s.songs))];
-    return uniqueSongs.map(song => {
-      const exactTag = song.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (isTagPresent(exactTag, actualTags)) return { song, matchedTag: exactTag, method: 'exact' };
-
-      const aliasTag = computeSongTagAlias(song);
-      if (aliasTag && isTagPresent(aliasTag, actualTags)) return { song, matchedTag: aliasTag, method: 'alias' };
-
-      const overrideTag = SONG_TAG_ALIAS_OVERRIDES[song.toLowerCase().trim()];
-      if (overrideTag && isTagPresent(overrideTag, actualTags)) return { song, matchedTag: overrideTag, method: 'override' };
-
-      return { song, matchedTag: null, method: null };
-    });
+    const allSongs = detailSections.flatMap(s => s.songs).flatMap(song => song.split(/\s+-\s+/));
+    const uniqueSongs = [...new Set(allSongs)];
+    return uniqueSongs.map(song => checkOneSongTag(song, actualTags));
   }
 
   /**
@@ -5861,7 +5926,7 @@
    * @returns {{tag: string, matchedTag: string|null}}
    */
   function checkSongExactTitleTag(songName, actualTags) {
-    const tag = songName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const tag = songTagSlug(songName);
     return { tag, matchedTag: (tag && isTagPresent(tag, actualTags)) ? tag : null };
   }
 
@@ -6199,7 +6264,7 @@
     const missingItems = [
       ...missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' })),
       ...unmatchedSongs.map(r => {
-        const candidate = computeSongTagAlias(r.song) || r.song.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const candidate = computeSongTagAlias(r.song) || songTagSlug(r.song);
         return { tag: candidate, html: null, missing: true, spurious: false,
           tooltip: `No tag found for setlist song "${r.song}" (tried exact match and derived alias "${candidate}")` };
       }),
@@ -7109,7 +7174,7 @@
     // Append one missing-tag span per setlist song with no corresponding tag,
     // showing the derived-alias candidate so it's clear what to look for/add.
     for (const r of unmatchedSongs) {
-      const candidate = computeSongTagAlias(r.song) || r.song.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const candidate = computeSongTagAlias(r.song) || songTagSlug(r.song);
       const missingSpan = document.createElement('span');
       missingSpan.className = 'bb-tag-missing';
       missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
@@ -8261,6 +8326,13 @@
 
       /* Tag rendered from the "onstage:" companion page, not this page's own .page-tags */
       .bb-tag-onstage { color: steelblue !important; font-style: italic; cursor: help; }
+
+      /* A companion-page tag that ALSO passed a consistency check: same green
+         as .bb-tag-ok (higher specificity than either single-class rule, so
+         it wins regardless of declaration order — both use !important on
+         color, and .bb-tag-onstage alone would otherwise win by being
+         declared later), but keep the italic from .bb-tag-onstage. */
+      .bb-tag-onstage.bb-tag-ok { color: #2a2 !important; }
 
       /* "Original Page" mode on DETAIL pages — hide all script annotations */
       .bb-original-view .bb-glyph,
