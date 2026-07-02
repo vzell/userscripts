@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.84
+// @version      2.85
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -7262,7 +7262,7 @@
       if (passing) {
         a.style.color = '#2a2';
         a.style.fontWeight = 'bold';
-        a.title = expectedNameTags.get(tag) || (tag === 'person'
+        a.title = expectedNameTags.get(tag)?.message || (tag === 'person'
           ? 'Tag "person" verified: page has a "Bands" tab (this entry belongs to bands)'
           : 'Tag "band" verified: page has a "Members" tab (this entry has members)');
       }
@@ -8113,22 +8113,27 @@
 
   /**
    * Returns additional lowercase tags expected on a relation page, keyed to
-   * a human-readable reason (so callers can show the same "verified"
-   * message used for the managed person/band tags):
+   * a human-readable reason plus the source `<a>` link(s) that produced the
+   * tag, if any (so callers can show the same "verified" message used for
+   * the managed person/band tags, and also colorize the corresponding
+   * band/member name link on the "Bands"/"Members" tab — see
+   * annotateRelationPageTags):
    *
    * - Person relation (has a "Bands" tab, #page-title is "<Surname>,
    *   <Name>"): the first letter of the Surname, the concatenation of
-   *   Name+Surname, and one or two tags per band listed on the "Bands" tab.
-   *   A band name containing " & " is first split into its two independent
-   *   parts (e.g. "Joe Grushecky & The Houserockers" -> "Joe Grushecky" and
-   *   "The Houserockers"), each becoming its own expected tag; a name
-   *   without "&" yields a single tag. Either way each part gets a leading
-   *   "The " and/or a trailing ", The" stripped before deriving the tag.
+   *   Name+Surname (neither has a source link — derived from #page-title,
+   *   not a tab entry), and one or two tags per band listed on the "Bands"
+   *   tab. A band name containing " & " is first split into its two
+   *   independent parts (e.g. "Joe Grushecky & The Houserockers" -> "Joe
+   *   Grushecky" and "The Houserockers"), each becoming its own expected
+   *   tag sharing the same source link; a name without "&" yields a single
+   *   tag. Either way each part gets a leading "The " and/or a trailing
+   *   ", The" stripped before deriving the tag.
    * - Band relation (has a "Members" tab, #page-title is the band name,
    *   optionally with a trailing ", The"): the first letter of the band
-   *   name (", The" stripped first), and one Name+Surname concatenation tag
-   *   per member listed on the "Members" tab (each in the same "<Surname>,
-   *   <Name>" format as a person #page-title).
+   *   name (", The" stripped first; no source link), and one Name+Surname
+   *   concatenation tag per member listed on the "Members" tab (each in the
+   *   same "<Surname>, <Name>" format as a person #page-title).
    *
    * Band/member link extraction uses collectRelationListLinks, so multi-list
    * tabs (e.g. a person's own bands followed by an "Other Bands" list) are
@@ -8138,10 +8143,18 @@
    * @param {Document} [doc=document] - Relation page document (defaults to
    *   the live document; pass a fetched relDoc for the YEAR page's nested
    *   relation "Tags" button — see addRelationTagsButton).
-   * @returns {Map<string, string>}
+   * @returns {Map<string, {message: string, links: HTMLAnchorElement[]}>}
    */
   function computeExpectedRelationNameTags(doc = document) {
     const expected = new Map();
+    const addExpected = (tag, message, link) => {
+      if (expected.has(tag)) {
+        if (link) expected.get(tag).links.push(link);
+      } else {
+        expected.set(tag, { message, links: link ? [link] : [] });
+      }
+    };
+
     const tabLabels = new Set(
       [...doc.querySelectorAll('.yui-nav em')].map(em => em.textContent.trim())
     );
@@ -8153,9 +8166,9 @@
       const person = parseRelationPersonTitle(titleText);
       if (person) {
         const letterTag = person.surname[0].toLowerCase();
-        expected.set(letterTag, `Tag "${letterTag}" verified: first letter of surname "${person.surname}"`);
+        addExpected(letterTag, `Tag "${letterTag}" verified: first letter of surname "${person.surname}"`, null);
         const nameTag = normalizeRelationTagName(person.name + person.surname);
-        expected.set(nameTag, `Tag "${nameTag}" verified: lowercase concatenation of "${person.name}" + "${person.surname}"`);
+        addExpected(nameTag, `Tag "${nameTag}" verified: lowercase concatenation of "${person.name}" + "${person.surname}"`, null);
       }
 
       for (const a of collectRelationListLinks(getTabEl(doc, tabMap, 'Bands'))) {
@@ -8164,7 +8177,7 @@
           const bandName = stripLeadingThe(stripTrailingThe(part));
           if (!bandName) continue;
           const tag = normalizeRelationTagName(bandName);
-          expected.set(tag, `Tag "${tag}" verified: page lists "${rawBandName}" on the "Bands" tab`);
+          addExpected(tag, `Tag "${tag}" verified: page lists "${rawBandName}" on the "Bands" tab`, a);
         }
       }
     }
@@ -8173,14 +8186,14 @@
       const bandName = stripTrailingThe(titleText);
       if (bandName) {
         const letterTag = bandName[0].toLowerCase();
-        expected.set(letterTag, `Tag "${letterTag}" verified: first letter of band name "${bandName}"`);
+        addExpected(letterTag, `Tag "${letterTag}" verified: first letter of band name "${bandName}"`, null);
       }
 
       for (const a of collectRelationListLinks(getTabEl(doc, tabMap, 'Members'))) {
         const member = parseRelationPersonTitle(a.textContent.trim());
         if (!member) continue;
         const tag = normalizeRelationTagName(member.name + member.surname);
-        expected.set(tag, `Tag "${tag}" verified: page lists "${member.surname}, ${member.name}" on the "Members" tab`);
+        addExpected(tag, `Tag "${tag}" verified: page lists "${member.surname}, ${member.name}" on the "Members" tab`, a);
       }
     }
 
@@ -8247,7 +8260,17 @@
     const passingNameLinks = tagLinks.filter(a =>
       expectedNameTags.has(a.textContent.trim().toLowerCase())
     );
-    markPassingTagLinks(passingNameLinks, tag => expectedNameTags.get(tag));
+    markPassingTagLinks(passingNameLinks, tag => expectedNameTags.get(tag).message);
+
+    // Colorize each verified tag's own source band/member name link(s) on
+    // the "Bands"/"Members" tab (e.g. "The Rogues", "Bittan, Roy") green.
+    for (const [tag, info] of expectedNameTags) {
+      if (!actualTags.has(tag)) continue;
+      for (const nameLink of info.links) {
+        nameLink.classList.add('bb-relation-name-ok');
+        nameLink.title = `Verified: tag "${tag}" is present in this page's tags`;
+      }
+    }
 
     if (missingTags.length === 0 && spuriousLinks.length === 0) return;
 
@@ -8974,6 +8997,10 @@
       /* Tag that passed its consistency check (DETAIL/VENUE/RETAIL/SONG/RELATION pages) */
       .bb-tag-ok { color: #2a2 !important; font-weight: bold; cursor: help; }
 
+      /* RELATION page: a band/member name link under the "Bands"/"Members"
+         tab whose derived tag is verified present in .page-tags */
+      .bb-relation-name-ok { color: #2a2 !important; font-weight: bold; cursor: help; }
+
       /* Tag rendered from the "onstage:" companion page, not this page's own .page-tags */
       .bb-tag-onstage { color: steelblue !important; font-style: italic; cursor: help; }
 
@@ -9003,7 +9030,8 @@
       .bb-original-view .bb-setlist-tab-ann { display: none !important; }
       .bb-original-view .bb-tags-warn-box   { border: none !important; background: none !important; padding: 0 !important; }
       .bb-original-view .bb-setlist-tab-match,
-      .bb-original-view .bb-tag-ok { color: inherit !important; font-weight: inherit !important; cursor: inherit !important; }
+      .bb-original-view .bb-tag-ok,
+      .bb-original-view .bb-relation-name-ok { color: inherit !important; font-weight: inherit !important; cursor: inherit !important; }
       /* Original view: collapse the letter-grouped lines back into
          BruceBase's original single flowing line (display:contents makes
          the wrapper divs transparent to layout, keeping only their tag

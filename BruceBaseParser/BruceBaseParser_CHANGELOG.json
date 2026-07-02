@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.85",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "On RELATION pages, a band/member name listed under the \"Bands\"/\"Members\" tab (e.g. \"The Rogues\", \"Bittan, Roy\") is now itself colorized green (new .bb-relation-name-ok class) whenever its derived tag (computeExpectedRelationNameTags) is verified present in this page's .page-tags — not just the tag link in .page-tags as before. computeExpectedRelationNameTags now returns {message, links} per tag instead of a bare message string, tracking which source <a> produced each tag (both halves of an \"&\"-split band name share the same source link) so annotateRelationPageTags can colorize it directly. Hidden/reset under the \"Original Page\" toggle like every other annotation."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.84",
         "date": "2026-07-03",
         "sections": [
