@@ -457,6 +457,37 @@ relation-matched tag from it (`&& !matchedRelationTagSet.has(tag)` /
 `"onstage"` (present but "not expected" by its own logic) at the same time
 this check marks it green, producing a confusing double-flag.
 
+**`ON_STAGE_RELATION_METHOD_LABEL` placement**: this lookup is declared in
+the top-of-file constants block (near `VENUE_TAG_ALIAS_OVERRIDES`), *not*
+near `checkOnStageRelationTags` itself. The boot dispatch block near the top
+of the file (`await runDetailPage()` etc.) runs before the script's
+sequential execution ever reaches later lines — `function` declarations are
+fully hoisted so this doesn't matter for them, but a `const` is only
+initialized when its declaration line actually executes. A `const` placed
+deep in the function-declaration section (after the dispatch) would still be
+in its temporal dead zone the first time a run\*Page() function (already
+running via that dispatch) tries to read it, throwing `ReferenceError:
+Cannot access '...' before initialization` — which is exactly what happened
+here until it was moved. Every other shared "data table" constant in this
+file (`MANAGED_CONTENT_TAGS`, `US_STATE_NAMES`, `SONG_TAG_ALIAS_OVERRIDES`,
+etc.) already lives in that same top block for this reason — any *new* one
+must go there too, never declared later "near where it's used."
+
+**Onstage-companion tag lookup**: a song/location/relation match against a
+tag that only exists via the companion "onstage:" page (i.e. rendered as a
+`.bb-tag-onstage` element, not present in the page's own original
+`.page-tags`) needs to be found by anchor *after* that rendering happens.
+`annotateDetailPageTags` builds a `tagToAnchor` map (tag string → element)
+from the original `tagLinks` and keeps adding to it as each onstage tag is
+rendered in, then uses `tagToAnchor.get(matchedTag)` (not
+`tagLinks.find(...)`, which would only ever see the pre-render snapshot) in
+every matched-tag marking loop. `addTagsButton`'s panel doesn't mutate a
+live DOM the same way, so its `onstageItems` entries instead check
+`matchedSongsByTag`/`matchedLocationsByTag`/`matchedRelationsByTag` directly
+and render green (`bb-tag-ok`) with the verification tooltip when a match
+exists, instead of unconditionally using the plain "found on companion page"
+style.
+
 `onStageRelationRulesExplanation()` returns a one-line summary of these same
 three rules; it's appended to `makeOnstageTagsGlyphSpan`'s tooltip (see
 "Onstage companion page tags" above) after the list of additional tags found

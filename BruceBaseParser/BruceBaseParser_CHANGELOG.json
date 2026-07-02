@@ -1,5 +1,18 @@
 [
     {
+        "version": "2.60",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed a ReferenceError (\"Cannot access 'ON_STAGE_RELATION_METHOD_LABEL' before initialization\") that crashed annotateDetailPageTags on every gig/rehearsal DETAIL page, aborting the rest of runDetailProcessing (missing 🏷️ glyph, missing gold warning box, setlist rendering/Save button never completing). ON_STAGE_RELATION_METHOD_LABEL was declared as a `const` deep inside the function-declaration section of the file, after the boot dispatch block already `await`s into run*Page(); unlike `function` declarations, `const` bindings aren't hoisted with a value, so the dispatch reached it while still in its temporal dead zone. Moved it to the top-of-file constants block alongside every other shared data constant, which all already followed this convention.",
+                    "Fixed relation/song/location tags whose only match exists on the companion \"onstage:\" page never rendering green: the marking loops searched `tagLinks`, a snapshot of .page-tags anchors captured *before* the onstage-companion tags were rendered into the DOM, so a newly-created onstage `<a>` could never be found and colored. annotateDetailPageTags now maintains a `tagToAnchor` map that's extended (not just built once) as onstage tags are added, and addTagsButton's onstage-tag panel entries now check for a song/location/relation match and render green (bb-tag-ok) instead of the plain \"found on companion page\" style when one exists."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.59",
         "date": "2026-07-02",
         "sections": [

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.59
+// @version      2.60
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -181,6 +181,21 @@
    */
   const VENUE_TAG_ALIAS_OVERRIDES = {
     // 'spotify hq': null,
+  };
+
+  /**
+   * Human-readable explanation per checkOnStageRelationTags `method`, for
+   * tag tooltips. Must be declared here (top-level, before the boot dispatch
+   * below awaits into run*Page()) rather than near checkOnStageRelationTags
+   * itself — `const` bindings are not hoisted with a value like `function`
+   * declarations are, so a `const` placed later in the file would still be
+   * in its temporal dead zone the first time a run*Page() function (already
+   * running via the dispatch below) tries to read it.
+   */
+  const ON_STAGE_RELATION_METHOD_LABEL = {
+    fixed: 'always expected because this page has an "On Stage" tab',
+    exact: 'matches a relation listed under the "On Stage" tab (lowercase, whitespace/punctuation stripped)',
+    'the-stripped': 'matches a relation listed under the "On Stage" tab (leading "The " stripped, lowercase, whitespace/punctuation stripped)',
   };
 
   /** SmartTable column definitions for YEAR OVERVIEW (list) pages. */
@@ -4675,13 +4690,6 @@
     return items;
   }
 
-  /** Human-readable explanation per checkOnStageRelationTags `method`, for tag tooltips. */
-  const ON_STAGE_RELATION_METHOD_LABEL = {
-    fixed: 'always expected because this page has an "On Stage" tab',
-    exact: 'matches a relation listed under the "On Stage" tab (lowercase, whitespace/punctuation stripped)',
-    'the-stripped': 'matches a relation listed under the "On Stage" tab (leading "The " stripped, lowercase, whitespace/punctuation stripped)',
-  };
-
   /**
    * One-line explanation of the "On Stage" relation-tag rules, for appending
    * to the companion "On Stage" page glyph tooltip (see
@@ -6152,12 +6160,27 @@
         tooltip: `No tag found for ${r.label}` })),
     ];
     // Onstage-companion tags: present (just not on this page), so rendered
-    // like an existing tag link rather than a missing/spurious one.
-    const onstageItems = onstageAdditionalTags.map(tag => ({
-      tag,
-      html: `<a href="/system:page-tags/tag/${esc(tag)}#pages" class="bb-tag-onstage" title="${esc(`Tag "${tag}" found on the companion "On Stage" page (${onstageResult.url})`)}">${esc(tag)}</a>`,
-      missing: false, spurious: false, tooltip: '',
-    }));
+    // like an existing tag link rather than a missing/spurious one. When one
+    // ALSO matches a song/location/relation check, render it green (bb-tag-ok)
+    // with that verification tooltip instead of the plain "found on companion
+    // page" one — otherwise a relation like "stevenvanzandt" that only exists
+    // via the companion page would never show as verified in this panel.
+    const onstageItems = onstageAdditionalTags.map(tag => {
+      const songMatch     = matchedSongsByTag.get(tag);
+      const locationMatch = matchedLocationsByTag.get(tag);
+      const relationMatch = matchedRelationsByTag.get(tag);
+      if (songMatch || locationMatch || relationMatch) {
+        const title = songMatch
+          ? `Tag "${tag}" verified: matches setlist song "${songMatch.song}" (${songMethodLabel[songMatch.method]})`
+          : locationMatch
+          ? `Tag "${tag}" verified: matches event ${locationMatch.label}`
+          : `Tag "${tag}" verified: ${relationMatch.label} — ${ON_STAGE_RELATION_METHOD_LABEL[relationMatch.method]}`;
+        return { tag, html: `<a href="/system:page-tags/tag/${esc(tag)}#pages" class="bb-tag-ok" style="color:#2a2; font-weight:bold; cursor:help;" title="${esc(title)}">${esc(tag)}</a>`,
+          missing: false, spurious: false, tooltip: '' };
+      }
+      return { tag, html: `<a href="/system:page-tags/tag/${esc(tag)}#pages" class="bb-tag-onstage" title="${esc(`Tag "${tag}" found on the companion "On Stage" page (${onstageResult.url})`)}">${esc(tag)}</a>`,
+        missing: false, spurious: false, tooltip: '' };
+    });
     const allItems = [...existingItems, ...onstageItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
 
     const spuriousCount = existingItems.filter(i => i.spurious).length;
@@ -6914,6 +6937,11 @@
 
     const tagLinks     = [...tagsContainer.querySelectorAll('a[href]')];
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    // tag string -> anchor element, for the matched-tag marking loops below.
+    // Extended (not replaced) as onstage-companion tags are rendered in, so
+    // a song/location/relation match against a tag that only exists via the
+    // companion page can still be found and colored green.
+    const tagToAnchor  = new Map(tagLinks.map(a => [a.textContent.trim().toLowerCase(), a]));
 
     // Merge in tags found on the "onstage:" companion page (BruceBase caps
     // tags-per-page, so some tags for a gig/rehearsal spill onto that page).
@@ -6935,6 +6963,7 @@
         a.className = 'bb-tag-onstage';
         a.title = `Tag "${tag}" found on the companion "On Stage" page (${onstageUrl})`;
         tagsSpan.appendChild(a);
+        tagToAnchor.set(tag, a);
       }
       [...tagsSpan.querySelectorAll('a[href]')]
         .sort((x, y) => {
@@ -6974,7 +7003,7 @@
     const unmatchedSongs = songResults.filter(r => !r.matchedTag);
     const songMethodLabel = { exact: 'exact match', alias: 'derived alias', override: 'manual override' };
     for (const r of matchedSongs) {
-      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.matchedTag);
+      const a = tagToAnchor.get(r.matchedTag);
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches setlist song "${r.song}" (${songMethodLabel[r.method]})`);
     }
 
@@ -6984,13 +7013,13 @@
     const matchedLocations   = locationResults.filter(r => r.matchedTag);
     const unmatchedLocations = locationResults.filter(r => !r.matchedTag);
     for (const r of matchedLocations) {
-      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.matchedTag);
+      const a = tagToAnchor.get(r.matchedTag);
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches event ${r.label}`);
     }
 
     // "On Stage" tab relation matches (computed earlier, before spurious/passing).
     for (const r of relationResults.filter(res => res.matchedTag)) {
-      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.matchedTag);
+      const a = tagToAnchor.get(r.matchedTag);
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label} — ${ON_STAGE_RELATION_METHOD_LABEL[r.method]}`);
     }
 

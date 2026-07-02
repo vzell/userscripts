@@ -3415,6 +3415,21 @@ Strip the "The" from the relation name if it's at the beginning e.g.
 
 In the tooltip explain these facts. For the current tooltip value for companion "On Stage" derived tags, append these facts.
 
+** bug
+
+After the latest changes the tags which represent relation names are not rendered in green when checked according our rules. 
+
+** still buggy
+
+Take e.g http://brucebase.wikidot.com/rehearsal:2026-03-24-youth-temple-ocean-grove-nj
+
+It's still not rendering in "green" the matched relation names, and now it's also NOT rendering anymore the 🏷️ glyph and yellow warning box around the tags:
+
+@debug/YEAR-BAD.debug - YEAR page entry has 🏷️ glyph, ONLY "brucespringsteen" tag is "green", tags from the companion URL not
+@debugDETAIL-BAD.debug - DETAIL page is now missing the 🏷️ glyph and the yellow warning box around the tags (whereas both were there in the version before, see @debug/DETAIL-BAD-BEFORE.debug), ONLY "brucespringsteen" tag is "green", tags from the companion URL not
+
+
+
 ** jake.clemons
 ** 10th doesn't work as alias for "TENTH..."
 
