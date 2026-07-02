@@ -3498,12 +3498,106 @@ the tage value "guest" must also be present
 
 ** DONE 10th doesn't work as alias for "TENTH..."
 
-
 ** jake.clemons
 
 RELATION_TAG_ALIAS_OVERRIDES = {
       197 +    'jake clemons': 'jake.clemons',
       198 +  };
+
+** DONE recording
+
+If an event type is of type "recording" and the DETAIL page e.g http://brucebase.wikidot.com/recording:2026-01-27-stone-hill-studio-colts-neck-nj
+has a named "In Studio" tab
+
+1.)
+
+make the same relation name checks like for e.g. "gig"
+
+2.)
+
+additional rule in this case is, the tag "studio" must always be present
+
+** DONE nogig
+
+If an event type is of type "nogig" and the DETAIL page e.g http://brucebase.wikidot.com/nogig:2026-02-01-crypto-com-arena-los-angeles-ca
+has a named "On Audio" tab
+
+1.)
+
+make the same relation name checks like for e.g. "gig"
+
+2.)
+
+if the following tags are present (this is generic and doesn't depend on the event type)
+
+#+begin_example
+award
+grammy
+#+end_example
+
+and are part/included as substring of the event alias string (case insensitve) '<span class="bb-event-alias">' on the YEAR page (derived from '<strong>68th Annual Grammy Awards Ceremony</strong>' at the DETAIL page before the relation list)
+also render these tags in green with a tooltip which explains the fact
+
+** DONE rehearsal
+
+If an event type is of type "rehearsal" and the DETAIL page e.g http://brucebase.wikidot.com/rehearsal:1980-09-00d-clair-brothers-audio-lititz-pa
+has a named "On Stage" tab:
+
+If the following tag is present
+
+#+begin_example
+private
+#+end_example
+
+and is part/included as substring of the event alias string (case insensitve) '<span class="bb-event-alias">' also render this tag in green with a tooltip which explains the fact
+
+** DONE bug
+
+Actually it should read:
+
+If the following tag is present
+
+#+begin_example
+private
+#+end_example
+
+and "private" or "closed" is part/included as substring of the event alias string (case insensitve) '<span class="bb-event-alias">' also render this tag in green with a tooltip which explains the fact
+
+** DONE 00
+
+1.)
+
+When the 2-digit day part of an event date e.g. http://brucebase.wikidot.com/rehearsal:1976-12-00b-telegraph-hill-studio-holmdel-nj is "00", the tag "00" should also be present
+
+2.)
+
+if there is additionally a one character like "a", "b", "c" etc. appended to the 2-digit event day (meaning, the first,
+second, third etc.event on the same day(month, when "00")), that character should also be present as tag value
+
+
+
+
+** DONE help icon
+
+If on any YEAR e.g. http://brucebase.wikidot.com/2026#210326 or DETAIL page of an event, the following symbol
+
+#+begin_example
+<img src="http://brucebase.wdfiles.com/local--files/content:files/00Help-32.png" title="Help Us" height="15" width="15" alt="00Help-32.png" class="image">
+#+end_example
+
+with a descriptive text appears, then the "help" tag should also be present @debug/help.html
+
+** DONE tags on detail
+
+On DETAIL pages currently the tags are rendered in one long line, e.g. on http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n
+@debug/longline.html
+
+On the final processed page they should be rendered in muliple lines grouped by the alpabet characters "a", "b", etc.
+
+** TODO benefit tag
+
+http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n - "benefit" tag is present, but ONLY mentioned in the notes text
+
 
 * question
 ** initial
