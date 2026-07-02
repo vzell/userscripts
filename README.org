@@ -3578,6 +3578,7 @@ second, third etc.event on the same day(month, when "00")), that character shoul
 
 
 ** DONE help icon
+*** initial
 
 If on any YEAR e.g. http://brucebase.wikidot.com/2026#210326 or DETAIL page of an event, the following symbol
 
@@ -3586,6 +3587,14 @@ If on any YEAR e.g. http://brucebase.wikidot.com/2026#210326 or DETAIL page of a
 #+end_example
 
 with a descriptive text appears, then the "help" tag should also be present @debug/help.html
+
+*** bug
+
+On the DETAIL page http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n the "help"
+tag is present but the tooltip text about "NO help us call-to-action icon on the YEAR page" is misleading, as it is on
+the DETAIL page itself under the "On Stage" tab
+
+@debug/helpbug.hml
 
 ** DONE tags on detail
 
@@ -3597,6 +3606,21 @@ On the final processed page they should be rendered in muliple lines grouped by 
 ** TODO benefit tag
 
 http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n - "benefit" tag is present, but ONLY mentioned in the notes text
+
+** DONE when the "News/Memorabilia" tab has NO images and only news links, the "Memorabilia"-Icon should not be present
+
+When the "News/Memorabilia" tab on a DETAIL page e.g. http://brucebase.wikidot.com/rehearsal:2026-03-21-youth-temple-ocean-grove-nj
+has NO images and only a news "Links" section, the "memorabilia" tag should not be present
+
+#+begin_example
+<div class="list-pages-item">
+
+<p><strong>Links</strong>:</p>
+<ul>
+<li><a target="_blank" href="https://eu.app.com/story/entertainment/music/2026/03/21/bruce-springsteen-e-street-band-rehearsal-bon-jovi-ocean-grove/89269837007/">Bon Jovi drives Bruce Springsteen to E Street rehearsal in Ocean Grove</a> <sup><em>(App.)</em></sup></li>
+</ul>
+</div>
+#+end_example
 
 
 * question
