@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.58
+// @version      2.59
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -6124,7 +6124,7 @@
       const songMatch     = matchedSongsByTag.get(tag);
       const locationMatch = matchedLocationsByTag.get(tag);
       const relationMatch = matchedRelationsByTag.get(tag);
-      const spurious    = isManagedTag(tag) && !isTagPresent(tag, expectedTags);
+      const spurious    = isManagedTag(tag) && !isTagPresent(tag, expectedTags) && !relationMatch;
       const passing     = (isManagedTag(tag) && isTagPresent(tag, expectedTags)) || !!songMatch || !!locationMatch || !!relationMatch;
       if (passing) {
         a.style.color = '#2a2';
@@ -6944,11 +6944,22 @@
         .forEach(a => tagsSpan.appendChild(a));
     }
 
+    // "On Stage" tab → relation tag check: "onstage" plus every relation
+    // name listed there should each have a corresponding tag. Computed here
+    // (before spurious/passing) because "onstage" is also a member of
+    // MANAGED_CONTENT_TAGS (used on actual /onstage: pages) but is never
+    // added to computeExpectedTags for gig/rehearsal pages — without this
+    // exclusion, the generic spurious-tag check below would incorrectly
+    // flag it orange even while this check marks it green.
+    const relationResults    = checkOnStageRelationTags(document, tabMap, actualTags);
+    const matchedRelationTagSet = new Set(relationResults.filter(r => r.matchedTag).map(r => r.matchedTag));
+    const unmatchedRelations = relationResults.filter(r => !r.matchedTag);
+
     const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
     const spuriousLinks = tagLinks.filter(a => {
       const tag = a.textContent.trim().toLowerCase();
-      return isManagedTag(tag) && !isTagPresent(tag, expectedTags);
+      return isManagedTag(tag) && !isTagPresent(tag, expectedTags) && !matchedRelationTagSet.has(tag);
     });
     const passingLinks = tagLinks.filter(a => {
       const tag = a.textContent.trim().toLowerCase();
@@ -6977,12 +6988,8 @@
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches event ${r.label}`);
     }
 
-    // "On Stage" tab → relation tag check: "onstage" plus every relation
-    // name listed there should each have a corresponding tag.
-    const relationResults    = checkOnStageRelationTags(document, tabMap, actualTags);
-    const matchedRelations   = relationResults.filter(r => r.matchedTag);
-    const unmatchedRelations = relationResults.filter(r => !r.matchedTag);
-    for (const r of matchedRelations) {
+    // "On Stage" tab relation matches (computed earlier, before spurious/passing).
+    for (const r of relationResults.filter(res => res.matchedTag)) {
       const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.matchedTag);
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label} — ${ON_STAGE_RELATION_METHOD_LABEL[r.method]}`);
     }

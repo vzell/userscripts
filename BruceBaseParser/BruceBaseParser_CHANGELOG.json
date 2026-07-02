@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.59",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed the On Stage relation-tag check (v2.58) incorrectly flagging the always-expected \"onstage\" tag as spurious (orange ⚠️) at the same time it was marked green/passing: \"onstage\" is a MANAGED_CONTENT_TAGS member (used on actual /onstage: pages), but computeExpectedTags never adds it for gig/rehearsal pages, so the generic spurious check treated it as present-but-unexpected. annotateDetailPageTags and addTagsButton now compute the On Stage relation results before the spurious/passing pass and exclude any relation-matched tag from spurious detection."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.58",
         "date": "2026-07-02",
         "sections": [

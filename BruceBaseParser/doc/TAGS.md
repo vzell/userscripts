@@ -446,6 +446,17 @@ under the 'On Stage' tab (lowercase, whitespace/punctuation stripped)"*). An
 unmatched relation (or a missing `"onstage"` tag itself) is rendered like a
 missing tag, showing `candidateTag`.
 
+**Important ordering note**: `"onstage"` is also a member of
+`MANAGED_CONTENT_TAGS` (it's a real event type for actual `/onstage:` pages),
+but `computeExpectedTags` never adds it to `expectedTags` for a gig/rehearsal
+page — only this check does. Both `annotateDetailPageTags` and
+`addTagsButton` therefore compute `checkOnStageRelationTags`'s results
+*before* their `spuriousLinks`/`spurious` computation and exclude any
+relation-matched tag from it (`&& !matchedRelationTagSet.has(tag)` /
+`&& !relationMatch`) — otherwise the generic spurious check would flag
+`"onstage"` (present but "not expected" by its own logic) at the same time
+this check marks it green, producing a confusing double-flag.
+
 `onStageRelationRulesExplanation()` returns a one-line summary of these same
 three rules; it's appended to `makeOnstageTagsGlyphSpan`'s tooltip (see
 "Onstage companion page tags" above) after the list of additional tags found
