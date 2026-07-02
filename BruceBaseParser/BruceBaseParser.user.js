@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.54
+// @version      2.55
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -126,6 +126,7 @@
   const SONG_TAG_ALIAS_OVERRIDES = {
     // 'incident on 57th street': 'incident57',
     'rosalita (come out tonight)': 'rosalita',
+    'tenth avenue freeze-out': '10th',
   };
 
   /** USPS state abbreviation -> full state name, for the event-name/venue-name location tag check. */
@@ -5660,25 +5661,34 @@
   }
 
   /**
-   * Recognizes (but does not require) two additional SONG-page tag
-   * conventions: the lowercase, punctuation-stripped song title itself, and
-   * the derived first-letter-per-word alias (computeSongTagAlias) — e.g. for
-   * "BORN TO RUN": "borntorun" and "btr". Neither is a hard requirement —
-   * real SONG pages sometimes use only one, or neither (relying on the
-   * simpler first-letter tag instead) — so this never contributes to a
-   * missing-tag list; it only reports which of the two happen to already be
-   * present, for green "recognized" marking.
+   * Checks the SONG page's exact-title-slug tag — a hard requirement, unlike
+   * the alias recognition below. E.g. "BORN TO RUN" -> "borntorun" must be
+   * present among the page's tags.
    * @param {string}      songName   - Text from the song page's #page-title.
    * @param {Set<string>} actualTags - Lowercase tags present on the page.
-   * @returns {{tag: string, method: 'exact'|'alias'}[]}
+   * @returns {{tag: string, matchedTag: string|null}}
    */
-  function checkSongTitleTagRecognition(songName, actualTags) {
-    const recognized = [];
-    const exactTag = songName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (exactTag && isTagPresent(exactTag, actualTags)) recognized.push({ tag: exactTag, method: 'exact' });
+  function checkSongExactTitleTag(songName, actualTags) {
+    const tag = songName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return { tag, matchedTag: (tag && isTagPresent(tag, actualTags)) ? tag : null };
+  }
+
+  /**
+   * Recognizes (but does not require) one additional SONG-page tag
+   * convention: the derived first-letter-per-word alias (computeSongTagAlias)
+   * — e.g. "BORN TO RUN" -> "btr". Not a hard requirement — real SONG pages
+   * sometimes carry only the exact-title tag, or neither — so this never
+   * contributes to a missing-tag list; it only reports whether the alias
+   * happens to already be present, for green "recognized" marking.
+   * @param {string}      songName   - Text from the song page's #page-title.
+   * @param {Set<string>} actualTags - Lowercase tags present on the page.
+   * @param {string}      exactTag   - The exact-title tag (from checkSongExactTitleTag), to avoid duplicate reporting when they're equal.
+   * @returns {{tag: string, matchedTag: string|null}|null} null when the alias equals the exact-title tag.
+   */
+  function checkSongAliasTagRecognition(songName, actualTags, exactTag) {
     const aliasTag = computeSongTagAlias(songName);
-    if (aliasTag && aliasTag !== exactTag && isTagPresent(aliasTag, actualTags)) recognized.push({ tag: aliasTag, method: 'alias' });
-    return recognized;
+    if (!aliasTag || aliasTag === exactTag) return null;
+    return { tag: aliasTag, matchedTag: isTagPresent(aliasTag, actualTags) ? aliasTag : null };
   }
 
   /**
@@ -5789,8 +5799,8 @@
     const atTheM = name.match(/^(.+?)\s+at\s+the\s+(.+)$/i);
     if (atTheM) {
       return [
-        checkLocationNameTag('Venue', atTheM[1].trim(), actualTags, cityHint),
-        checkLocationNameTag('Venue', atTheM[2].trim(), actualTags, cityHint),
+        checkLocationNameTag(`Venue part before "At The" in "${name}"`, atTheM[1].trim(), actualTags, cityHint),
+        checkLocationNameTag(`Venue part after "At The" in "${name}"`, atTheM[2].trim(), actualTags, cityHint),
       ].filter(Boolean);
     }
     const item = checkLocationNameTag('Venue', name, actualTags, cityHint);
@@ -6317,7 +6327,9 @@
 
   /**
    * Appends a "Tags" button (inside row) for the song page's .page-tags.
-   * Consistency checks: "song", first-letter, and "lyricsheet" are managed.
+   * Consistency checks: "song", first-letter, "lyricsheet", and the
+   * exact-title-slug tag are managed/required; the derived-alias tag is
+   * recognized (green if present) but not required.
    * @param {Document}           songDoc
    * @param {Map<string,number>} songTabMap
    * @param {string}             songName
@@ -6334,26 +6346,25 @@
     const expectedTags = computeExpectedYearSongTags(songDoc, songTabMap, songName);
     const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
 
-    // Recognize (but don't require) the exact-title-slug / derived-alias tags.
-    const recognizedByTag = new Map(
-      checkSongTitleTagRecognition(songName, actualTags).map(r => [r.tag, r])
-    );
-    const recognitionMethodLabel = {
-      exact: `matches the song name "${songName}" (lowercase, punctuation stripped)`,
-      alias: `matches the derived first-letter-per-word alias of song name "${songName}"`,
-    };
+    // Exact-title-slug tag: a hard requirement, e.g. "BORN TO RUN" -> "borntorun".
+    const exactCheck = checkSongExactTitleTag(songName, actualTags);
+    // Derived-alias tag: recognized (but not required) — e.g. "BORN TO RUN" -> "btr".
+    const aliasCheck = checkSongAliasTagRecognition(songName, actualTags, exactCheck.tag);
 
     const existingItems = tagLinks.map(a => {
-      const tag        = a.textContent.trim().toLowerCase();
-      const recognized = recognizedByTag.get(tag);
+      const tag           = a.textContent.trim().toLowerCase();
+      const isExactMatch   = exactCheck.matchedTag === tag;
+      const isAliasMatch   = aliasCheck && aliasCheck.matchedTag === tag;
       const spurious = isManagedYearSongTag(tag) && !expectedTags.has(tag);
-      const passing  = (isManagedYearSongTag(tag) && expectedTags.has(tag)) || !!recognized;
+      const passing  = (isManagedYearSongTag(tag) && expectedTags.has(tag)) || isExactMatch || isAliasMatch;
       const tooltip  = spurious ? `Tag "${tag}" is present but not expected for this song` : '';
       if (passing) {
         a.style.color = '#2a2';
         a.style.fontWeight = 'bold';
-        a.title = recognized
-          ? `Tag "${tag}" recognized: ${recognitionMethodLabel[recognized.method]}`
+        a.title = isExactMatch
+          ? `Tag "${tag}" verified: matches the song name "${songName}" (lowercase, punctuation stripped)`
+          : isAliasMatch
+          ? `Tag "${tag}" recognized: matches the derived first-letter-per-word alias of song name "${songName}"`
           : tag === 'song'
           ? 'Tag "song" verified: this is a song page'
           : tag === 'lyricsheet'
@@ -6362,22 +6373,29 @@
       }
       return { tag, html: a.outerHTML, missing: false, spurious, tooltip };
     });
-    const missingItems = missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' }));
+    const missingItems = [
+      ...missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' })),
+      ...(!exactCheck.matchedTag ? [{ tag: exactCheck.tag, html: null, missing: true, spurious: false,
+        tooltip: `Tag "${exactCheck.tag}" expected (exact match of song name "${songName}") but not present` }] : []),
+    ];
     const allItems = [...existingItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
 
     const spuriousCount = existingItems.filter(i => i.spurious).length;
+    const totalMissing  = missingTags.length + (exactCheck.matchedTag ? 0 : 1);
     const issueParts = [];
-    if (missingTags.length > 0) issueParts.push(`${missingTags.length} missing`);
-    if (spuriousCount > 0)      issueParts.push(`${spuriousCount} spurious`);
+    if (totalMissing > 0)  issueParts.push(`${totalMissing} missing`);
+    if (spuriousCount > 0) issueParts.push(`${spuriousCount} spurious`);
 
     let html = '';
-    if (missingTags.length > 0) {
+    if (totalMissing > 0) {
       html += '<p style="color:red; font-weight:bold; margin:0 0 6px 0">⚠️ Missing expected song tags:</p>';
     }
     html += '<ol class="bb-tags-list" style="margin:4px 0; padding-left:18px;">';
     for (const item of allItems) {
       if (item.missing) {
-        html += `<li style="color:red; font-weight:bold">⚠️ ${esc(item.tag)}</li>`;
+        const style     = `color:red; font-weight:bold${item.tooltip ? '; cursor:help' : ''}`;
+        const titleAttr = item.tooltip ? ` title="${esc(item.tooltip)}"` : '';
+        html += `<li style="${style}"${titleAttr}>⚠️ ${esc(item.tag)}</li>`;
       } else if (item.spurious) {
         html += `<li>${item.html} <span style="color:darkorange; font-weight:bold; cursor:help" title="${esc(item.tooltip)}">⚠️</span></li>`;
       } else {
@@ -6393,7 +6411,7 @@
     btn.title = issueParts.length > 0
       ? `Song Tags — issues: ${issueParts.join(', ')}`
       : 'All tags verified — click to expand/collapse the Song Tags panel';
-    if (missingTags.length > 0)  btn.style.color = 'red';
+    if (totalMissing > 0)       btn.style.color = 'red';
     else if (spuriousCount > 0)  btn.style.color = 'darkorange';
     else                         btn.style.color = '#2a2';
 
@@ -7042,9 +7060,10 @@
 
   /**
    * On SONG pages: wraps .page-tags in a yellow warning box and annotates
-   * missing / spurious song tags inline on the live page. Also recognizes
-   * (without requiring) the exact-title-slug and derived-alias tags via
-   * checkSongTitleTagRecognition, marking them green when present.
+   * missing / spurious song tags inline on the live page. Also requires the
+   * exact-title-slug tag (checkSongExactTitleTag) and recognizes (without
+   * requiring) the derived-alias tag (checkSongAliasTagRecognition), marking
+   * either green when present.
    * No-op when all expected tags are present and no spurious managed tags exist.
    * @param {string}             songName - Text from the song page's #page-title.
    * @param {Map<string,number>} tabMap   - buildTabMap(document) result.
@@ -7071,18 +7090,21 @@
       ? 'Tag "lyricsheet" verified: Gallery tab has lyricsheet image(s)'
       : `Tag "${tag}" verified: matches the first letter of song title "${songName}"`);
 
-    // Recognize (but don't require) the exact-title-slug / derived-alias tags.
-    const recognized = checkSongTitleTagRecognition(songName, actualTags);
-    const recognitionMethodLabel = {
-      exact: `matches the song title "${songName}" (lowercase, punctuation stripped)`,
-      alias: `matches the derived first-letter-per-word alias of song title "${songName}"`,
-    };
-    for (const r of recognized) {
-      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.tag);
-      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" recognized: ${recognitionMethodLabel[r.method]}`);
+    // Exact-title-slug tag: a hard requirement, e.g. "BORN TO RUN" -> "borntorun".
+    const exactCheck = checkSongExactTitleTag(songName, actualTags);
+    if (exactCheck.matchedTag) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === exactCheck.matchedTag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches the song title "${songName}" (lowercase, punctuation stripped)`);
     }
 
-    if (missingTags.length === 0 && spuriousLinks.length === 0) return;
+    // Derived-alias tag: recognized (but not required) — e.g. "BORN TO RUN" -> "btr".
+    const aliasCheck = checkSongAliasTagRecognition(songName, actualTags, exactCheck.tag);
+    if (aliasCheck && aliasCheck.matchedTag) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === aliasCheck.matchedTag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" recognized: matches the derived first-letter-per-word alias of song title "${songName}"`);
+    }
+
+    if (missingTags.length === 0 && spuriousLinks.length === 0 && exactCheck.matchedTag) return;
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
@@ -7108,6 +7130,15 @@
       missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
       missingSpan.title = `Tag "${tag}" expected for this song page but not present`;
       missingSpan.textContent = ` ⚠️${tag}`;
+      span.appendChild(missingSpan);
+    }
+
+    if (!exactCheck.matchedTag) {
+      const missingSpan = document.createElement('span');
+      missingSpan.className = 'bb-tag-missing';
+      missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
+      missingSpan.title = `Tag "${exactCheck.tag}" expected (exact match of song title "${songName}") but not present`;
+      missingSpan.textContent = ` ⚠️${exactCheck.tag}`;
       span.appendChild(missingSpan);
     }
   }

@@ -238,8 +238,8 @@ actual tag wins:
    case where BruceBase's real tag matches neither of the above — e.g.
    `"ROSALITA (COME OUT TONIGHT)"` → `rosalita` (real tag is just the first
    word, not the full-title slug `rosalitacomeouttonight` nor an acronym
-   alias). Add entries here as exceptions are discovered; no code changes
-   needed elsewhere.
+   alias), and `"TENTH AVENUE FREEZE-OUT"` → `10th`. Add entries here as
+   exceptions are discovered; no code changes needed elsewhere.
 
 Result shape: `{ song, matchedTag, method: 'exact'|'alias'|'override'|null }[]`.
 A matched song's tag is colored green via `markPassingTagLinks`/inline
@@ -305,7 +305,11 @@ Memorial"`); if found, it splits into two independently-checked names —
 (`bluecrossarena` and `warmemorial`) — instead of a single combined-name
 tag (`bluecrossarenaatthewarmemorial`, which BruceBase never uses). If no
 `" At The "` is found, it falls back to a single `checkLocationNameTag`
-call for the whole name.
+call for the whole name. Each split half is passed a distinct `label`
+(`` `Venue part before "At The" in "${name}"` `` / `` `Venue part after "At
+The" in "${name}"` ``) instead of the generic `"Venue"` label, so the
+resulting tooltip on the matched (or missing) tag explicitly names the "At
+The" splitting rule rather than just saying "Venue".
 
 `checkLocationNameTag` itself first looks up `VENUE_TAG_ALIAS_OVERRIDES`
 (keyed by the lowercase, trimmed name), then tries the plain full-name slug,
@@ -372,22 +376,24 @@ instead of a fetched one:
 | `song` | Always — every `/song:…` page must carry this tag |
 | First letter of `songName` | Lowercase, e.g. `"BORN TO RUN"` → `b` |
 | `lyricsheet` | Gallery tab has an `<img>` whose `src` contains `"lyricsheet"` |
+| Exact-title slug (`checkSongExactTitleTag`) | `songName.toLowerCase().replace(/[^a-z0-9]/g, '')` — e.g. `"BORN TO RUN"` → `borntorun` — a hard requirement, flagged missing if absent |
 
-In addition, `checkSongTitleTagRecognition(songName, actualTags)` checks two
-more tag conventions — but as *recognition only*, never as a requirement
-(real SONG pages sometimes use just one of these, or neither, relying on the
-first-letter tag alone), so neither ever appears in the missing-tag list:
-1. **Exact title match**: `songName.toLowerCase().replace(/[^a-z0-9]/g, '')`
-   — e.g. `"BORN TO RUN"` → `borntorun`.
-2. **Derived alias** (`computeSongTagAlias`, same algorithm as the setlist
-   song tag check) — e.g. `"BORN TO RUN"` → `btr`.
+In addition, `checkSongAliasTagRecognition(songName, actualTags, exactTag)`
+checks one more tag convention — but as *recognition only*, never as a
+requirement (real SONG pages sometimes carry only the exact-title tag, or
+neither, relying on the first-letter tag alone), so it never appears in the
+missing-tag list: the **derived alias** (`computeSongTagAlias`, same
+algorithm as the setlist song tag check) — e.g. `"BORN TO RUN"` → `btr`.
+Returns `null` when the alias would equal the exact-title tag, to avoid
+double-reporting the same tag under two labels.
 
-Whichever of these (zero, one, or both) happens to already be present among
-the page's tags is marked green via `markPassingTagLinks`, with a tooltip
-saying "recognized" rather than "verified" (to distinguish an optional match
-from a required one). `addSongTagsButton` (YEAR page's nested "Song Tags"
-button) mirrors this via a `recognizedByTag` map merged into its existing-tag
-pass/tooltip logic.
+The exact-title tag, when present, is marked green via `markPassingTagLinks`
+with a "verified" tooltip (same wording as the required checks above); the
+alias tag, when present, gets a "recognized" tooltip instead, to distinguish
+an optional match from a required one. `addSongTagsButton` (YEAR page's
+nested "Song Tags" button) mirrors both checks, merging the exact-title
+check into its missing-tag list (contributing to the "N missing" button
+count) and the alias check into its existing-tag pass/tooltip logic only.
 
 ---
 

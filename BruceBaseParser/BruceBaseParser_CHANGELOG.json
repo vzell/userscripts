@@ -1,5 +1,19 @@
 [
     {
+        "version": "2.55",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "The SONG-page exact-title-slug tag check (formerly part of checkSongTitleTagRecognition, optional) is now a hard requirement, split into checkSongExactTitleTag (required, flagged missing if absent) and checkSongAliasTagRecognition (still optional, green-only). Wired into both annotateSongPageTags and addSongTagsButton, including missing-tag-count/button-color contributions.",
+                    "Added 'tenth avenue freeze-out': '10th' to SONG_TAG_ALIAS_OVERRIDES.",
+                    "checkVenueNameTag's \"At The\" venue-name split now passes a descriptive label (\"Venue part before/after \\\"At The\\\" in ...\") instead of the generic \"Venue\" label, so the resulting tag tooltip explicitly mentions the splitting rule instead of just naming the sub-part."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.54",
         "date": "2026-07-02",
         "sections": [

@@ -3254,7 +3254,7 @@ rename the current "Tags"
 
 in the "Tags"-button panel of '<div class="bb-event-tab-row">' to the complete event name plus " Tags" appended
 
-** some more tag value check rules
+** DONE some more tag value check rules
 
 On e.g. http://brucebase.wikidot.com/gig:2008-03-06-blue-cross-arena-rochester-ny
 the event name is "2008-03-06 Blue Cross Arena At The War Memorial, Rochester, NY" and the actual
@@ -3287,7 +3287,7 @@ Add
 
 to the SONG_TAG_ALIAS_OVERRIDES variable
 
-** SONG page tag checks
+** DONE SONG page tag checks
 
 On SONG pages e.g. http://brucebase.wikidot.com/song:born-to-run implement the following additionally tag value checks:
 
@@ -3315,27 +3315,57 @@ check if the lowercase blank stripped version of a song title matches with a sam
 #+end_example
 
 #+begin_example
-5661 +   * Recognizes (but does not require) two additional SONG-page tag
-      5662 +   * conventions: the lowercase, punctuation-stripped song title itself, and
-      5663 +   * the derived first-letter-per-word alias (computeSongTagAlias) — e.g. for
-      5664 +   * "BORN TO RUN": "borntorun" and "btr". Neither is a hard requirement —
-      5665 +   * real SONG pages sometimes use only one, or neither (relying on the
-      5666 +   * simpler first-letter tag instead) — so this never contributes to a
-      5667 +   * missing-tag list; it only reports which of the two happen to already be
-      5668 +   * present, for green "recognized" marking.
+  1. First letter required — annotateSongPageTags now requires the first-letter tag (e.g. "BORN TO RUN" → b), delegating to the same rule already used by the YEAR page's nested Song Tags button.
+  2. Alias recognition (optional) — checkSongTitleTagRecognition computes the btr-style alias via the existing computeSongTagAlias; if present, marked green as "recognized," but never flagged missing if
+  absent.
+  3. Exact-title-match recognition (optional) — same treatment for borntorun (lowercase, punctuation-stripped title).
+  4. lyricsheet required if present in Gallery — already existed on the YEAR-page button; now also required on the live SONG page via the same delegation.
+
+  I made a judgment call on items 2 and 3: your message called out item 2 explicitly as "not a requirement," and I extended that same soft treatment to item 3, since real SONG pages in the data we've seen so
+  far often carry only the alias tag (e.g. btn, btr) rather than the full-title slug — making the exact match a hard requirement would have produced false-positive "missing" warnings. Let me know if you
+  actually want item 3 to be a hard requirement instead.
+
+  Both annotateSongPageTags (live page) and addSongTagsButton (YEAR page nested button) got the same treatment for consistency. Verified with a scratch test covering alias-only, exact-only, and neither-present
+  cases, plus node --check and changelog JSON validation.
 #+end_example
-
-** mention the 'Venue "At The" splitting rule' fact also on the corresponding tag value tooltips
-
-mention the 'Venue "At The" splitting rule' fact also on the corresponding tag value tooltips
 
 ** all hyperlinks in the processed final page should be rendered in a new tab
 
 ** http://brucebase.wikidot.com/song:born-to-run add MusicBrainz icon to the song title on SONG pages
 
-** add the following manual overrides to songlist
+** bugs
+
+1.)
+
+The following rule
+
+#+begin_example
+3. Exact-title-match recognition (optional) — same treatment for borntorun (lowercase, punctuation-stripped title).
+#+end_example
+
+should actually NOT be optional, but be enforced
+
+2.)
+
+add the following additional manual overrides to SONG_TAG_ALIAS_OVERRIDES
 
 "TENTH AVENUE FREEZE-OUT" => 10th
+
+3.)
+
+mention the 'Venue "At The" splitting rule' fact also on the corresponding tag value tooltips
+
+** onstage, offstage, soundcheck
+*** onstage
+
+If an event type is of type "gig" and the DETAIL page e.g http://brucebase.wikidot.com/gig:2025-10-26-stone-pony-asbury-park-nj
+and has a named "On Stage" tab, additionally fetch the corresponding "onstage" URL e.g. http://brucebase.wikidot.com/onstage:2025-10-26-stone-pony-asbury-park-nj/noredirect/true
+by replacing "gig->onstage" and appending "/noredirect/true" to the original DETAIL URL.
+
+These types of pages only exist (actually optional) because BruceBase Wiki does not allow unlimited tag values per
+page. To get the complete list of tag values for the original DETAIL page, the tags from the "onstage" version needs to
+be fetched too and appended to the original list
+
 
 * question
 ** initial
