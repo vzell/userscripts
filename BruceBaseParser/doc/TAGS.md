@@ -130,12 +130,19 @@ passed, without needing to open a panel or hunt for a ⚠️.
 
 ## YEAR page Tags button (`addTagsButton`)
 
-Called from `wireIconHandlers` (after `addEventTabButtons`). It:
+Called from `wireIconHandlers(eventLink, doc, onstageResult)` (after
+`addEventTabButtons`), where `onstageResult` is `processOneYearEvent`'s
+`fetchOnstageCompanionTags` result (or `null`), threaded through so the
+button shows ALL tags for the event, not just the ones on the DETAIL page
+itself. It:
 1. Reads `.page-tags a[href]` from the fetched DETAIL `doc`.
-2. Computes expected tags and compares against actual.
+2. Merges in any onstage-companion tags not already present (same pattern as
+   `annotateDetailPageTags` — see "Onstage companion page tags" below), then
+   computes expected tags and compares against the merged actual set.
 3. Merges existing links (styled green if passing, with spurious ⚠️ if not) +
-   missing placeholders into one sorted list; renders in the `buildIconPanel`
-   infrastructure.
+   onstage-companion tags (rendered as `bb-tag-onstage`-styled entries, always
+   "present", never spurious/missing) + missing placeholders into one sorted
+   list; renders in the `buildIconPanel` infrastructure.
 4. Button label: `"Tags"` when clean; `"Tags ⚠️ (N missing, M spurious)"` with
    colour red (if any missing), dark-orange (if only spurious), or green
    (`#2a2`, when fully clean) — so status is visible without clicking.
@@ -195,20 +202,25 @@ once at the top of `runDetailPage` to avoid a duplicate parse), `rawDetailName`
 8. Appends `<span class="bb-tag-missing">⚠️tag</span>` spans for missing tags,
    one per unmatched setlist song (showing the derived-alias candidate), AND
    one per unmatched location part (showing the expected slug/override tag).
-9. Returns `{ additionalTags, onstageUrl }` — tags found only on the onstage
-   companion page, for the caller to pass to `addOnstageTagsGlyph`.
+9. Renders any onstage-companion `additionalTags` directly into `.page-tags`
+   itself as real-looking `<a href="/system:page-tags/tag/…">` links (class
+   `bb-tag-onstage`), then re-sorts the combined tag list alphabetically —
+   see "Onstage companion page tags" below.
+10. Returns `{ additionalTags, onstageUrl }` — tags found only on the onstage
+    companion page, for the caller to pass to `addOnstageTagsGlyph`.
 
 Merging onstage-only tags into the internal `actualTags` Set (step 2) means
 they correctly suppress false "missing" warnings and satisfy the setlist-song
-/ location checks, but since they have no real `<a>` element in this page's
-own `.page-tags`, they can never be colored green or flagged spurious here —
-`markPassingTagLinks`'s callers already guard with `if (a) ...` before
-calling it, so this degrades silently (no crash, just no green highlight for
-that specific tag on this page).
+/ location checks. Rendering them into the DOM (step 9) additionally makes
+them count toward `passingLinks`/`spuriousLinks` like any other tag link from
+that point on — `tagLinks` (captured before step 9) still only contains the
+*original* anchors, though, so a setlist-song/location match against a
+newly-rendered onstage tag still won't get the green "verified" treatment on
+this pass (same `if (a) ...` guard as before — no crash, just no highlight).
 
 ---
 
-## Onstage companion page tags (`fetchOnstageCompanionTags`, `addOnstageTagsGlyph`)
+## Onstage companion page tags (`fetchOnstageCompanionTags`, `makeOnstageTagsGlyphSpan`)
 
 BruceBase wiki caps the number of tags per page. For "gig"/"rehearsal" DETAIL
 pages, this means some tags spill onto a separate, optional companion page:
@@ -219,7 +231,7 @@ companion page only exists when the DETAIL page itself has an "On Stage" tab.
 
 `fetchOnstageCompanionTags(path, eventType, tabMap)`:
 - Returns `null` immediately when `eventType` isn't `"gig"` or `"rehearsal"`,
-  or when `tabMap` (from `buildTabMap(document)`) has no `"On Stage"` entry.
+  or when `tabMap` (from `buildTabMap(doc)`) has no `"On Stage"` entry.
 - Otherwise builds the companion URL via
   `path.replace(/^(gig|rehearsal):/, 'onstage:') + '/noredirect/true'`,
   fetches it with `fetchPage` (same try/catch/`logWarn`-on-failure convention
@@ -227,16 +239,31 @@ companion page only exists when the DETAIL page itself has an "On Stage" tab.
   `{ url, tags }` — `tags` being the lowercase `Set` from the companion
   page's own `.page-tags`.
 
-Called from `runDetailPage` right after `buildTabMap`, before
-`annotateDetailPageTags` (which needs the result to merge tags in). When
-`annotateDetailPageTags` returns one or more `additionalTags` (present on the
-companion page but not on this one), `addOnstageTagsGlyph(additionalTags,
-onstageUrl)` appends a new `🏷️` glyph (via `makeGlyphSpan`) to `#page-title
-h1`, alongside the existing name-match glyph from `addDetailTitleAnnotation`.
-Since the tooltip content is a variable-length, `\n`-joined list of tag names
-(the "genuinely rich" bucket per the native-title-vs-rich-tooltip convention
-in [UTILITIES.md](UTILITIES.md)), it's wired via `mouseenter` →
-`showErrorTooltip`, not a native `title`.
+`makeOnstageTagsGlyphSpan(additionalTags, onstageUrl)` builds (but doesn't
+insert) a `🏷️` `.bb-glyph` span with a rich tooltip listing the additional
+tags — the tooltip content is a variable-length, `\n`-joined list (the
+"genuinely rich" bucket per the native-title-vs-rich-tooltip convention in
+[UTILITIES.md](UTILITIES.md)), so it's wired via `mouseenter` →
+`showErrorTooltip`, not a native `title`. Two call sites insert it
+differently:
+
+- **DETAIL page** (`runDetailPage`): calls `fetchOnstageCompanionTags` right
+  after `buildTabMap`, before `annotateDetailPageTags` (which needs the
+  result to merge/render tags — see above). When `additionalTags.length > 0`,
+  `addOnstageTagsGlyph(additionalTags, onstageUrl)` appends the glyph span to
+  `#page-title h1`, alongside the existing name-match glyph from
+  `addDetailTitleAnnotation`.
+- **YEAR page** (`processOneYearEvent`): calls `fetchOnstageCompanionTags`
+  right after `addYearGlyph` (which now returns its `.bb-glyph` span so a
+  further glyph can be inserted right after it via `glyphSpan.after(...)`),
+  reusing the DETAIL `doc` it already fetched for name/venue/setlist checks —
+  no extra DETAIL fetch, only the conditional onstage one. `onstageResult` is
+  then threaded through `wireIconHandlers` into `addTagsButton` (see the
+  "YEAR page Tags button" section above) so the nested Tags panel shows the
+  same additional tags. **LIST pages are out of scope**: they never fetch a
+  per-event DETAIL document at all (only one shared YEAR page for name
+  comparison), so adding this there would mean introducing a whole new eager
+  per-event fetch loop — deferred pending a decision on that cost.
 
 ---
 

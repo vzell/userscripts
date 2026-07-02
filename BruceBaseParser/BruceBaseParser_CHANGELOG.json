@@ -1,5 +1,19 @@
 [
     {
+        "version": "2.57",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Extended the onstage-companion-tags feature to YEAR pages: processOneYearEvent now calls fetchOnstageCompanionTags for each gig/rehearsal event (reusing the DETAIL doc it already fetches) and, when additional tags are found, appends the same 🏷️ glyph (now shared via makeOnstageTagsGlyphSpan) right after the existing match/mismatch bb-glyph on that event's row (addYearGlyph now returns its glyph span so callers can insert further glyphs after it). LIST pages are intentionally out of scope for now since they don't fetch per-event DETAIL pages at all.",
+                    "addTagsButton (YEAR page's nested per-event \"Tags\" button) now also merges in onstage-companion tags, rendering them as additional present-tag entries (styled via the new .bb-tag-onstage class) in the sorted panel list, so clicking \"Tags\" shows ALL tags for the event, not just the ones on the DETAIL page itself.",
+                    "annotateDetailPageTags now renders the onstage-companion additional tags directly into the DETAIL page's own .page-tags box (as real-looking <a href=\"/system:page-tags/tag/...\"> links, styled via .bb-tag-onstage), then re-sorts the combined tag list alphabetically to match BruceBase's own tag ordering convention, instead of only using them internally for consistency checks."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.56",
         "date": "2026-07-02",
         "sections": [

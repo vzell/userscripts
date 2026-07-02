@@ -79,6 +79,23 @@ Fetches the DETAIL page with `fetchPage(url)`, then runs in sequence:
 - `addYearGlyph(element, nameMatch, isEarlyLate, …)` — appends ✅/⚠️/❌ glyph
   after the event link; hover shows a tooltip via `showYearTooltip`.
   Also appends a `bb-event-type` span showing the event type in grey italics.
+  Returns the inserted `.bb-glyph` span, so a further glyph (below) can be
+  inserted right after it via `glyphSpan.after(...)`.
+
+### 1a. Onstage companion page (tags-per-page cap spillover)
+
+- `fetchOnstageCompanionTags(eventPath, eventType, buildTabMap(doc))` — for
+  "gig"/"rehearsal" events with an "On Stage" tab, fetches the companion
+  `onstage:…/noredirect/true` page (reusing the already-fetched `doc`'s own
+  tab map — no extra DETAIL fetch, only this one conditional extra request).
+  See [TAGS.md](TAGS.md) for the full rule.
+- When it returns additional tags not already on this event's own
+  `.page-tags`, appends a `🏷️` `.bb-glyph` (`makeOnstageTagsGlyphSpan`) right
+  after the match/mismatch glyph from step 1, with a tooltip listing them.
+- The result is also threaded through to `wireIconHandlers` (step 4) so the
+  nested "Tags" button panel shows the same additional tags.
+- **LIST pages are out of scope**: `processOneListEvent` never fetches a
+  per-event DETAIL document, so this feature isn't available there.
 
 ### 2. Timing blocks
 
@@ -109,7 +126,9 @@ Fetches the DETAIL page with `fetchPage(url)`, then runs in sequence:
 
 ### 4. Clickable icons
 
-`wireIconHandlers(eventLink, doc)` — see [ICONS_PANELS.md](ICONS_PANELS.md).
+`wireIconHandlers(eventLink, doc, onstageResult)` — see
+[ICONS_PANELS.md](ICONS_PANELS.md). `onstageResult` (from step 1a) is passed
+through to `addTagsButton` so its panel includes the onstage-companion tags.
 
 ### 5. Venue tab buttons
 

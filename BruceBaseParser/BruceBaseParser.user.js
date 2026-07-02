@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.56
+// @version      2.57
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1439,14 +1439,19 @@
       retryBtn.textContent = '⏳';
       retryBtn.disabled    = true;
       try {
-        const url = `${location.protocol}//${location.host}${eventLink.getAttribute('href')}`;
-        const doc = await fetchPage(url);
+        const href = eventLink.getAttribute('href') || '';
+        const url  = `${location.protocol}//${location.host}${href}`;
+        const doc  = await fetchPage(url);
 
         section.querySelectorAll('img.image').forEach(img => { img.style.opacity = ''; });
         section.querySelector('.bb-event-tab-row')?.remove();
         section.querySelectorAll('.bb-icon-sorry').forEach(s => s.remove());
 
-        wireIconHandlers(eventLink, doc);
+        const typeM     = href.match(/^\/([a-z]+):/);
+        const eventType = typeM ? typeM[1] : '';
+        const retryTabMap = buildTabMap(doc);
+        const onstageResult = await fetchOnstageCompanionTags(href.replace(/^\//, ''), eventType, retryTabMap);
+        wireIconHandlers(eventLink, doc, onstageResult);
         retryBtn.remove();
       } catch (e) {
         retryBtn.textContent = '⟳';
@@ -2681,7 +2686,21 @@
       const eventDate  = eventDateM ? eventDateM[1].toLowerCase() : null;
 
       const eventAlias = extractEventAlias(doc);
-      addYearGlyph(element, nameMatch, isEarlyLate, yearNameUpper, normalizedDetailName, rawDetailName, eventType, eventAlias, anchorName);
+      const yearGlyphSpan = addYearGlyph(element, nameMatch, isEarlyLate, yearNameUpper, normalizedDetailName, rawDetailName, eventType, eventAlias, anchorName);
+
+      // ── Onstage companion page (tags-per-page cap spillover) ─────────────
+      const eventPath  = new URL(url).pathname.replace(/^\//, '');
+      const eventTabMap = buildTabMap(doc);
+      const onstageResult = await fetchOnstageCompanionTags(eventPath, eventType, eventTabMap);
+      if (onstageResult) {
+        const docTagsEl    = doc.querySelector('.page-tags');
+        const docTagLinks  = docTagsEl ? [...docTagsEl.querySelectorAll('a[href]')] : [];
+        const docActualTags = new Set(docTagLinks.map(a => a.textContent.trim().toLowerCase()));
+        const onstageAdditionalTags = [...onstageResult.tags].filter(t => !docActualTags.has(t));
+        if (onstageAdditionalTags.length > 0) {
+          yearGlyphSpan.after(makeOnstageTagsGlyphSpan(onstageAdditionalTags, onstageResult.url));
+        }
+      }
 
       // ── Timing blocks ────────────────────────────────────────────────────
       const timingBlocks = extractTimingBlocks(doc);
@@ -2723,7 +2742,7 @@
       }
 
       // ── Clickable icons ──────────────────────────────────────────────────
-      wireIconHandlers(element, doc);
+      wireIconHandlers(element, doc, onstageResult);
 
       // ── Venue tab buttons ─────────────────────────────────────────────────
       if (_venueTabDoc) {
@@ -4345,6 +4364,11 @@
 
   // ── DOM mutation ──────────────────────────────────────────────────────────
 
+  /**
+   * @returns {HTMLElement} the inserted `.bb-glyph` match/mismatch glyph span,
+   *   so callers can insert further glyphs (e.g. the onstage-tags glyph)
+   *   right after it via `glyphSpan.after(...)`.
+   */
   function addYearGlyph(element, match, isEarlyLate, yearName, normalizedDetailName, rawDetailName, eventType, alias, anchorName = null) {
     const glyph     = match ? '✅' : isEarlyLate ? '⚠️' : '❌';
     const typeSpan  = makeEventTypeSpan(eventType);
@@ -4357,6 +4381,7 @@
       n.addEventListener('mouseenter', enter);
       n.addEventListener('mouseleave', hideTooltip);
     });
+    return glyphSpan;
   }
 
   function addListGlyph(element, match, strippedName, rawName, yearName, anchor) {
@@ -5972,7 +5997,7 @@
    * @param {HTMLElement}        section   - .bb-section-processed element.
    * @param {HTMLElement}        eventLink - The event <a> element on the YEAR page.
    */
-  function addTagsButton(doc, tabMap, section, eventLink) {
+  function addTagsButton(doc, tabMap, section, eventLink, onstageResult = null) {
     const tagsEl = doc.querySelector('.page-tags');
     if (!tagsEl) return;
     const tagLinks = [...tagsEl.querySelectorAll('a[href]')];
@@ -5985,6 +6010,14 @@
     const eventDate = dateM ? dateM[1] : null;
 
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+
+    // Merge in tags found on the "onstage:" companion page so the panel
+    // shows ALL tags for this event, not just the ones on this page.
+    const onstageAdditionalTags = onstageResult
+      ? [...onstageResult.tags].filter(t => !actualTags.has(t))
+      : [];
+    for (const t of onstageAdditionalTags) actualTags.add(t);
+
     const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
 
@@ -6030,7 +6063,14 @@
       ...unmatchedLocations.map(r => ({ tag: r.candidateTag, html: null, missing: true, spurious: false,
         tooltip: `No tag found for ${r.label}` })),
     ];
-    const allItems = [...existingItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
+    // Onstage-companion tags: present (just not on this page), so rendered
+    // like an existing tag link rather than a missing/spurious one.
+    const onstageItems = onstageAdditionalTags.map(tag => ({
+      tag,
+      html: `<a href="/system:page-tags/tag/${esc(tag)}#pages" class="bb-tag-onstage" title="${esc(`Tag "${tag}" found on the companion "On Stage" page (${onstageResult.url})`)}">${esc(tag)}</a>`,
+      missing: false, spurious: false, tooltip: '',
+    }));
+    const allItems = [...existingItems, ...onstageItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
 
     const spuriousCount = existingItems.filter(i => i.spurious).length;
     const totalMissing  = missingTags.length + unmatchedSongs.length + unmatchedLocations.length;
@@ -6795,6 +6835,27 @@
     for (const t of additionalTags) actualTags.add(t);
     const onstageUrl = onstageResult ? onstageResult.url : null;
 
+    // Render the additional tags into .page-tags itself, alongside the
+    // original ones, then re-sort the combined list alphabetically to match
+    // BruceBase's own tag ordering convention.
+    if (additionalTags.length > 0) {
+      const tagsSpan = tagsContainer.querySelector('span') || tagsContainer;
+      for (const tag of additionalTags) {
+        const a = document.createElement('a');
+        a.href = `/system:page-tags/tag/${tag}#pages`;
+        a.textContent = tag;
+        a.className = 'bb-tag-onstage';
+        a.title = `Tag "${tag}" found on the companion "On Stage" page (${onstageUrl})`;
+        tagsSpan.appendChild(a);
+      }
+      [...tagsSpan.querySelectorAll('a[href]')]
+        .sort((x, y) => {
+          const tx = x.textContent.trim(), ty = y.textContent.trim();
+          return tx < ty ? -1 : tx > ty ? 1 : 0;
+        })
+        .forEach(a => tagsSpan.appendChild(a));
+    }
+
     const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
     const spuriousLinks = tagLinks.filter(a => {
@@ -7308,7 +7369,7 @@
     }
   }
 
-  function wireIconHandlers(eventLink, doc) {
+  function wireIconHandlers(eventLink, doc, onstageResult = null) {
     const section = eventLink.closest('.bb-section-processed');
     if (!section) return;
     const tabMap = buildTabMap(doc);
@@ -7363,7 +7424,7 @@
       }
     }
     addEventTabButtons(doc, tabMap, section);
-    addTagsButton(doc, tabMap, section, eventLink);
+    addTagsButton(doc, tabMap, section, eventLink, onstageResult);
   }
 
   // Returns the first <a href> on doc whose href matches INFO_SETLIST_HREF_RE
@@ -7522,22 +7583,36 @@
   }
 
   /**
-   * Appends a glyph to the DETAIL page's <h1> (inside #page-title) noting
-   * that additional tags were found on the "onstage:" companion page (see
-   * fetchOnstageCompanionTags), with a rich tooltip listing them.
+   * Builds (but does not insert) a 🏷️ glyph span noting that additional tags
+   * were found on the "onstage:" companion page (see
+   * fetchOnstageCompanionTags), with a rich tooltip listing them. Callers
+   * insert it wherever appropriate (e.g. `h1.appendChild(...)` on DETAIL
+   * pages, `glyphSpan.after(...)` right after the existing match/mismatch
+   * glyph on YEAR pages).
    * @param {string[]} additionalTags - Extra tags found on the onstage page, not already on this page.
+   * @param {string}   onstageUrl
+   * @returns {HTMLElement}
+   */
+  function makeOnstageTagsGlyphSpan(additionalTags, onstageUrl) {
+    const glyphSpan = makeGlyphSpan('🏷️');
+    const count = additionalTags.length;
+    const msg = `${count} additional tag${count === 1 ? '' : 's'} found on the companion "On Stage" page (${onstageUrl}):\n${[...additionalTags].sort().join(', ')}`;
+    glyphSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    glyphSpan.addEventListener('mouseleave', hideTooltip);
+    return glyphSpan;
+  }
+
+  /**
+   * Appends a 🏷️ glyph to the DETAIL page's <h1> (inside #page-title) noting
+   * that additional tags were found on the "onstage:" companion page.
+   * @param {string[]} additionalTags
    * @param {string}   onstageUrl
    */
   function addOnstageTagsGlyph(additionalTags, onstageUrl) {
     const pageTitle = document.getElementById('page-title');
     if (!pageTitle) return;
     const h1 = pageTitle.querySelector('h1') || pageTitle;
-    const glyphSpan = makeGlyphSpan('🏷️');
-    h1.appendChild(glyphSpan);
-    const count = additionalTags.length;
-    const msg = `${count} additional tag${count === 1 ? '' : 's'} found on the companion "On Stage" page (${onstageUrl}):\n${[...additionalTags].sort().join(', ')}`;
-    glyphSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
-    glyphSpan.addEventListener('mouseleave', hideTooltip);
+    h1.appendChild(makeOnstageTagsGlyphSpan(additionalTags, onstageUrl));
   }
 
   // ── Tooltip ───────────────────────────────────────────────────────────────
@@ -7987,6 +8062,9 @@
       /* Tag that passed its consistency check (DETAIL/VENUE/RETAIL/SONG/RELATION pages) */
       .bb-tag-ok { color: #2a2 !important; font-weight: bold; cursor: help; }
 
+      /* Tag rendered from the "onstage:" companion page, not this page's own .page-tags */
+      .bb-tag-onstage { color: steelblue !important; font-style: italic; cursor: help; }
+
       /* "Original Page" mode on DETAIL pages — hide all script annotations */
       .bb-original-view .bb-glyph,
       .bb-original-view .bb-anchor-match,
@@ -7994,6 +8072,7 @@
       .bb-original-view .bb-venue-warn,
       .bb-original-view .bb-tag-missing,
       .bb-original-view .bb-tag-spurious,
+      .bb-original-view .bb-tag-onstage,
       .bb-original-view .bb-icon-sorry,
       .bb-original-view .bb-setlist-tab-ann { display: none !important; }
       .bb-original-view .bb-tags-warn-box   { border: none !important; background: none !important; padding: 0 !important; }

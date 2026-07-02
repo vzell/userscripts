@@ -2,9 +2,11 @@
 
 ## Overview
 
-After `processOneYearEvent` fetches the DETAIL page, `wireIconHandlers(eventLink, doc)`
+After `processOneYearEvent` fetches the DETAIL page, `wireIconHandlers(eventLink, doc, onstageResult)`
 makes icon images on the YEAR page interactive and appends event-tab and venue-tab
-button rows to the event section.
+button rows to the event section. `onstageResult` (from `fetchOnstageCompanionTags`,
+see [TAGS.md](TAGS.md)) is threaded through to `addTagsButton` so its panel
+also shows any tags found on the event's "onstage:" companion page.
 
 ---
 
@@ -19,7 +21,7 @@ button rows to the event section.
 
 ---
 
-## `wireIconHandlers(eventLink, doc)`
+## `wireIconHandlers(eventLink, doc, onstageResult = null)`
 
 1. Builds `tabMap = buildTabMap(doc)`.
 2. For each `img.image` in the event's `.bb-section-processed`:
@@ -38,7 +40,8 @@ button rows to the event section.
      - `canonical === 'Photo'` → `openLightbox(content, rawTitle)` on click.
      - All others → `toggleIconPanel(icon, content, section)` on click.
 3. `addEventTabButtons(doc, tabMap, section)`.
-4. `addTagsButton(doc, tabMap, section, eventLink)`.
+4. `addTagsButton(doc, tabMap, section, eventLink, onstageResult)` — merges
+   any onstage-companion tags into the panel (see [TAGS.md](TAGS.md)).
 
 ---
 
