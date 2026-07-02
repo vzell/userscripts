@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.71
+// @version      2.72
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -320,9 +320,63 @@
   function logWarn(...a) { console.warn ('[BruceBase]', ...a); }
   function logErr(...a)  { console.error('[BruceBase]', ...a); }
 
+  /**
+   * Tests whether an href's first path segment has a "<category>:" prefix
+   * (e.g. /gig:1978-08-21, /venue:xyz, /system:recent-changes). Plain
+   * navigation/UI links - year pages, pagination, Wikidot's own Edit/History/
+   * Tags buttons, in-page anchors, etc. - never match and must keep their
+   * normal same-tab behaviour.
+   * @param {string} href Raw href attribute value.
+   * @returns {boolean}
+   */
+  function isCategoryPageHref(href) {
+    let path;
+    try {
+      path = new URL(href, location.href).pathname;
+    } catch (e) {
+      return false;
+    }
+    const firstSegment = path.replace(/^\//, '').split('/')[0];
+    return /^[a-zA-Z][\w-]*:/.test(firstSegment);
+  }
+
+  /**
+   * Forces a single <a> element to open in a new tab, but only when it
+   * links to a "<category>:" BruceBase page (see isCategoryPageHref).
+   * @param {Element} a Anchor element to update.
+   */
+  function forceNewTab(a) {
+    const href = a.getAttribute('href');
+    if (!href || !isCategoryPageHref(href)) return;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+  }
+
+  /**
+   * Starts a MutationObserver that forces every hyperlink on the page -
+   * present now or inserted later by any processing step (original site
+   * markup, Save/Load, tab switches, SmartTable, etc.) - to open in a new
+   * tab. Without this, an accidental click on a link inside the processed
+   * content would replace a page that may have taken a long time to build.
+   */
+  function startNewTabLinkGuard() {
+    document.querySelectorAll('a[href]').forEach(forceNewTab);
+    const observer = new MutationObserver(mutations => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          if (node.matches('a[href]')) forceNewTab(node);
+          node.querySelectorAll?.('a[href]').forEach(forceNewTab);
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
   log('Script starting on', location.href);
   addStyles();
   createTooltipElement();
+  startNewTabLinkGuard();
 
   const path        = location.pathname.replace(/^\//, '');
   const isHomePage   = path === '' || path === 'start';
