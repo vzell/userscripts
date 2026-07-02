@@ -625,45 +625,63 @@ never affects `annotateDetailPageTags`'s warn-box early-return check or
 
 ## Help-icon tag check (`hasHelpIcon`, `eventHasHelpIcon`)
 
-BruceBase shows a boilerplate call-to-action for events lacking full
-documentation: `<img title="Help Us" class="image" src=".../00Help-32.png">`
-followed by descriptive text (*"If you have any information (eg. setlist,
-memories, ticket stub or other images, as applicable) regarding this date
-please get in touch."*), usually wrapped in `<a href="/Info%20Request">`.
-Observed **only on YEAR pages**, in each event's own block of HTML — never
-on the corresponding DETAIL page itself (confirmed by fetching several
-DETAIL pages known to show it on their YEAR page; none reproduced it). When
-present, the `"help"` tag is expected on that event's DETAIL page.
+BruceBase shows a boilerplate call-to-action for missing/incomplete
+information: `<img title="Help Us" class="image" src=".../00Help-32.png">`
+followed by descriptive text, usually wrapped in `<a href="/Info%20Request">`.
+It appears in **two different places**, both of which must be checked:
 
-Two helpers detect it, matched to what container is available at each call site:
+1. **YEAR page**, in each event's own block of HTML, with generic text
+   (*"If you have any information (eg. setlist, memories, ticket stub or
+   other images, as applicable) regarding this date please get in
+   touch."*) — for events lacking full documentation overall.
+2. **DETAIL page**, directly inside a specific tab's own content, with
+   text scoped to what that tab is missing (e.g. *"Complete lineup of
+   performers is not known. If you have any information or further
+   details regarding the musicians onstage for this date please get in
+   touch."* inside the "On Stage" tab). Originally assumed to be
+   YEAR-page-only (based on a handful of DETAIL pages that happened not to
+   have it) until a counter-example turned up — a page whose *only*
+   instance of the icon was this DETAIL-page/tab-scoped one, which the
+   YEAR-only check couldn't see, producing an incorrectly-spurious
+   `"help"` tag with a misleading "...on the YEAR page" tooltip.
+
+When present in *either* place, the `"help"` tag is expected on that
+event's DETAIL page. Two helpers detect it, matched to what container is
+available at each call site — **both are always checked, ORed together**:
 
 - **`hasHelpIcon(container)`** — `!!container.querySelector('img.image[title="Help Us"]')`.
-  For an already-per-event-scoped container. Used in `addTagsButton` with
-  `section` (the YEAR page's own `.bb-section-processed` div for this event,
-  which — per "Each `.bb-section-processed` div wraps exactly one event" —
-  never needs boundary logic: any match inside it belongs to this event).
-  The icon survives userscript processing unmodified (unlike `Photo`/`News`/
-  `Video`/etc. icons, `"Help Us"` isn't in `ICON_TITLE_MAP`, so
-  `wireIconHandlers` skips it entirely — no click handler, no styling — it's
-  only ever unwrapped from its `<a href="/Info%20Request">` parent by the
-  same generic "unwrap real navigation `<a>` parents" step every icon gets).
+  For an already-per-event-scoped container, or any single-event document.
+  Used with:
+  - `section` in `addTagsButton` (the YEAR page's own `.bb-section-processed`
+    div for this event, which — per "Each `.bb-section-processed` div wraps
+    exactly one event" — never needs boundary logic: any match inside it
+    belongs to this event), **and** `doc` (the fetched DETAIL page) in the
+    same call, ORed together.
+  - `document` (the live DETAIL page) in `annotateDetailPageTags`, ORed with
+    its `hasHelp` parameter (see below).
+  The icon survives userscript processing unmodified wherever it appears
+  (unlike `Photo`/`News`/`Video`/etc. icons, `"Help Us"` isn't in
+  `ICON_TITLE_MAP`, so `wireIconHandlers` skips it entirely — no click
+  handler, no styling — it's only ever unwrapped from its
+  `<a href="/Info%20Request">` parent by the same generic "unwrap real
+  navigation `<a>` parents" step every icon gets).
 - **`eventHasHelpIcon(eventLinkEl, nextAnchorEl, content)`** — scans a
   multi-event container (`content`) for a match positioned after
   `eventLinkEl` and before `nextAnchorEl` (or to the end of `content` when
   `nextAnchorEl` is `null`), via the same `compareDocumentPosition` boundary
   technique as `collectSetlistElements`. Used in `annotateDetailPageTags`'s
-  caller (`runDetailProcessing`), since the DETAIL page pipeline only has
-  the fetched YEAR page's full `#page-content` (`yearContent`) — the icon
-  being YEAR-page-only means there's no per-event container to check
-  directly on the live DETAIL page itself. `nextAnchor` (previously computed
-  after the `annotateDetailPageTags` call) was moved earlier so it's
-  available in time for this check.
+  caller (`runDetailProcessing`) against the fetched YEAR page's full
+  `#page-content` (`yearContent`) — the DETAIL-page-side check
+  (`hasHelpIcon(document)`) happens separately, inside
+  `annotateDetailPageTags` itself. `nextAnchor` (previously computed after
+  the `annotateDetailPageTags` call) was moved earlier so it's available in
+  time for this check.
 
 `"help"` was added to `MANAGED_CONTENT_TAGS` (so `isManagedTag`/the generic
 spurious-orange and passing-green branches apply to it like any other
 managed tag) with matching `SPURIOUS_TAG_REASONS`/`PASSING_TAG_REASONS`
-entries. `computeExpectedTags` takes a new optional `hasHelp` boolean
-argument; when true, `expected.add('help')`.
+entries (mentioning both possible locations). `computeExpectedTags` takes a
+new optional `hasHelp` boolean argument; when true, `expected.add('help')`.
 
 ---
 

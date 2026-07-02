@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.71",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "The \"help\" tag check (2.68) only looked for BruceBase's \"Help Us\" call-to-action icon on the YEAR page, but BruceBase also renders it directly inside a DETAIL page tab (e.g. \"Complete lineup of performers is not known\" in the \"On Stage\" tab) — a page with only the DETAIL-page instance got an incorrectly-spurious \"help\" tag with a misleading \"...on the YEAR page\" tooltip. hasHelp is now the OR of both checks (hasHelpIcon(section)/hasHelpIcon(document) in addTagsButton, hasHelp-param-or-hasHelpIcon(document) in annotateDetailPageTags). SPURIOUS_TAG_REASONS/PASSING_TAG_REASONS['help'] tooltip text updated to mention both locations."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.70",
         "date": "2026-07-02",
         "sections": [

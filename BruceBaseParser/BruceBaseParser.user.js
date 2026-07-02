@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.70
+// @version      2.71
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -93,7 +93,7 @@
     printed:     'No printed setlist images found in News/Memorabilia tab',
     soundcheck:  'No "Soundcheck" section header found in setlist content',
     storyteller: 'Storyteller tab is empty or unavailable',
-    help:        'No "Help Us" call-to-action icon found on the YEAR page for this event',
+    help:        'No "Help Us" call-to-action icon found on the YEAR page or the DETAIL page itself for this event',
   };
 
   /** Human-readable reasons why each managed tag is correctly present ("passing"). */
@@ -108,7 +108,7 @@
     printed:     'Printed setlist image(s) found in the News/Memorabilia tab',
     soundcheck:  '"Soundcheck" section header found in the setlist content',
     storyteller: 'Storyteller tab has content',
-    help:        '"Help Us" call-to-action icon found on the YEAR page for this event',
+    help:        '"Help Us" call-to-action icon found on the YEAR page or the DETAIL page itself for this event',
   };
 
   /**
@@ -6405,7 +6405,12 @@
     const dateM     = eventLink.textContent.trim().match(/^(\d{4}-\d{2}-\d{2})/);
     const eventDate = dateM ? dateM[1] : null;
     const daySuffix = extractEventDaySuffix(href);
-    const hasHelp   = hasHelpIcon(section);
+    // Checks both the YEAR page's own per-event block AND the DETAIL page's
+    // content — BruceBase shows this icon in either place: the YEAR-page
+    // boilerplate "please get in touch" note for undocumented events, OR a
+    // tab-specific note on the DETAIL page itself (e.g. "Complete lineup of
+    // performers is not known" inside the "On Stage" tab).
+    const hasHelp   = hasHelpIcon(section) || hasHelpIcon(doc);
 
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
 
@@ -7314,13 +7319,17 @@
    * @param {string}             rawDetailName
    * @param {{url: string, tags: Set<string>}|null} [onstageResult] - fetchOnstageCompanionTags result, if any.
    * @param {boolean}             [hasHelp] - Whether the YEAR page shows a "Help Us"
-   *   call-to-action icon for this event (see eventHasHelpIcon). When true, "help"
-   *   is always expected as a tag.
+   *   call-to-action icon for this event (see eventHasHelpIcon). ORed with a check
+   *   of the live DETAIL page's own content (see hasHelpIcon) — BruceBase also shows
+   *   this icon directly inside a DETAIL page tab (e.g. "Complete lineup of performers
+   *   is not known" in the "On Stage" tab), not just on the YEAR page. When either is
+   *   true, "help" is always expected as a tag.
    * @returns {{additionalTags: string[], onstageUrl: string|null}} Tags found only on the onstage companion page, for addOnstageTagsGlyph.
    */
   function annotateDetailPageTags(tabMap, eventDate, eventType, detailSections, rawDetailName, onstageResult = null, hasHelp = false) {
     const tagsContainer = document.querySelector('.page-tags');
     if (!tagsContainer) return { additionalTags: [], onstageUrl: null };
+    hasHelp = hasHelp || hasHelpIcon(document);
 
     const tagLinks     = [...tagsContainer.querySelectorAll('a[href]')];
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
