@@ -1,5 +1,18 @@
 [
     {
+        "version": "2.58",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added an \"On Stage\" tab relation-tag consistency check on EVENT DETAIL pages (checkOnStageRelationTags, extractOnStageRelationNames): \"onstage\" is always expected when the tab exists, and every relation name listed under it (reusing extractRelations, including band members) must have a corresponding tag via exact match (lowercase, punctuation/whitespace stripped, e.g. \"Steven Van Zandt\" -> stevenvanzandt) or the same with a leading \"The \" stripped first (e.g. \"The E Street Band\" -> estreetband). Wired into both annotateDetailPageTags (live DETAIL page) and addTagsButton (YEAR page's nested \"Tags\" button, .bb-event-tab-row), including missing-tag rendering and green \"verified\" tooltips explaining which rule matched.",
+                    "The companion \"On Stage\" page glyph tooltip (makeOnstageTagsGlyphSpan, used by both the DETAIL-page and YEAR-page 🏷️ icons) now also explains the On Stage relation-tag rules (onStageRelationRulesExplanation), appended after the list of additional tags found."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.57",
         "date": "2026-07-02",
         "sections": [

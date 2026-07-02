@@ -139,15 +139,19 @@ itself. It:
 2. Merges in any onstage-companion tags not already present (same pattern as
    `annotateDetailPageTags` — see "Onstage companion page tags" below), then
    computes expected tags and compares against the merged actual set.
-3. Merges existing links (styled green if passing, with spurious ⚠️ if not) +
+3. Also runs the setlist-song, event-location, and "On Stage" tab relation
+   tag checks (same functions `annotateDetailPageTags` uses, against `doc`),
+   contributing matched tags to the green/passing set and unmatched ones to
+   the missing-tag count.
+4. Merges existing links (styled green if passing, with spurious ⚠️ if not) +
    onstage-companion tags (rendered as `bb-tag-onstage`-styled entries, always
    "present", never spurious/missing) + missing placeholders into one sorted
    list; renders in the `buildIconPanel` infrastructure.
-4. Button label: `"Tags"` when clean; `"Tags ⚠️ (N missing, M spurious)"` with
+5. Button label: `"Tags"` when clean; `"Tags ⚠️ (N missing, M spurious)"` with
    colour red (if any missing), dark-orange (if only spurious), or green
    (`#2a2`, when fully clean) — so status is visible without clicking.
-5. Appended as the last button in `.bb-event-tab-row` (created if absent).
-6. The panel header caption is the complete raw event name plus `" Tags"`
+6. Appended as the last button in `.bb-event-tab-row` (created if absent).
+7. The panel header caption is the complete raw event name plus `" Tags"`
    (e.g. `"2026-04-18 Pollak Theatre, Monmouth University, West Long Branch,
    NJ Tags"`), not just `"Tags"` — set via `content.caption`, rendered as
    plain text (`titleSpan.textContent`) by `buildIconPanel`, so no escaping
@@ -195,18 +199,21 @@ once at the top of `runDetailPage` to avoid a duplicate parse), `rawDetailName`
    green too.
 5. Runs the event-name location tag check (see below) and marks matched
    venue/city/state/country tags green too.
-6. If any issues found (missing/spurious tags, unmatched setlist songs, OR
-   unmatched location parts), wraps `.page-tags` parent in a gold warning box
-   (`<div class="bb-tags-warn-box">`).
-7. Appends `<span class="bb-tag-spurious">⚠️</span>` after spurious tag links.
-8. Appends `<span class="bb-tag-missing">⚠️tag</span>` spans for missing tags,
-   one per unmatched setlist song (showing the derived-alias candidate), AND
-   one per unmatched location part (showing the expected slug/override tag).
-9. Renders any onstage-companion `additionalTags` directly into `.page-tags`
-   itself as real-looking `<a href="/system:page-tags/tag/…">` links (class
-   `bb-tag-onstage`), then re-sorts the combined tag list alphabetically —
-   see "Onstage companion page tags" below.
-10. Returns `{ additionalTags, onstageUrl }` — tags found only on the onstage
+6. Runs the "On Stage" tab relation tag check (see below) and marks matched
+   `"onstage"`/relation tags green too.
+7. If any issues found (missing/spurious tags, unmatched setlist songs,
+   unmatched location parts, OR unmatched relations), wraps `.page-tags`
+   parent in a gold warning box (`<div class="bb-tags-warn-box">`).
+8. Appends `<span class="bb-tag-spurious">⚠️</span>` after spurious tag links.
+9. Appends `<span class="bb-tag-missing">⚠️tag</span>` spans for missing tags,
+   one per unmatched setlist song (showing the derived-alias candidate), one
+   per unmatched location part, and one per unmatched relation/`"onstage"`
+   (each showing the expected slug/candidate tag).
+10. Renders any onstage-companion `additionalTags` directly into `.page-tags`
+    itself as real-looking `<a href="/system:page-tags/tag/…">` links (class
+    `bb-tag-onstage`), then re-sorts the combined tag list alphabetically —
+    see "Onstage companion page tags" below.
+11. Returns `{ additionalTags, onstageUrl }` — tags found only on the onstage
     companion page, for the caller to pass to `addOnstageTagsGlyph`.
 
 Merging onstage-only tags into the internal `actualTags` Set (step 2) means
@@ -406,6 +413,44 @@ A matched part's tag is colored green via `markPassingTagLinks`/inline
 title-setting with a tooltip naming the location field and method. An
 unmatched part is rendered like a missing tag, showing `candidateTag` (the
 slug/override/remainder-slug that was expected).
+
+---
+
+## "On Stage" tab relation tag check (`checkOnStageRelationTags`)
+
+Every relation name listed under a DETAIL page's "On Stage" tab should have
+a corresponding tag, checked on both `annotateDetailPageTags` (live DETAIL
+page) and `addTagsButton` (YEAR page's nested "Tags" button, using the
+fetched `doc`). `checkOnStageRelationTags(doc, tabMap, actualTags)` returns
+`[]` immediately when `tabMap` (from `buildTabMap`) has no `"On Stage"`
+entry; otherwise:
+
+1. **Fixed tag**: `"onstage"` is always expected, independent of any
+   relation — first item in the result, `method: 'fixed'`.
+2. **Exact match**: for every relation name from
+   `extractOnStageRelationNames(doc)` (flattens `extractRelations(doc)`'s
+   groups — top-level entries *and* their band members — into a unique
+   name list; `extractRelations` itself always reads `#wiki-tab-0-0`, the
+   established convention already used elsewhere in this file for
+   relation-participant rendering), the lowercase, punctuation/whitespace-stripped
+   form must match a tag, e.g. `"Steven Van Zandt"` → `stevenvanzandt`.
+3. **"The"-stripped fallback**: only tried when #2 fails — same slug rule,
+   but with a leading `"The "` stripped from the name first, e.g.
+   `"The E Street Band"` → `estreetband` (not `theestreetband`).
+
+Result shape: `{ label, candidateTag, matchedTag, method: 'fixed'|'exact'|'the-stripped'|null }[]`,
+mirroring the setlist-song/location checks. A matched tag is colored green
+via `markPassingTagLinks` with a tooltip built from
+`ON_STAGE_RELATION_METHOD_LABEL[method]` (e.g. *"matches a relation listed
+under the 'On Stage' tab (lowercase, whitespace/punctuation stripped)"*). An
+unmatched relation (or a missing `"onstage"` tag itself) is rendered like a
+missing tag, showing `candidateTag`.
+
+`onStageRelationRulesExplanation()` returns a one-line summary of these same
+three rules; it's appended to `makeOnstageTagsGlyphSpan`'s tooltip (see
+"Onstage companion page tags" above) after the list of additional tags found
+on the companion page, since both facts concern the same "On Stage" tab/page
+— visible from a single hover on the 🏷️ glyph on both DETAIL and YEAR pages.
 
 ---
 

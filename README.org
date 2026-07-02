@@ -3388,9 +3388,12 @@ on the YEAR pages the Event "Tags" button when clicked should show ALL tags now
 
 ** relation check on event detail pages
 
-Now extend the event detail pages tag value checks with relation checks.
+Now extend the EVENT DETAIL page tag value checks with relation checks and also display the same when the "Tags" button
+at '<div class="bb-event-tab-row">' is clicked.
 
-Every relation name present under the "On Stage" tab of an EVENT DETAIL page must also be present as a tag value. The rules are:
+Every relation name present under the "On Stage" tab of an EVENT DETAIL page must also be present as a tag value.
+
+The rules are:
 
 1.)
 
@@ -3407,6 +3410,10 @@ Check if the lowercase blank stripped version of a relation name matches with a 
 Strip the "The" from the relation name if it's at the beginning e.g.
 
 "The E Street Band" => estreetband
+
+4.)
+
+In the tooltip explain these facts. For the current tooltip value for companion "On Stage" derived tags, append these facts.
 
 ** jake.clemons
 ** 10th doesn't work as alias for "TENTH..."

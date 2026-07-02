@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.57
+// @version      2.58
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -4619,6 +4619,83 @@
   }
 
   /**
+   * Flattens extractRelations(doc)'s groups into a unique list of relation
+   * names (top-level items and their band members alike), for the "On
+   * Stage" tab tag consistency check.
+   * @param {Document} doc
+   * @returns {string[]}
+   */
+  function extractOnStageRelationNames(doc) {
+    const names = [];
+    for (const group of extractRelations(doc)) {
+      for (const item of group.items) {
+        names.push(item.name);
+        for (const m of item.members) names.push(m.name);
+      }
+    }
+    return [...new Set(names)];
+  }
+
+  /**
+   * Checks that a DETAIL page's "On Stage" tab relation names each have a
+   * corresponding tag, per three rules:
+   * 1. `"onstage"` is always expected, independent of any relation name.
+   * 2. Exact match: lowercase, punctuation/whitespace-stripped relation
+   *    name, e.g. `"Steven Van Zandt"` -> `"stevenvanzandt"`.
+   * 3. Same as #2, but with a leading `"The "` stripped first, e.g.
+   *    `"The E Street Band"` -> `"estreetband"` (tried only when #2 fails).
+   * Returns `[]` when the page has no "On Stage" tab at all.
+   * @param {Document}            doc
+   * @param {Map<string, number>} tabMap
+   * @param {Set<string>}         actualTags
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: 'fixed'|'exact'|'the-stripped'|null}[]}
+   */
+  function checkOnStageRelationTags(doc, tabMap, actualTags) {
+    if (!tabMap.has('On Stage')) return [];
+    const items = [{
+      label: 'Tab: On Stage',
+      candidateTag: 'onstage',
+      matchedTag: isTagPresent('onstage', actualTags) ? 'onstage' : null,
+      method: 'fixed',
+    }];
+    for (const name of extractOnStageRelationNames(doc)) {
+      const exactTag = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (isTagPresent(exactTag, actualTags)) {
+        items.push({ label: `Relation: ${name}`, candidateTag: exactTag, matchedTag: exactTag, method: 'exact' });
+        continue;
+      }
+      const strippedTag = name.replace(/^the\s+/i, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (strippedTag !== exactTag && isTagPresent(strippedTag, actualTags)) {
+        items.push({ label: `Relation: ${name}`, candidateTag: strippedTag, matchedTag: strippedTag, method: 'the-stripped' });
+        continue;
+      }
+      const candidate = strippedTag !== exactTag ? strippedTag : exactTag;
+      items.push({ label: `Relation: ${name}`, candidateTag: candidate, matchedTag: null, method: null });
+    }
+    return items;
+  }
+
+  /** Human-readable explanation per checkOnStageRelationTags `method`, for tag tooltips. */
+  const ON_STAGE_RELATION_METHOD_LABEL = {
+    fixed: 'always expected because this page has an "On Stage" tab',
+    exact: 'matches a relation listed under the "On Stage" tab (lowercase, whitespace/punctuation stripped)',
+    'the-stripped': 'matches a relation listed under the "On Stage" tab (leading "The " stripped, lowercase, whitespace/punctuation stripped)',
+  };
+
+  /**
+   * One-line explanation of the "On Stage" relation-tag rules, for appending
+   * to the companion "On Stage" page glyph tooltip (see
+   * makeOnstageTagsGlyphSpan) so both facts are visible together.
+   * @returns {string}
+   */
+  function onStageRelationRulesExplanation() {
+    return 'Every relation listed under the "On Stage" tab must also have a tag: '
+      + '"onstage" is always expected; a relation name matches when its lowercase, '
+      + 'whitespace/punctuation-stripped form (e.g. "Steven Van Zandt" -> stevenvanzandt) '
+      + '— or the same after stripping a leading "The " (e.g. "The E Street Band" -> estreetband) — equals a tag.';
+  }
+
+  /**
    * Returns an HTML string for the flat one-line relation view of a single group.
    * Top-level entries use "•" (bb-rel-main); band members use "◦" (bb-rel-member).
    * Extra annotations (e.g. "(Guest)") are rendered as .bb-rel-extra spans.
@@ -6035,13 +6112,20 @@
     const matchedLocationsByTag = new Map(locationResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
     const unmatchedLocations    = locationResults.filter(r => !r.matchedTag);
 
+    // "On Stage" tab → relation tag check: "onstage" plus every relation
+    // name listed there should each have a corresponding tag.
+    const relationResults       = checkOnStageRelationTags(doc, tabMap, actualTags);
+    const matchedRelationsByTag = new Map(relationResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
+    const unmatchedRelations    = relationResults.filter(r => !r.matchedTag);
+
     // Merge existing tag links (with spurious/passing flag) + missing placeholders → sorted.
     const existingItems = tagLinks.map(a => {
       const tag         = a.textContent.trim().toLowerCase();
       const songMatch     = matchedSongsByTag.get(tag);
       const locationMatch = matchedLocationsByTag.get(tag);
+      const relationMatch = matchedRelationsByTag.get(tag);
       const spurious    = isManagedTag(tag) && !isTagPresent(tag, expectedTags);
-      const passing     = (isManagedTag(tag) && isTagPresent(tag, expectedTags)) || !!songMatch || !!locationMatch;
+      const passing     = (isManagedTag(tag) && isTagPresent(tag, expectedTags)) || !!songMatch || !!locationMatch || !!relationMatch;
       if (passing) {
         a.style.color = '#2a2';
         a.style.fontWeight = 'bold';
@@ -6049,6 +6133,8 @@
           ? `Tag "${tag}" verified: matches setlist song "${songMatch.song}" (${songMethodLabel[songMatch.method]})`
           : locationMatch
           ? `Tag "${tag}" verified: matches event ${locationMatch.label}`
+          : relationMatch
+          ? `Tag "${tag}" verified: ${relationMatch.label} — ${ON_STAGE_RELATION_METHOD_LABEL[relationMatch.method]}`
           : passingTagMsg(tag, expectedTags);
       }
       return { tag, html: a.outerHTML, missing: false, spurious, tooltip: spurious ? spuriousTagMsg(tag, expectedTags) : '' };
@@ -6062,6 +6148,8 @@
       }),
       ...unmatchedLocations.map(r => ({ tag: r.candidateTag, html: null, missing: true, spurious: false,
         tooltip: `No tag found for ${r.label}` })),
+      ...unmatchedRelations.map(r => ({ tag: r.candidateTag, html: null, missing: true, spurious: false,
+        tooltip: `No tag found for ${r.label}` })),
     ];
     // Onstage-companion tags: present (just not on this page), so rendered
     // like an existing tag link rather than a missing/spurious one.
@@ -6073,7 +6161,7 @@
     const allItems = [...existingItems, ...onstageItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
 
     const spuriousCount = existingItems.filter(i => i.spurious).length;
-    const totalMissing  = missingTags.length + unmatchedSongs.length + unmatchedLocations.length;
+    const totalMissing  = missingTags.length + unmatchedSongs.length + unmatchedLocations.length + unmatchedRelations.length;
     const issueParts = [];
     if (totalMissing > 0)  issueParts.push(`${totalMissing} missing`);
     if (spuriousCount > 0) issueParts.push(`${spuriousCount} spurious`);
@@ -6889,7 +6977,18 @@
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches event ${r.label}`);
     }
 
-    if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedSongs.length === 0 && unmatchedLocations.length === 0) {
+    // "On Stage" tab → relation tag check: "onstage" plus every relation
+    // name listed there should each have a corresponding tag.
+    const relationResults    = checkOnStageRelationTags(document, tabMap, actualTags);
+    const matchedRelations   = relationResults.filter(r => r.matchedTag);
+    const unmatchedRelations = relationResults.filter(r => !r.matchedTag);
+    for (const r of matchedRelations) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.matchedTag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label} — ${ON_STAGE_RELATION_METHOD_LABEL[r.method]}`);
+    }
+
+    if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedSongs.length === 0
+        && unmatchedLocations.length === 0 && unmatchedRelations.length === 0) {
       return { additionalTags, onstageUrl };
     }
 
@@ -6937,6 +7036,17 @@
     // Append one missing-tag span per unmatched event-name location part
     // (venue, venue detail, city, state/country/region).
     for (const r of unmatchedLocations) {
+      const missingSpan = document.createElement('span');
+      missingSpan.className = 'bb-tag-missing';
+      missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
+      missingSpan.title = `No tag found for ${r.label} (expected "${r.candidateTag}")`;
+      missingSpan.textContent = ` ⚠️${r.candidateTag}`;
+      span.appendChild(missingSpan);
+    }
+
+    // Append one missing-tag span per unmatched "On Stage" tab relation
+    // (or the always-expected "onstage" tag itself).
+    for (const r of unmatchedRelations) {
       const missingSpan = document.createElement('span');
       missingSpan.className = 'bb-tag-missing';
       missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
@@ -7585,10 +7695,12 @@
   /**
    * Builds (but does not insert) a 🏷️ glyph span noting that additional tags
    * were found on the "onstage:" companion page (see
-   * fetchOnstageCompanionTags), with a rich tooltip listing them. Callers
-   * insert it wherever appropriate (e.g. `h1.appendChild(...)` on DETAIL
-   * pages, `glyphSpan.after(...)` right after the existing match/mismatch
-   * glyph on YEAR pages).
+   * fetchOnstageCompanionTags), with a rich tooltip listing them plus the
+   * "On Stage" relation-tag rules (see checkOnStageRelationTags /
+   * onStageRelationRulesExplanation), since both facts concern the same
+   * "On Stage" tab/page. Callers insert it wherever appropriate (e.g.
+   * `h1.appendChild(...)` on DETAIL pages, `glyphSpan.after(...)` right
+   * after the existing match/mismatch glyph on YEAR pages).
    * @param {string[]} additionalTags - Extra tags found on the onstage page, not already on this page.
    * @param {string}   onstageUrl
    * @returns {HTMLElement}
@@ -7596,7 +7708,7 @@
   function makeOnstageTagsGlyphSpan(additionalTags, onstageUrl) {
     const glyphSpan = makeGlyphSpan('🏷️');
     const count = additionalTags.length;
-    const msg = `${count} additional tag${count === 1 ? '' : 's'} found on the companion "On Stage" page (${onstageUrl}):\n${[...additionalTags].sort().join(', ')}`;
+    const msg = `${count} additional tag${count === 1 ? '' : 's'} found on the companion "On Stage" page (${onstageUrl}):\n${[...additionalTags].sort().join(', ')}\n\n${onStageRelationRulesExplanation()}`;
     glyphSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
     glyphSpan.addEventListener('mouseleave', hideTooltip);
     return glyphSpan;
