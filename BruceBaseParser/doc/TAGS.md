@@ -62,7 +62,7 @@ which each get their own separate check independent of
 | `bootleg` | Recording tab has non-Sorry content AND is not purely a LiveDL (i.e. `!isLiveDLSplit(recTab)` OR `recTab.querySelector('hr')` exists) |
 | `livedl` | `isLiveDLSplit(recTab)` is true |
 | `news` | News/Memorabilia tab has non-Sorry content |
-| `memorabilia` | Tab label is exactly `"News/Memorabilia"` (not just `"News"`) AND non-Sorry |
+| `memorabilia` | Tab label is exactly `"News/Memorabilia"` (not just `"News"`) AND non-Sorry AND has at least one `<img>` — a tab with only a text "Links" section (news article links, no images) is news-only, not memorabilia |
 | `ticket` | News/Memorabilia tab has `<img>` with `"ticket"` in `src` |
 | `setlist` | News/Memorabilia tab has `<img>` with `"setlist"` in `src`, excl. `"ticket"` |
 | `handwritten` | Setlist images with `"handwritten"` in `src` |

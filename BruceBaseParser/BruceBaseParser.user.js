@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.69
+// @version      2.70
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -86,7 +86,7 @@
     bootleg:     'Recording tab has no bootleg content',
     livedl:      'Recording tab has no official live download content',
     news:        'News/Memorabilia tab is empty or unavailable',
-    memorabilia: 'News/Memorabilia tab is empty or unavailable',
+    memorabilia: 'News/Memorabilia tab has no images (text-only, e.g. a "Links" section) or is empty/unavailable',
     ticket:      'No ticket images found in News/Memorabilia tab',
     setlist:     'No setlist images found in News/Memorabilia tab',
     handwritten: 'No handwritten setlist images found in News/Memorabilia tab',
@@ -101,7 +101,7 @@
     bootleg:     'Recording tab has bootleg content',
     livedl:      'Recording tab has an official live download',
     news:        'News/Memorabilia tab has content',
-    memorabilia: 'News/Memorabilia tab has content (tab is labelled "News/Memorabilia")',
+    memorabilia: 'News/Memorabilia tab (labelled "News/Memorabilia") has image content',
     ticket:      'Ticket image(s) found in the News/Memorabilia tab',
     setlist:     'Setlist image(s) found in the News/Memorabilia tab',
     handwritten: 'Handwritten setlist image(s) found in the News/Memorabilia tab',
@@ -6349,8 +6349,11 @@
     const newsMemTab = getNewsMemTab(doc, tabMap);
     if (newsMemTab && !SORRY_RE.test(newsMemTab.textContent.trim())) {
       expected.add('news');
-      if (tabMap.has('News/Memorabilia')) expected.add('memorabilia');
       const imgs = [...newsMemTab.querySelectorAll('img')];
+      // "memorabilia" requires actual image content, not just the tab being
+      // labeled "News/Memorabilia" — a tab with only a text "Links" section
+      // (news article links, no images) is news-only, not memorabilia.
+      if (tabMap.has('News/Memorabilia') && imgs.length > 0) expected.add('memorabilia');
       if (imgs.some(img => /ticket/i.test(img.src) || /\/(?:files:)?pass/i.test(img.src))) expected.add('ticket');
       const setlistImgs = imgs.filter(img => /setlist/i.test(img.src) && !/ticket/i.test(img.src));
       if (setlistImgs.length > 0) {

@@ -1,5 +1,17 @@
 [
     {
+        "version": "2.70",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "computeExpectedTags no longer expects the \"memorabilia\" tag merely because a tab is labelled \"News/Memorabilia\" — it now additionally requires at least one <img> in that tab. A tab with only a text \"Links\" section (news article links, no images) is news-only and was previously flagged with a false \"missing memorabilia\" warning. SPURIOUS_TAG_REASONS/PASSING_TAG_REASONS['memorabilia'] tooltip text updated to mention the image requirement."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.69",
         "date": "2026-07-02",
         "sections": [
