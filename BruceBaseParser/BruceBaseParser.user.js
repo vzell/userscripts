@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.72
+// @version      2.78
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -7114,9 +7114,12 @@
 
   /**
    * Appends a "Tags" button (inside row) for the relation page's .page-tags.
-   * Consistency checks: "person" (if a "Bands" tab exists) or "band" (if a
-   * "Members" tab exists), based on relDoc's own tab set. No-op when neither
-   * tab is present (page type can't be determined) or there are no tags.
+   * Consistency checks, based on relDoc's own tab set: "person" (if a
+   * "Bands" tab exists) or "band" (if a "Members" tab exists), plus the
+   * name-derived tags from computeExpectedRelationNameTags (surname-letter/
+   * Name+Surname for a person, band-letter/member Name+Surname for a band).
+   * No-op when neither tab is present (page type can't be determined) or
+   * there are no tags.
    * @param {Document}    relDoc   - Parsed relation page document.
    * @param {string}      relName  - Display name for the row label.
    * @param {HTMLElement} section  - .bb-section-processed container (panel host).
@@ -7128,22 +7131,24 @@
     const tagLinks = [...tagsEl.querySelectorAll('a[href]')];
     if (tagLinks.length === 0) return;
 
-    const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
-    const expectedTags = computeExpectedYearRelationTags(relDoc);
-    if (expectedTags.size === 0) return;   // can't determine person vs band — skip
-    const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+    const actualTags       = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const expectedTags     = computeExpectedYearRelationTags(relDoc);
+    const expectedNameTags = computeExpectedRelationNameTags(relDoc);
+    const allExpectedTags  = new Set([...expectedTags, ...expectedNameTags.keys()]);
+    if (allExpectedTags.size === 0) return;   // can't determine person vs band — skip
+    const missingTags  = [...allExpectedTags].filter(t => !actualTags.has(t)).sort();
 
     const existingItems = tagLinks.map(a => {
       const tag      = a.textContent.trim().toLowerCase();
       const spurious = isManagedRelationTag(tag) && !expectedTags.has(tag);
-      const passing  = isManagedRelationTag(tag) && expectedTags.has(tag);
+      const passing  = (isManagedRelationTag(tag) && expectedTags.has(tag)) || expectedNameTags.has(tag);
       const tooltip  = spurious ? `Tag "${tag}" is present but not expected for this relation page` : '';
       if (passing) {
         a.style.color = '#2a2';
         a.style.fontWeight = 'bold';
-        a.title = tag === 'person'
+        a.title = expectedNameTags.get(tag) || (tag === 'person'
           ? 'Tag "person" verified: page has a "Bands" tab (this entry belongs to bands)'
-          : 'Tag "band" verified: page has a "Members" tab (this entry has members)';
+          : 'Tag "band" verified: page has a "Members" tab (this entry has members)');
       }
       return { tag, html: a.outerHTML, missing: false, spurious, tooltip };
     });
@@ -7197,6 +7202,25 @@
   }
 
   /**
+   * Tests whether a relation-page tab panel has no meaningful content.
+   * A tab is NOT considered empty when it embeds actual media (img, iframe,
+   * object, embed, video, audio) even if that leaves no text behind (e.g. a
+   * Media tab holding only a YouTube <iframe>, or a Gallery tab holding only
+   * <img> thumbnails) — text presence alone is not a reliable emptiness test.
+   * @param {HTMLElement|null} tab
+   * @returns {boolean}
+   */
+  function isRelationTabEmpty(tab) {
+    if (!tab) return true;
+    const text = tab.textContent.trim();
+    if (SORRY_RE.test(text)) return true;
+    if (tab.querySelector('img, iframe, object, embed, video, audio')) return false;
+    const lBoxes = [...tab.querySelectorAll('.list-pages-box')];
+    if (lBoxes.length > 0) return lBoxes.every(box => !box.textContent.trim());
+    return !text;
+  }
+
+  /**
    * Builds a .bb-relation-tab-row containing one button per non-empty tab on
    * the relation page. Appended to section; returns the row (or null if empty).
    * @param {Document}    relDoc    - Parsed relation page document.
@@ -7222,17 +7246,14 @@
       // Wikidot sometimes omits the content panel (#wiki-tab-0-N) entirely for
       // empty tabs — only the nav label is present. Treat a null panel the same
       // as an empty one: render a flagged, non-interactive button.
-      const text   = tab ? tab.textContent.trim() : '';
-      const lBoxes = tab ? [...tab.querySelectorAll('.list-pages-box')] : [];
-      const isEmpty = !tab || !text || SORRY_RE.test(text) ||
-        (lBoxes.length > 0 && lBoxes.every(box => !box.textContent.trim()));
+      const isEmpty = isRelationTabEmpty(tab);
 
       if (isEmpty) {
         // Empty or "Sorry, no…" tabs are still rendered as buttons but flagged.
         btn.classList.add('bb-relation-tab-empty');
         const msg = !tab
           ? `Tab "${label}" has no content (panel not rendered by server).`
-          : SORRY_RE.test(text)
+          : SORRY_RE.test(tab.textContent.trim())
             ? `Tab "${label}" reports no content available.`
             : `Tab "${label}" is empty.`;
         btn.dataset.msg = msg;
@@ -7891,6 +7912,166 @@
   }
 
   /**
+   * Parses a person relation page's "<Surname>, <Name>" #page-title text
+   * (e.g. "Federici, Danny") into its parts. Returns null when the title
+   * isn't a single comma-separated "Surname, Name" pair (e.g. band titles
+   * like "E Street Band, The", which use the same comma but aren't a person).
+   * @param {string} titleText
+   * @returns {{surname:string, name:string}|null}
+   */
+  function parseRelationPersonTitle(titleText) {
+    const parts = titleText.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length !== 2) return null;
+    const [surname, name] = parts;
+    return surname && name ? { surname, name } : null;
+  }
+
+  /**
+   * Strips a trailing ", The" from a band name, e.g. "E Street Band, The" ->
+   * "E Street Band". Case-insensitive; leaves other names unchanged.
+   * @param {string} name
+   * @returns {string}
+   */
+  function stripTrailingThe(name) {
+    return name.replace(/,\s*The$/i, '').trim();
+  }
+
+  /**
+   * Strips a leading "The " from a name, e.g. "The Houserockers" ->
+   * "Houserockers". Case-insensitive; leaves other names unchanged.
+   * @param {string} name
+   * @returns {string}
+   */
+  function stripLeadingThe(name) {
+    return name.replace(/^The\s+/i, '').trim();
+  }
+
+  /**
+   * Splits a band name on " & " into its independent parts (e.g. "Joe
+   * Grushecky & The Houserockers" -> ["Joe Grushecky", "The Houserockers"]),
+   * or returns the name as its own single-element array when there's no
+   * "&". Each part still needs stripLeadingThe/stripTrailingThe applied.
+   * @param {string} name
+   * @returns {string[]}
+   */
+  function splitAmpersandName(name) {
+    return name.split(' & ').map(s => s.trim()).filter(Boolean);
+  }
+
+  /**
+   * Normalizes a person/band name into its expected tag form: lowercase
+   * with all whitespace and "." removed, e.g. "Dr. Zoom" -> "drzoom".
+   * @param {string} name
+   * @returns {string}
+   */
+  function normalizeRelationTagName(name) {
+    return name.toLowerCase().replace(/[.\s]/g, '');
+  }
+
+  /**
+   * Returns the "/relation:..." links within a relation-page tab that
+   * represent a clean, single-entry list item — i.e. links whose immediate
+   * parent element's text is exactly the link's own text, with no extra
+   * prose attached (a role annotation like "(piano)", a date range, etc.).
+   * This is what distinguishes a genuine band/member list entry (e.g.
+   * "<li><a>The Rogues</a></li>") from an incidental relation mention
+   * inside free-text content that some tabs append after the real list —
+   * e.g. a band's "Members" tab followed by a lineup timeline listing
+   * "<li><a>Clarence Clemons</a> (saxophone)</li>" for people who aren't
+   * all necessarily current/actual members. Deliberately not restricted to
+   * any single wrapper element, since some tabs render their primary list
+   * as a bare <ul> (not wrapped in .list-pages-box) and follow it with a
+   * second, still-relevant list — e.g. a person's "Bands" tab can have an
+   * unwrapped list of their own bands followed by a .list-pages-box-wrapped
+   * "Other Bands" list; both are picked up equally by this check.
+   * @param {HTMLElement|null} tab
+   * @returns {HTMLAnchorElement[]}
+   */
+  function collectRelationListLinks(tab) {
+    if (!tab) return [];
+    const norm = s => s.trim().replace(/\s+/g, ' ');
+    return [...tab.querySelectorAll('a[href^="/relation:"]')].filter(a =>
+      norm(a.parentElement ? a.parentElement.textContent : '') === norm(a.textContent)
+    );
+  }
+
+  /**
+   * Returns additional lowercase tags expected on a relation page, keyed to
+   * a human-readable reason (so callers can show the same "verified"
+   * message used for the managed person/band tags):
+   *
+   * - Person relation (has a "Bands" tab, #page-title is "<Surname>,
+   *   <Name>"): the first letter of the Surname, the concatenation of
+   *   Name+Surname, and one or two tags per band listed on the "Bands" tab.
+   *   A band name containing " & " is first split into its two independent
+   *   parts (e.g. "Joe Grushecky & The Houserockers" -> "Joe Grushecky" and
+   *   "The Houserockers"), each becoming its own expected tag; a name
+   *   without "&" yields a single tag. Either way each part gets a leading
+   *   "The " and/or a trailing ", The" stripped before deriving the tag.
+   * - Band relation (has a "Members" tab, #page-title is the band name,
+   *   optionally with a trailing ", The"): the first letter of the band
+   *   name (", The" stripped first), and one Name+Surname concatenation tag
+   *   per member listed on the "Members" tab (each in the same "<Surname>,
+   *   <Name>" format as a person #page-title).
+   *
+   * Band/member link extraction uses collectRelationListLinks, so multi-list
+   * tabs (e.g. a person's own bands followed by an "Other Bands" list) are
+   * fully covered while trailing unrelated content (e.g. a "Members" tab's
+   * lineup timeline) is excluded. Returns an empty map when neither tab is
+   * present or the title/list can't be parsed.
+   * @param {Document} [doc=document] - Relation page document (defaults to
+   *   the live document; pass a fetched relDoc for the YEAR page's nested
+   *   relation "Tags" button — see addRelationTagsButton).
+   * @returns {Map<string, string>}
+   */
+  function computeExpectedRelationNameTags(doc = document) {
+    const expected = new Map();
+    const tabLabels = new Set(
+      [...doc.querySelectorAll('.yui-nav em')].map(em => em.textContent.trim())
+    );
+    const titleEl = doc.getElementById('page-title');
+    const titleText = titleEl ? titleEl.textContent.trim() : '';
+    const tabMap = buildTabMap(doc);
+
+    if (tabLabels.has('Bands')) {
+      const person = parseRelationPersonTitle(titleText);
+      if (person) {
+        const letterTag = person.surname[0].toLowerCase();
+        expected.set(letterTag, `Tag "${letterTag}" verified: first letter of surname "${person.surname}"`);
+        const nameTag = normalizeRelationTagName(person.name + person.surname);
+        expected.set(nameTag, `Tag "${nameTag}" verified: lowercase concatenation of "${person.name}" + "${person.surname}"`);
+      }
+
+      for (const a of collectRelationListLinks(getTabEl(doc, tabMap, 'Bands'))) {
+        const rawBandName = a.textContent.trim();
+        for (const part of splitAmpersandName(rawBandName)) {
+          const bandName = stripLeadingThe(stripTrailingThe(part));
+          if (!bandName) continue;
+          const tag = normalizeRelationTagName(bandName);
+          expected.set(tag, `Tag "${tag}" verified: page lists "${rawBandName}" on the "Bands" tab`);
+        }
+      }
+    }
+
+    if (tabLabels.has('Members')) {
+      const bandName = stripTrailingThe(titleText);
+      if (bandName) {
+        const letterTag = bandName[0].toLowerCase();
+        expected.set(letterTag, `Tag "${letterTag}" verified: first letter of band name "${bandName}"`);
+      }
+
+      for (const a of collectRelationListLinks(getTabEl(doc, tabMap, 'Members'))) {
+        const member = parseRelationPersonTitle(a.textContent.trim());
+        if (!member) continue;
+        const tag = normalizeRelationTagName(member.name + member.surname);
+        expected.set(tag, `Tag "${tag}" verified: page lists "${member.surname}, ${member.name}" on the "Members" tab`);
+      }
+    }
+
+    return expected;
+  }
+
+  /**
    * On RELATION pages: wraps .page-tags in a yellow warning box and annotates
    * missing / spurious relation tags inline on the live page.
    * No-op when all expected tags are present, no spurious managed tags exist,
@@ -7908,14 +8089,10 @@
       const em  = navEms[idx];
       if (!em) continue;
       const tab     = document.getElementById(`wiki-tab-0-${idx}`);
-      const text    = tab ? tab.textContent.trim() : '';
-      const lBoxes  = tab ? [...tab.querySelectorAll('.list-pages-box')] : [];
-      const isEmpty = !tab || !text || SORRY_RE.test(text) ||
-        (lBoxes.length > 0 && lBoxes.every(box => !box.textContent.trim()));
-      if (!isEmpty) continue;
+      if (!isRelationTabEmpty(tab)) continue;
       const msg = !tab
         ? `Tab "${label}" has no content (panel not rendered by server).`
-        : SORRY_RE.test(text)
+        : SORRY_RE.test(tab.textContent.trim())
           ? `Tab "${label}" reports no content available.`
           : `Tab "${label}" is empty.`;
       const warn = document.createElement('span');
@@ -7931,11 +8108,13 @@
     const tagsContainer = document.querySelector('.page-tags');
     if (!tagsContainer) return;
 
-    const tagLinks     = [...tagsContainer.querySelectorAll('a[href]')];
-    const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
-    const expectedTags = computeExpectedRelationTags();
-    if (expectedTags.size === 0) return;   // can't determine person vs band — skip
-    const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+    const tagLinks         = [...tagsContainer.querySelectorAll('a[href]')];
+    const actualTags       = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const expectedTags     = computeExpectedRelationTags();
+    const expectedNameTags = computeExpectedRelationNameTags();
+    const allExpectedTags  = new Set([...expectedTags, ...expectedNameTags.keys()]);
+    if (allExpectedTags.size === 0) return;   // can't determine person vs band — skip
+    const missingTags  = [...allExpectedTags].filter(t => !actualTags.has(t)).sort();
     const spuriousLinks = tagLinks.filter(a => {
       const tag = a.textContent.trim().toLowerCase();
       return isManagedRelationTag(tag) && !expectedTags.has(tag);
@@ -7947,6 +8126,11 @@
     markPassingTagLinks(passingLinks, tag => tag === 'person'
       ? 'Tag "person" verified: page has a "Bands" tab (this entry belongs to bands)'
       : 'Tag "band" verified: page has a "Members" tab (this entry has members)');
+
+    const passingNameLinks = tagLinks.filter(a =>
+      expectedNameTags.has(a.textContent.trim().toLowerCase())
+    );
+    markPassingTagLinks(passingNameLinks, tag => expectedNameTags.get(tag));
 
     if (missingTags.length === 0 && spuriousLinks.length === 0) return;
 

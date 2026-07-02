@@ -1,5 +1,83 @@
 [
     {
+        "version": "2.78",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "computeExpectedRelationNameTags's Bands/Members tab scan only ever read the tab's first .list-pages-box, but not every relation page follows that layout — e.g. http://brucebase.wikidot.com/relation:bruce-springsteen's \"Bands\" tab renders its 14 own-bands entries (The Rogues, The Castiles, ..., The Sessions Band) as a bare <ul> with no .list-pages-box wrapper at all, followed by an unrelated hr/heading/hr, and only THEN a .list-pages-box wrapping a second, separate \"Other Bands\" list (3 entries) — so every one of those 14 bands was silently skipped, never checked against its tag. Replaced the .list-pages-box restriction with a new collectRelationListLinks(tab) helper: it scans every \"/relation:...\" link in the whole tab, keeping only ones whose immediate parent element's text exactly matches the link's own text (a clean \"<li><a>Name</a></li>\" entry) — which naturally includes both of Bruce's Bands lists while still excluding a \"Members\" tab's trailing lineup-timeline prose (e.g. \"<li><a>Clarence Clemons</a> (saxophone)</li>\", where the parent text includes the role annotation and so no longer matches)."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.77",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "normalizeRelationTagName (shared by all relation-page name-tag derivations: surname+name, band name, band-part-after-\"&\"-split, and member name+surname) now also strips \".\" in addition to whitespace, e.g. \"Dr. Zoom\" -> \"drzoom\" rather than \"dr.zoom\". Combined with the v2.76 \"&\"-split, a band listed as \"Dr. Zoom & The Sonic Boom\" on a person's \"Bands\" tab now expects both \"drzoom\" and \"sonicboom\" as tags."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.76",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "computeExpectedRelationNameTags's per-band tag derivation (person relation's \"Bands\" tab, rule (c) from v2.73) now splits a band name containing \" & \" into its two independent parts and expects a separate tag for each, e.g. \"Joe Grushecky & The Houserockers\" -> \"joegrushecky\" AND \"houserockers\" (two tags, not one combined tag), via new splitAmpersandName()/stripLeadingThe() helpers. Each part still gets the existing trailing \", The\" strip as well as a leading \"The \" strip before deriving its tag. A band name without \"&\" is unaffected (still yields its single existing tag)."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.75",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "The YEAR page relation-tab-row's \"Tags\" button (addRelationTagsButton) only ever rendered \"person\"/\"band\" in green, never the surname-letter/Name+Surname/band-member tags added in v2.73/v2.74 for the live RELATION page — those extra checks hadn't been wired into the YEAR page's nested panel at all, so a fetched relation's tags list showed no missing-tag warnings and no green highlight for them. computeExpectedRelationNameTags now takes an optional doc parameter (defaults to the live document; addRelationTagsButton passes the fetched relDoc), and addRelationTagsButton merges its tags into the existing missing/passing computation alongside the managed person/band tags, so the YEAR page panel now matches the live RELATION page's tag-consistency checks exactly."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.74",
+        "date": "2026-07-03",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Extended computeExpectedRelationNameTags (added in v2.73) to also cover band relation pages (ones with a \"Members\" tab instead of \"Bands\"): the page tags must include (1) the lowercase first letter of the band name (#page-title with a trailing \", The\" stripped, e.g. \"E Street Band, The\" -> \"e\"), and (2) one lowercase Name+Surname concatenation tag per member listed on the \"Members\" tab, each in the same \"<Surname>, <Name>\" format as a person #page-title (e.g. \"Bittan, Roy\" -> \"roybittan\"). Both the person-side and band-side list scans now read only the tab's first .list-pages-box, since the \"Members\" tab appends an unrelated lineup-timeline as free text after the real list. Reported the same way as the existing checks: green \"verified\" highlight when present, red missing-tag warning when absent."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.73",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "RELATION page tab-emptiness check (annotateEmptyRelationTabs/addRelationTabButtons) judged a tab empty purely from tab.textContent, so a Media tab holding only a YouTube <iframe> (or a Gallery tab holding only <img> thumbnails) was incorrectly flagged with a spurious \"Tab is empty\" ⚠️, since embedded media contributes no text. Both call sites now share a new isRelationTabEmpty(tab) helper that first checks for iframe/object/embed/video/audio/img content and treats the tab as non-empty when any is found."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Added three more RELATION page tag-consistency checks (computeExpectedRelationNameTags), reported the same way as the existing person/band tag check — including the green \"verified\" highlight (markPassingTagLinks) when present, not just a red missing-tag warning when absent: for a person relation (one with a \"Bands\" tab) whose #page-title is \"<Surname>, <Name>\" (e.g. \"Federici, Danny\"), the page tags must include (a) the lowercase first letter of Surname (\"f\"), (b) the lowercase concatenation of Name+Surname with spaces removed (\"dannyfederici\"), and (c) one tag per band listed on the \"Bands\" tab, lowercased/space-stripped with any trailing \", The\" removed first (e.g. \"E Street Band, The\" -> \"estreetband\"). computeExpectedRelationNameTags now returns a Map of tag -> reason so each verified tag gets its own tooltip; this does not add new spurious-tag detection."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.72",
         "date": "2026-07-02",
         "sections": [
