@@ -3329,7 +3329,22 @@ check if the lowercase blank stripped version of a song title matches with a sam
   cases, plus node --check and changelog JSON validation.
 #+end_example
 
-** all hyperlinks in the processed final page should be rendered in a new tab
+** DONE all hyperlinks in the processed final page should be rendered in a new tab
+*** initial
+
+all hyperlinks in the processed final pages mentioned in the userscript "@include" directives should be rendered in a
+new tab, otherwise by accidentally clickin a link, the page which probably took very long to process will be replaced with the clicked anchor
+
+*** bug
+
+This breaks some buttons clicks on BruceBase pages
+
+The rendering in a new tab should only be done for anchors which have the following structure
+
+http://brucebase.wikidot.com/<category>:<arbitrary text>
+
+So in essence the "<category>:" must be present
+
 ** http://brucebase.wikidot.com/song:born-to-run add MusicBrainz icon to the song title on SONG pages
 
 ** TODO check the "At The" tooltip
@@ -3622,6 +3637,149 @@ has NO images and only a news "Links" section, the "memorabilia" tag should not 
 </div>
 #+end_example
 
+** DONE media
+*** initial
+
+Load and parse the following URL - http://brucebase.wikidot.com/relation:danny-federici
+
+1.)
+
+Why does the "Media" tab on the RELATION page http://brucebase.wikidot.com/relation:danny-federici shows the warning icon about being empty, but it's not
+
+#+begin_example
+<li title="active" class="selected"><a href="javascript:;" target="_blank" rel="noopener noreferrer"><em>Media<span data-msg="Tab &quot;Media&quot; is empty." title="Tab &quot;Media&quot; is empty." style="cursor: help;"> ⚠️</span></em></a></li>
+#+end_example
+
+2.)
+
+The following are additional rules for checking for tag consistency for RELATION pages are:
+
+The '<div id="page-title">' lists a relation which is an artist in the format "<Surname>, <Name>" so e.g. "Federici, Danny"
+
+a.)
+
+The first letter (lowercase) of "Surname" must appear in the page tags, so e.g. "f"
+
+b.)
+
+the lowercased concatenation of "Name" and "Surname" must also appear as a tag
+
+c.)
+
+If the relation (artist) has been/is a member of different bands, a "Bands" tab on the DETAIL page list all of them
+All the lowercase and blank removed band names must also appear as tags (for bands which have a ", The" at the end e.g. "E Street Band, The" remove it first, before checking the tag value) 
+
+*** bug
+
+Only "person" is rendered green
+
+@debug/bands.html
+
+console log:
+
+#+begin_example
+Navigated to http://brucebase.wikidot.com/relation:danny-federici
+index.js:65 [BruceBase] Script starting on http://brucebase.wikidot.com/relation:danny-federici
+index.js:65 [BruceBase] [DBG] path: "relation:danny-federici" | home: false | list: false | year: false | detail: false | venue: false | retail: false | song: false | relation: true | recent: false
+index.js:65 [BruceBase] Detected RELATION page
+#+end_example
+
+** DONE bands
+
+Now do the same for relations which are bands, a "Members" tab is present on the DETAIL page e.g. http://brucebase.wikidot.com/relation:the-e-street-band for "E Street Band, The"
+
+1.)
+
+The first letter (lowercase) of the band name must appear in the page tags, so e.g. "e"
+
+2.)
+
+Each relation under the "Members" tab also must have a corresponding tag, the lowercased concatenation of "Name" and "Surname"
+
+** DONE tag colorization missing on the YEAR pages
+
+On YEAR pages, when the '<div class="bb-relation-tab-row">' is shown for relations and the "Tags" button is clicked,
+currently ONLY the tag "person" is rendered in "green" for person relations and the tag "band" for band relation
+
+** DONE for relations which are bands
+
+for relations which are persons, If the relation (artist) has been/is a member of a band and the band name has a " & " in it's name, remove it before deducing the string to compare against a tag
+
+** DONE revert
+
+please revert the last change, what I meant was:
+
+for relations which are persons, If the relation (artist) has been/is a member of a band and the band name has a " & "
+in it's name, treat the parts before and after the " & " as separate strings (also remove a "The " if the resulting string starts with it) to deduce the actual string to compare against tags
+
+** DONE remove a "."
+
+Also remove a "." e.g from "Dr. Zoom & The Sonic Boom" as a band, before deducing the tag, e.g. "drzoom"
+
+** for Bruce
+
+for the relation http://brucebase.wikidot.com/relation:bruce-springsteen
+currently the following is being rendered for the tags @debug/bruce.html
+
+Somehow all the relations starting from '<li><a href="/relation:the-rogues" target="_blank" rel="noopener noreferrer">The Rogues</a></li>' up to '<li><a href="/relation:the-sessions-band" target="_blank" rel="noopener noreferrer">The Sessions Band</a></li>'
+doesn't seem to be checked for tag comparison
+
+** TODO http://brucebase.wikidot.com/retail:darkness-on-the-edge-of-town - "Commercial Release: June 2, 1978" instead of "Commercially Released: June 2, 1978"
+
+** DONE The "Original page" button on relation pages does not remove the warning box and green highlightning for tags
+
+1.)
+
+The "Original page" button on relation pages does not remove the warning box and green highlightning for tags
+
+2.)
+
+"Tab" clicking on '<ul class="yui-nav">' when switched from the processed page to the original view does NOT work on tabs
+
+** DONE SONG and RETAIL (and VENUE) pages exhibit the same problem which has just been fixed from RELATION pages
+
+SONG and RETAIL (and VENUE) pages exhibit the same problem which has just been fixed for RELATION pages
+
+** DONE paging does not work on tab "Performances"
+*** initial
+
+When tab internal paging '<div class="pager">' is being involved (under e.g. the "Performances" tab) for e.g. the following relation http://brucebase.wikidot.com/relation:garry-tallent but also http://brucebase.wikidot.com/song:the-river
+clicking a button in the paging line currently opens a blank browser tab which breaks pagination. These kind of button hrefs should NOT redirect to a new tab but instead should work as usual
+See also @debug/internalPaging.html
+
+*** bug
+
+when clicking a paginated page button, it now works, BUT the tab where we clicked (e.g. "Performances") should still have the focus. Right now the very first tab (e.g. "Credits") gets the focus
+
+*** bug
+
+even worse now, it still switches to the very first tab, shows the right page number in the browser URL line, but always stays on the very first page of the pagination
+
+*** bug
+
+1.)
+
+actually it was working for "/relation:garry-tallent" before the last fix, probably the "Performances" tab is the first
+tab in the '<ul class="yui-nav">', but now it's not working anymore, always the data from the first internal paginated
+page is shown
+
+2.)
+
+What was and is never working is "/song:the-river", probably because here the "Performances" tab is NOT the first in '<ul class="yui-nav">'
+
+load and parse both pages to understand the bug. when I call the "/song:the-river" in a browser without my userscript installed, pagination is working, but still after every click on a pagination button for "/song:the-river" the first tab "Credits" is selected
+Hope this helps in fixing the bug
+
+** TODO "/song:the-river" stiil switches to rab 1 when paginating
+
+** TODO colorize "green" the bands and members names in relation pages under their respective tabs when they match tags
+*** DONE initial
+
+colorize "green" the bands and members names in relation pages under their respective tabs when they match tags
+
+*** bug
+
+also colorize the tab name green if no errors
 
 * question
 ** initial
