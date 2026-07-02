@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.51
+// @version      2.52
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -5713,12 +5713,18 @@
   /**
    * Checks a single venue/detail/city name against its expected tag, honoring
    * VENUE_TAG_ALIAS_OVERRIDES (including explicit `null` = "not expected").
+   * When `cityHint` is given and `name` begins with it (e.g. venue "Ocean
+   * Grove Youth Temple" in city "Ocean Grove"), and the plain full-name slug
+   * isn't found, also tries the slug of just the remainder after the city
+   * prefix ("youthtemple") — BruceBase sometimes only tags the venue-specific
+   * part since the city itself already has its own tag.
    * @param {string}      label      - Human-readable field name, e.g. "Venue".
    * @param {string}      name       - Raw name text, e.g. "West Long Branch".
    * @param {Set<string>} actualTags - Lowercase tags present on the page.
+   * @param {string|null} [cityHint] - City name to strip as a leading prefix, if present.
    * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null}|null} null if suppressed by an override.
    */
-  function checkLocationNameTag(label, name, actualTags) {
+  function checkLocationNameTag(label, name, actualTags, cityHint = null) {
     const key = name.toLowerCase().trim();
     if (Object.prototype.hasOwnProperty.call(VENUE_TAG_ALIAS_OVERRIDES, key)) {
       const override = VENUE_TAG_ALIAS_OVERRIDES[key];
@@ -5726,7 +5732,20 @@
       return { label: `${label}: ${name}`, candidateTag: override, matchedTag: isTagPresent(override, actualTags) ? override : null, method: 'override' };
     }
     const slug = toLocationTagSlug(name);
-    return { label: `${label}: ${name}`, candidateTag: slug, matchedTag: isTagPresent(slug, actualTags) ? slug : null, method: slug ? 'exact' : null };
+    if (isTagPresent(slug, actualTags)) {
+      return { label: `${label}: ${name}`, candidateTag: slug, matchedTag: slug, method: 'exact' };
+    }
+    if (cityHint) {
+      const trimmedName = name.trim();
+      const cityPrefix  = cityHint.trim();
+      if (trimmedName.toLowerCase().startsWith(`${cityPrefix.toLowerCase()} `)) {
+        const remainderSlug = toLocationTagSlug(trimmedName.slice(cityPrefix.length).trim());
+        if (remainderSlug) {
+          return { label: `${label}: ${name}`, candidateTag: remainderSlug, matchedTag: isTagPresent(remainderSlug, actualTags) ? remainderSlug : null, method: 'exact' };
+        }
+      }
+    }
+    return { label: `${label}: ${name}`, candidateTag: slug, matchedTag: null, method: slug ? 'exact' : null };
   }
 
   /**
@@ -5740,7 +5759,7 @@
   function checkParsedLocationTags(loc, actualTags) {
     if (!loc) return [];
     const items = [];
-    const venueItem = checkLocationNameTag('Venue', loc.venueName, actualTags);
+    const venueItem = checkLocationNameTag('Venue', loc.venueName, actualTags, loc.city);
     if (venueItem) items.push(venueItem);
     if (loc.venueDetail) {
       const detailItem = checkLocationNameTag('Venue detail', loc.venueDetail, actualTags);
@@ -5887,7 +5906,8 @@
 
     // Event-name → tag check: venue/city/state/country parts of the page
     // title should each have a corresponding tag (exact match or manual override).
-    const locationResults       = checkEventNameLocationTags(extractDetailEventName(doc, href), actualTags);
+    const rawEventName          = extractDetailEventName(doc, href);
+    const locationResults       = checkEventNameLocationTags(rawEventName, actualTags);
     const matchedLocationsByTag = new Map(locationResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
     const unmatchedLocations    = locationResults.filter(r => !r.matchedTag);
 
@@ -5945,7 +5965,7 @@
     }
     html += '</ol>';
 
-    const content = { type: 'html', caption: 'Tags', html };
+    const content = { type: 'html', caption: `${rawEventName} Tags`, html };
     let row = section.querySelector('.bb-event-tab-row');
     if (!row) {
       row = document.createElement('div');
@@ -5981,15 +6001,15 @@
 
   /**
    * Returns the set of lowercase tags expected for a venue page.
-   * Currently: "venue", "files", "info" (always) and the first letter of
-   * the venue name. Location tags (venue name/city/state/country slugs) are
-   * checked separately via checkVenuePageLocationTags — see annotateVenuePageTags
+   * Currently: "venue" (always) and the first letter of the venue name.
+   * Location tags (venue name/city/state/country slugs) are checked
+   * separately via checkVenuePageLocationTags — see annotateVenuePageTags
    * / addVenueTagsButton.
    * @param {string} venueName  - Text from the venue page's #page-title.
    * @returns {Set<string>}
    */
   function computeExpectedVenueTags(venueName) {
-    const expected = new Set(['venue', 'files', 'info']);
+    const expected = new Set(['venue']);
     const first = (venueName || '').trim()[0];
     if (first && /[a-z]/i.test(first)) expected.add(first.toLowerCase());
     return expected;
@@ -5997,12 +6017,12 @@
 
   /**
    * Returns true for venue-page tags whose presence can be verified:
-   * "venue", "files", "info", and single lowercase letter tags (first-letter index).
+   * the "venue" tag and single lowercase letter tags (first-letter index).
    * @param {string} tag
    * @returns {boolean}
    */
   function isManagedVenueTag(tag) {
-    return tag === 'venue' || tag === 'files' || tag === 'info' || /^[a-z]$/.test(tag);
+    return tag === 'venue' || /^[a-z]$/.test(tag);
   }
 
   /**
@@ -6146,8 +6166,6 @@
           ? `Tag "${tag}" verified: matches venue ${locationMatch.label}`
           : tag === 'venue'
           ? 'Tag "venue" verified: this is a venue page'
-          : (tag === 'files' || tag === 'info')
-          ? `Tag "${tag}" verified: standard venue page tag`
           : `Tag "${tag}" verified: matches the first letter of venue name "${venueName}"`;
       }
       return { tag, html: a.outerHTML, missing: false, spurious, tooltip };
@@ -6183,7 +6201,7 @@
     }
     html += '</ol>';
 
-    const content = { type: 'html', caption: 'Venue Tags', html };
+    const content = { type: 'html', caption: `${venueName} Tags`, html };
     const btn = document.createElement('button');
     btn.className = 'bb-venue-tab-btn';
     btn.textContent = issueParts.length > 0 ? `Tags ⚠️ (${issueParts.join(', ')})` : 'Tags';
@@ -6763,8 +6781,6 @@
     });
     markPassingTagLinks(passingLinks, tag => tag === 'venue'
       ? 'Tag "venue" verified: this is a venue page'
-      : (tag === 'files' || tag === 'info')
-      ? `Tag "${tag}" verified: standard venue page tag`
       : `Tag "${tag}" verified: matches the first letter of venue name "${venueName}"`);
 
     // Venue-name → tag check: venue/city/state/country parts of the venue

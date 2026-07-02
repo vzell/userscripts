@@ -1,5 +1,24 @@
 [
     {
+        "version": "2.52",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Removed \"files\"/\"info\" from computeExpectedVenueTags/isManagedVenueTag: they aren't reliably present on every VENUE page, so treating them as always-expected produced false-positive missing-tag warnings.",
+                    "checkLocationNameTag now handles venue names that repeat their city as a prefix (e.g. venue \"Ocean Grove Youth Temple\" in city \"Ocean Grove\"): when the plain full-name slug isn't found, it retries with just the remainder after the city prefix (\"youthtemple\"), since BruceBase sometimes only tags the venue-specific part once the city itself is already tagged separately. Applied via checkParsedLocationTags passing loc.city as a cityHint to the venue-name check only, so it covers both DETAIL pages (venue named as part of the event name) and VENUE pages."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "The \"Tags\" button panel caption on the YEAR page's nested .bb-event-tab-row is now the complete raw event name plus \" Tags\" instead of the generic \"Tags\"; the .bb-venue-tab-row \"Venue Tags\" panel caption is likewise the complete venue-page title plus \" Tags\" instead of \"Venue Tags\"."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.51",
         "date": "2026-07-02",
         "sections": [

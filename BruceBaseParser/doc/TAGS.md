@@ -140,6 +140,12 @@ Called from `wireIconHandlers` (after `addEventTabButtons`). It:
    colour red (if any missing), dark-orange (if only spurious), or green
    (`#2a2`, when fully clean) — so status is visible without clicking.
 5. Appended as the last button in `.bb-event-tab-row` (created if absent).
+6. The panel header caption is the complete raw event name plus `" Tags"`
+   (e.g. `"2026-04-18 Pollak Theatre, Monmouth University, West Long Branch,
+   NJ Tags"`), not just `"Tags"` — set via `content.caption`, rendered as
+   plain text (`titleSpan.textContent`) by `buildIconPanel`, so no escaping
+   is needed. `addVenueTagsButton`'s panel caption is likewise the complete
+   venue-page title plus `" Tags"`, not `"Venue Tags"`.
 
 `addVenueTagsButton` (nested in `.bb-venue-tab-row`, class `bb-venue-tab-btn`),
 `addSongTagsButton` (nested in the song tab row, class `bb-song-tab-btn`), and
@@ -286,33 +292,43 @@ Tag derivation, per component:
   extra tags from `COUNTRY_EXTRA_TAGS` (`England` → also `unitedkingdom`,
   `europe`; `Finland` → also `europe`, `scandinavia`).
 
-Each venue-name/venue-detail check first looks up `VENUE_TAG_ALIAS_OVERRIDES`
-(keyed by the lowercase, trimmed name) before falling back to the plain
-slug — set a value to `null` to mean "no tag is expected for this name at
-all" (e.g. a generic building name like `"Spotify HQ"` that BruceBase never
-tags, favoring the more specific venue detail — `"Adelphi (The)"` → `adelphi`
-— instead; on VENUE pages this exception doesn't need an override at all,
-since the venue's own title is already the entity that has a wiki page).
+Each venue-name check (`checkLocationNameTag`) first looks up
+`VENUE_TAG_ALIAS_OVERRIDES` (keyed by the lowercase, trimmed name), then
+tries the plain full-name slug, then — only if a `cityHint` was supplied and
+the name begins with it — the slug of just the remainder after the city
+prefix. This handles two real-world cases:
+- Set an override value to `null` to mean "no tag is expected for this name
+  at all" (e.g. a generic building name like `"Spotify HQ"` that BruceBase
+  never tags, favoring the more specific venue detail — `"Adelphi (The)"` →
+  `adelphi` — instead; on VENUE pages this exception doesn't need an
+  override at all, since the venue's own title is already the entity that
+  has a wiki page).
+- The **city-prefix rule**: when a venue name repeats its city as a prefix
+  (e.g. venue `"Ocean Grove Youth Temple"` in city `"Ocean Grove"`),
+  BruceBase sometimes only tags the venue-specific remainder (`youthtemple`)
+  since the city itself is already tagged separately (`oceangrove`).
+  `checkParsedLocationTags` passes `loc.city` as the `cityHint` for the
+  venue-name check only (not venue detail or city itself). This applies on
+  both DETAIL pages (when the venue is named as part of the event name) and
+  VENUE pages (the venue's own title).
 
 Result shape: `{ label, candidateTag, matchedTag, method: 'exact'|'override'|null }[]`.
 A matched part's tag is colored green via `markPassingTagLinks`/inline
 title-setting with a tooltip naming the location field and method. An
 unmatched part is rendered like a missing tag, showing `candidateTag` (the
-slug/override that was expected).
-
-VENUE pages additionally expect two fixed tags unrelated to the title,
-`files` and `info`, added to `computeExpectedVenueTags`/`isManagedVenueTag`
-alongside the existing `venue` tag and first-letter index — see "VENUE page
-annotation" below.
+slug/override/remainder-slug that was expected).
 
 ---
 
 ## VENUE page annotation (`annotateVenuePageTags`)
 
 Called from `runVenuePage`. `computeExpectedVenueTags(venueName)` returns a
-fixed set: `venue`, `files`, `info`, plus the first letter of the venue name
-(lowercase, alphabetical-index tag — e.g. `"Pollak Theatre…"` → `p`).
-`isManagedVenueTag(tag)` returns true for exactly those four kinds of tag.
+fixed set: `venue`, plus the first letter of the venue name (lowercase,
+alphabetical-index tag — e.g. `"Pollak Theatre…"` → `p`).
+`isManagedVenueTag(tag)` returns true for exactly those two kinds of tag.
+(`files`/`info` were considered as always-present fixed tags but are *not*
+reliably present on every VENUE page, so they are intentionally left
+unmanaged/unchecked.)
 
 Location tags (venue-name/city/state/country slugs) are checked separately
 by the location tag check above — deliberately *not* added to

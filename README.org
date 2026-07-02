@@ -3112,7 +3112,7 @@ for both the "Tags" buttons on '<div class="bb-relation-tab-row">' and '<div cla
 
 YEAR page Tags/Venue Tags/Song Tags buttons now turn green (instead of staying the default grey) when all tags pass, so consistency status is visible without clicking.
 
-** plan: tag name aliases
+** DONE plan: tag name aliases
 
 Introduce the concept of "lookup tables"/lookup functions" for tag name aliases in different contexts like EVENT DETAIL, SONG, VENUE,
 RELATION, RETAIL, etc pages to make additional consistency checks to tag name aliases
@@ -3166,7 +3166,7 @@ New setlist-song-tag consistency check on DETAIL pages
   it's untested end-to-end yet.
 #+end_example
 
-** plan: event names
+** DONE plan: event names
 
 Extend our implementation that "Every song listed under the "Setlist" tab should have a corresponding tag value." to the different parts of an event name.
 
@@ -3194,11 +3194,11 @@ reliably determine the following information from the event name and deduce the 
 Then check given the "Tags" column, which tag values should be present for an event name. Deduce helper functions which
 would produce the expected tag values.
 
-** act on @debug/event-names.tags
+** DONE act on @debug/event-names.tags
 
 act on @debug/event-names.tags
 
-** VENUE
+** DONE VENUE
 
 extend the tag checks also to the venue name (in the page title) in VENUE pages itself
 
@@ -3213,16 +3213,28 @@ extend the tag checks also to the venue name (in the page title) in VENUE pages 
 
 One pattern here is, the venue detail which is present on EVENT DETAIL pages is never present on the VENUE page itself
 
-** Ocean Grove Youth Temple, Ocean Grove, NJ - rule
-
-
 ** files tag value
 
-plus two new fixed expected tags, files and info
-
-** rename the current "Venue Tags"
-
 1.)
+
+Actually the two new fixed expected tags, files and info for VENUE pages are not always present, please remove from fixed list
+
+2.)
+
+Take into account the following additional rule for VENUE pages e.g. "Ocean Grove Youth Temple, Ocean Grove, NJ" or if
+the venue is part of an event name:
+
+The actual tags for this VENUE are
+
+#+begin_example
+files info newjersey(nj) o oceangrove usa venue youthtemple
+#+end_example
+
+We currently flag "oceangroveyouthtemple" as being NOT found. But if the city name e.g. "Ocean Grove" is already present
+as a tag value "oceangrove" and the city name is also part of the venue name e.g "Ocean Grove Youth Temple" only expect
+the latter part of the venue name e.g "Youth Temple" to be part of the tags e.g "youthtemple"
+
+3.)
 
 rename the current "Venue Tags"
 
@@ -3232,7 +3244,7 @@ rename the current "Venue Tags"
 
 in the "Tags"-button panel of '<div class="bb-venue-tab-row">' to the complete venue name plus " Tags" appended
 
-2.)
+4.)
 
 rename the current "Tags"
 
