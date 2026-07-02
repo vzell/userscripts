@@ -1,13 +1,25 @@
 # TAGS.md — Tag Consistency Checks
 
-Tag consistency checks run in four contexts:
+Tag consistency checks run in these contexts:
 
-- **YEAR page**: `addTagsButton` opens a panel showing all DETAIL page tags.
+- **YEAR page**: `addTagsButton` opens a panel showing all DETAIL page tags for
+  the event; `addVenueTagsButton` / `addSongTagsButton` do the same nested
+  inside the venue/song tab rows for the venue and song pages linked from the
+  event.
 - **DETAIL page**: `annotateDetailPageTags` directly annotates the `.page-tags` block.
 - **VENUE page**: `annotateVenuePageTags` annotates `.page-tags` inline on the live page.
 - **RETAIL page**: `annotateRetailPageTags` annotates `.page-tags` inline on the live page.
 - **SONG page**: `annotateSongPageTags` annotates `.page-tags` inline on the live page.
 - **RELATION page**: `annotateRelationPageTags` annotates `.page-tags` inline on the live page.
+
+Every managed tag falls into exactly one of three states: **missing** (red),
+**spurious** (orange ⚠️), or **passing** (green — see below). Unmanaged tags
+(tour codes, etc.) are never colored — **except** song-name tags on DETAIL
+pages / the YEAR page's nested Tags button (see "Setlist song tag check"),
+and venue-name/city/state/country tags on DETAIL and VENUE pages / their
+nested Tags buttons (see "Event-name / venue-name location tag check"),
+which each get their own separate check independent of
+`isManagedTag`/`MANAGED_CONTENT_TAGS`/`isManagedVenueTag`.
 
 ---
 
@@ -20,6 +32,11 @@ Tag consistency checks run in four contexts:
 | `DAY_NAMES` | `['sunday', …, 'saturday']` — indexed 0–6 |
 | `MANAGED_CONTENT_TAGS` | `Set` of content tags whose presence can be verified |
 | `SPURIOUS_TAG_REASONS` | `{tag: 'human-readable reason'}` for content tags |
+| `SONG_TAG_ALIAS_OVERRIDES` | `{songTitleLowercase: 'expectedTag'}` — user-editable manual overrides for the setlist song tag check (empty by default) |
+| `US_STATE_NAMES` | `{abbr: 'Full State Name'}` — all 50 US states + DC, for the location tag check |
+| `CA_PROVINCE_NAMES` | `{abbr: 'Full Province Name'}` — all 13 Canadian provinces/territories, for the location tag check |
+| `COUNTRY_EXTRA_TAGS` | `{countryName: ['extraTag', …]}` — extra continent/region tags expected alongside a bare country's own slug (e.g. `England` → `unitedkingdom`, `europe`); not exhaustive, user-extendable |
+| `VENUE_TAG_ALIAS_OVERRIDES` | `{venueOrDetailNameLowercase: 'expectedTag' \| null}` — user-editable manual overrides for the location tag check; `null` means "no tag expected for this name at all" (empty by default) |
 
 `MANAGED_CONTENT_TAGS` covers: event types (`gig`, `interview`, `nogig`,
 `offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck`) plus `bootleg`,
@@ -71,6 +88,10 @@ labels so that events with only a `"News"` tab are still checked.
 `isManagedTag(tag)` returns true for: `MANAGED_CONTENT_TAGS` members, month
 names, weekday names, 4-digit years, and 1–2 digit day numbers (1–31).
 
+**Passing** (present AND condition met):
+- Every context also marks these tags to make correct data visible without
+  clicking. See "Passing (green) tags" below.
+
 ---
 
 ## `isTagPresent(tag, actualTags)`
@@ -80,28 +101,229 @@ Like `actualTags.has(tag)` but also accepts numeric day aliases:
 
 ---
 
+## Passing (green) tags
+
+Any managed tag that is both present and matches its expected condition is
+rendered green, in addition to the existing red (missing) / orange (spurious)
+handling. This lets the user see that a consistency check was performed and
+passed, without needing to open a panel or hunt for a ⚠️.
+
+- **Live pages** (DETAIL/VENUE/RETAIL/SONG/RELATION): `markPassingTagLinks(links, msgFn)`
+  adds the `.bb-tag-ok` class, sets inline `color:#2a2; font-weight:bold`, and
+  wires a `mouseenter`/`mouseleave` pair that shows the rich floating tooltip
+  (`showOkTooltip`, styled with `.bb-ok`) via `msgFn(tag)`.
+- **YEAR page panels** (`addTagsButton` / `addVenueTagsButton` / `addSongTagsButton`):
+  the tag `<a>` element (from the fetched `Document`) gets the same inline
+  style plus a native `title` attribute — no custom tooltip wiring, since the
+  panel content is inserted as a static HTML string.
+- `passingTagMsg(tag, expectedTags)` builds the DETAIL/YEAR event-tag message,
+  backed by `PASSING_TAG_REASONS` (mirrors `SPURIOUS_TAG_REASONS`) for content
+  tags, with date/weekday/event-type cases handled inline. VENUE, RETAIL,
+  SONG, and RELATION pages build their passing message inline in their own
+  `annotate*PageTags` / `add*TagsButton` function (no shared helper, since
+  each has only 1–4 possible passing tags).
+- Marking happens **unconditionally**, before the missing/spurious early-return
+  in each `annotate*PageTags` function — so a fully clean `.page-tags` block
+  still gets its tags colored green, even though no warning box is drawn.
+
+---
+
 ## YEAR page Tags button (`addTagsButton`)
 
 Called from `wireIconHandlers` (after `addEventTabButtons`). It:
 1. Reads `.page-tags a[href]` from the fetched DETAIL `doc`.
 2. Computes expected tags and compares against actual.
-3. Merges existing links (with spurious ⚠️) + missing placeholders into one
-   sorted list; renders in the `buildIconPanel` infrastructure.
+3. Merges existing links (styled green if passing, with spurious ⚠️ if not) +
+   missing placeholders into one sorted list; renders in the `buildIconPanel`
+   infrastructure.
 4. Button label: `"Tags"` when clean; `"Tags ⚠️ (N missing, M spurious)"` with
-   colour red (if any missing) or dark-orange (if only spurious).
+   colour red (if any missing), dark-orange (if only spurious), or green
+   (`#2a2`, when fully clean) — so status is visible without clicking.
 5. Appended as the last button in `.bb-event-tab-row` (created if absent).
+
+`addVenueTagsButton` (nested in `.bb-venue-tab-row`, class `bb-venue-tab-btn`),
+`addSongTagsButton` (nested in the song tab row, class `bb-song-tab-btn`), and
+`addRelationTagsButton` (nested in `.bb-relation-tab-row`, class
+`bb-relation-tab-btn`) follow the identical pattern for the VENUE, SONG, and
+RELATION pages linked from the event, including the same green/red/dark-orange
+button coloring.
+
+`addSongTagsButton` uses `computeExpectedYearSongTags(songDoc, songTabMap, songName)`
+and `isManagedYearSongTag(tag)` — distinct names from the live SONG page's
+`computeExpectedSongTags()` / `isManagedSongTag(tag)` (see below). These were
+previously both named the same; the later, simpler declarations silently won
+in the shared module scope, so the YEAR page's Song Tags button never actually
+checked the first-letter/lyricsheet tags. Fixed by renaming the YEAR-page
+versions.
+
+`addRelationTagsButton` similarly uses `computeExpectedYearRelationTags(relDoc)`
+— a `relDoc`-based counterpart to the live RELATION page's
+`computeExpectedRelationTags()`, which reads tab labels from the live
+`document` instead of a fetched document (same live-vs-fetched split as the
+song tags, but no naming collision here since the two were already named
+differently). Detects `person`/`band` expected tags from `relDoc`'s own
+`.yui-nav em` labels (`Bands`/`Members`); a no-op when neither is present
+(page type can't be determined) or `.page-tags` is absent.
 
 ---
 
 ## DETAIL page annotation (`annotateDetailPageTags`)
 
-Called from `runDetailPage` right after `addDetailTitleAnnotation`. It:
+Called from `runDetailPage` right after `addDetailTitleAnnotation`, passed
+the already-parsed `detailSections` (`parseDetailSetlist(document)`, computed
+once at the top of `runDetailPage` to avoid a duplicate parse) and
+`rawDetailName` (the page's raw `#page-title` text, from
+`extractDetailEventName`). It:
 1. Builds `detailTabMap = buildTabMap(document)` from the current page.
 2. Computes expected and actual tags.
-3. If any issues found, wraps `.page-tags` parent in a gold warning box
+3. Marks passing tag links green (see "Passing (green) tags").
+4. Runs the setlist song tag check (see below) and marks matched song tags
+   green too.
+5. Runs the event-name location tag check (see below) and marks matched
+   venue/city/state/country tags green too.
+6. If any issues found (missing/spurious tags, unmatched setlist songs, OR
+   unmatched location parts), wraps `.page-tags` parent in a gold warning box
    (`<div class="bb-tags-warn-box">`).
-4. Appends `<span class="bb-tag-spurious">⚠️</span>` after spurious tag links.
-5. Appends `<span class="bb-tag-missing">⚠️tag</span>` spans for missing tags.
+7. Appends `<span class="bb-tag-spurious">⚠️</span>` after spurious tag links.
+8. Appends `<span class="bb-tag-missing">⚠️tag</span>` spans for missing tags,
+   one per unmatched setlist song (showing the derived-alias candidate), AND
+   one per unmatched location part (showing the expected slug/override tag).
+
+---
+
+## Setlist song tag check (`checkSetlistSongTags`, `computeSongTagAlias`)
+
+Every song listed in a DETAIL page's Setlist tab should have a corresponding
+tag on that page — this is checked independently of `isManagedTag` (song
+tags are never in `MANAGED_CONTENT_TAGS`), on both `annotateDetailPageTags`
+(live DETAIL page) and `addTagsButton` (YEAR page's nested "Tags" button,
+using the fetched `doc` — it calls `parseDetailSetlist(doc)` itself since it
+doesn't have an already-parsed `detailSections` at hand).
+
+`checkSetlistSongTags(detailSections, actualTags)` takes the unique set of
+song titles across all sections (`detailSections.flatMap(s => s.songs)`) and,
+for each, tries three lookups in order — the first one that matches an
+actual tag wins:
+
+1. **Exact match**: `song.toLowerCase().replace(/\s+/g, '')` — e.g.
+   `"WRECKING BALL"` → `wreckingball`.
+2. **Derived alias** (`computeSongTagAlias(title)`): splits the title on
+   whitespace and, per word:
+   - a dotted initialism (`^([A-Za-z]\.)+$`, e.g. `"U.S.A."`) contributes ALL
+     its letters, periods stripped (`"usa"`, not just `"u"`);
+   - a purely-numeric word contributes the whole number (`"41"` stays `"41"`,
+     not `"4"`);
+   - every other word contributes only its first letter.
+
+   Parens `()`, apostrophes `'`, hyphens `-`, ampersands `&`, and periods (on
+   non-initialism words) are deleted outright (not replaced with a space) —
+   so letters on either side merge into one word when there's no space
+   (`"DOESN'T"` → `"DOESNT"` → one word), but stay separate when a space
+   already exists on both sides (`"(41 SHOTS)"` → `"41"`, `"SHOTS"` — two
+   words, since the space between them is untouched by paren-stripping).
+
+   Examples: `"AMERICAN SKIN (41 SHOTS)"` → `as41s`, `"BORN IN THE U.S.A."`
+   → `bitusa`, `"BECAUSE THE NIGHT"` → `btn`, `"DARKNESS ON THE EDGE OF TOWN"`
+   → `doteot`.
+3. **Manual override** (`SONG_TAG_ALIAS_OVERRIDES[song.toLowerCase().trim()]`):
+   a small, user-editable lookup table (empty by default, see "Constants"
+   above) for the rare case where BruceBase's real tag matches neither of the
+   above — e.g. an idiosyncratic/legacy tag. Add entries here as exceptions
+   are discovered; no code changes needed elsewhere.
+
+Result shape: `{ song, matchedTag, method: 'exact'|'alias'|'override'|null }[]`.
+A matched song's tag is colored green via `markPassingTagLinks`/inline
+title-setting (same convention as other passing tags) with a tooltip naming
+the song and the method. An unmatched song is rendered like a missing tag,
+showing the derived-alias candidate (or the exact-match candidate as
+fallback) so it's clear what to add.
+
+Sibling override tables for other page types (`RELATION_TAG_ALIAS_OVERRIDES`,
+`RETAIL_TAG_ALIAS_OVERRIDES`) are not implemented yet. `VENUE_TAG_ALIAS_OVERRIDES`
+*is* implemented, but for the location tag check below, not for song tags.
+
+---
+
+## Event-name / venue-name location tag check
+
+Every location component in a page's own title — venue name, venue detail
+(DETAIL pages only), city, state/province, country/region — should have a
+corresponding tag. Checked independently of `isManagedTag`/`isManagedVenueTag`
+(location tags are never added to those managed-tag sets — see "Passing
+(green) tags" note below), on:
+- `annotateDetailPageTags` (live DETAIL page) / `addTagsButton` (YEAR page's
+  nested "Tags" button) via `checkEventNameLocationTags(pageTitle, actualTags)`.
+- `annotateVenuePageTags` (live VENUE page) / `addVenueTagsButton` (nested
+  "Tags" button) via `checkVenuePageLocationTags(venueTitle, actualTags)`.
+
+Both delegate to the shared `checkParsedLocationTags(loc, actualTags)`, fed
+by one of two title parsers:
+- `parseEventNameLocation(pageTitle)` — DETAIL-page title, e.g. `"2026-04-18
+  Pollak Theatre, Monmouth University, West Long Branch, NJ"`. Strips the
+  leading `YYYY-MM-DD `, then splits the remainder on commas: 4 parts means
+  `venueName, venueDetail, city, state/country`; 3 parts means
+  `venueName, city, state/country` (no detail).
+- `parseVenuePageLocation(venueTitle)` — VENUE-page's own title, e.g.
+  `"Pollak Theatre, West Long Branch, NJ"`. No date prefix and no venue
+  detail ever appears here — always exactly `venueName, city, state/country`.
+
+Both feed the shared `parseLocationParts(parts)`, which decides US-state vs.
+Canadian-province vs. bare-country from the last comma part (checked against
+`US_STATE_NAMES`/`CA_PROVINCE_NAMES` — a bare 2-letter code that isn't a
+known abbreviation, e.g. a country initialism, falls through to the
+bare-country branch).
+
+Tag derivation, per component:
+- **Venue name / venue detail / city**: `toLocationTagSlug(str)` — drop a
+  leading/trailing `"The"`/`"Le"`/`"De"` article (including the `"(The)"`
+  parenthetical form), lowercase, delete every non-alphanumeric character —
+  no acronym, unlike `computeSongTagAlias`. E.g. `"West Long Branch"` →
+  `westlongbranch`, `"Co-op Live"` → `cooplive`, `"Adelphi (The)"` → `adelphi`.
+- **US state**: tag is `` `${toLocationTagSlug(fullName)}(${abbr.toLowerCase()})` ``,
+  e.g. `NJ` → `newjersey(nj)`, plus a separate `usa` tag.
+- **Canadian province**: same shape, e.g. `ON` → `ontario(on)`, plus `canada`.
+- **Bare country**: its own slug (`England` → `england`) plus zero or more
+  extra tags from `COUNTRY_EXTRA_TAGS` (`England` → also `unitedkingdom`,
+  `europe`; `Finland` → also `europe`, `scandinavia`).
+
+Each venue-name/venue-detail check first looks up `VENUE_TAG_ALIAS_OVERRIDES`
+(keyed by the lowercase, trimmed name) before falling back to the plain
+slug — set a value to `null` to mean "no tag is expected for this name at
+all" (e.g. a generic building name like `"Spotify HQ"` that BruceBase never
+tags, favoring the more specific venue detail — `"Adelphi (The)"` → `adelphi`
+— instead; on VENUE pages this exception doesn't need an override at all,
+since the venue's own title is already the entity that has a wiki page).
+
+Result shape: `{ label, candidateTag, matchedTag, method: 'exact'|'override'|null }[]`.
+A matched part's tag is colored green via `markPassingTagLinks`/inline
+title-setting with a tooltip naming the location field and method. An
+unmatched part is rendered like a missing tag, showing `candidateTag` (the
+slug/override that was expected).
+
+VENUE pages additionally expect two fixed tags unrelated to the title,
+`files` and `info`, added to `computeExpectedVenueTags`/`isManagedVenueTag`
+alongside the existing `venue` tag and first-letter index — see "VENUE page
+annotation" below.
+
+---
+
+## VENUE page annotation (`annotateVenuePageTags`)
+
+Called from `runVenuePage`. `computeExpectedVenueTags(venueName)` returns a
+fixed set: `venue`, `files`, `info`, plus the first letter of the venue name
+(lowercase, alphabetical-index tag — e.g. `"Pollak Theatre…"` → `p`).
+`isManagedVenueTag(tag)` returns true for exactly those four kinds of tag.
+
+Location tags (venue-name/city/state/country slugs) are checked separately
+by the location tag check above — deliberately *not* added to
+`computeExpectedVenueTags`'s Set or to `isManagedVenueTag`, since they're
+page-specific freeform strings rather than a small fixed vocabulary; a wrong
+venue/city tag will still show up as a red missing entry for the *correct*
+tag, it just isn't flagged "spurious" (same trade-off as song tags).
+
+`addVenueTagsButton` (YEAR page's nested "Tags" button, `.bb-venue-tab-row`)
+mirrors this exactly, merging the same location-check results into its
+`<ol>` panel.
 
 ---
 
@@ -113,7 +335,9 @@ Called from `runSongPage`. Rules:
 |---|---|
 | `song` | Always — every `/song:…` page must carry this tag |
 
-`isManagedSongTag(tag)` returns true only for `"song"`.
+`isManagedSongTag(tag)` returns true only for `"song"`. (Not to be confused
+with `isManagedYearSongTag(tag)`, used by the YEAR page's nested Song Tags
+button — see above.)
 
 ---
 
@@ -131,7 +355,8 @@ from the live page's `.yui-nav em` elements:
 `isManagedRelationTag(tag)` returns true for `"person"` and `"band"`.
 
 `computeExpectedRelationTags()` returns an empty set when neither `Bands` nor
-`Members` tab is found, causing `annotateRelationPageTags` to exit early.
+`Members` tab is found, causing `annotateRelationPageTags` to exit early
+(before any passing-tag marking, too — the page type can't be determined).
 
 ---
 
@@ -141,4 +366,5 @@ from the live page's `.yui-nav em` elements:
 |---|---|
 | `.bb-tag-missing` | Bold red span for expected-but-absent tags |
 | `.bb-tag-spurious` | Orange ⚠️ for present-but-unexpected managed tags |
+| `.bb-tag-ok` | Bold green (`#2a2`) for present-and-expected ("passing") managed tags; reset to `inherit` in `.bb-original-view` |
 | `.bb-tags-warn-box` | Gold border, #fffbe6 background wrapper around `.page-tags` when issues found |

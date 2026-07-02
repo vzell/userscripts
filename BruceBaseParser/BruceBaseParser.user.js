@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.46
+// @version      2.51
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -93,6 +93,92 @@
     printed:     'No printed setlist images found in News/Memorabilia tab',
     soundcheck:  'No "Soundcheck" section header found in setlist content',
     storyteller: 'Storyteller tab is empty or unavailable',
+  };
+
+  /** Human-readable reasons why each managed tag is correctly present ("passing"). */
+  const PASSING_TAG_REASONS = {
+    bootleg:     'Recording tab has bootleg content',
+    livedl:      'Recording tab has an official live download',
+    news:        'News/Memorabilia tab has content',
+    memorabilia: 'News/Memorabilia tab has content (tab is labelled "News/Memorabilia")',
+    ticket:      'Ticket image(s) found in the News/Memorabilia tab',
+    setlist:     'Setlist image(s) found in the News/Memorabilia tab',
+    handwritten: 'Handwritten setlist image(s) found in the News/Memorabilia tab',
+    printed:     'Printed setlist image(s) found in the News/Memorabilia tab',
+    soundcheck:  '"Soundcheck" section header found in the setlist content',
+    storyteller: 'Storyteller tab has content',
+  };
+
+  /**
+   * User-editable song→tag manual overrides for the DETAIL page setlist tag
+   * check (see computeSongTagAlias / checkSetlistSongTags). Add an entry here
+   * only when neither the exact-match nor the derived-alias correctly predicts
+   * the real tag BruceBase uses for a song (idiosyncratic/legacy tags).
+   * Keyed by the lowercase, trimmed song title (as it appears in
+   * parseDetailSetlist's `songs` array); value is the exact tag string
+   * expected on the DETAIL page. Empty by default — populate as exceptions
+   * are discovered.
+   *
+   * Sibling tables for other page types (VENUE_TAG_ALIAS_OVERRIDES,
+   * RELATION_TAG_ALIAS_OVERRIDES, RETAIL_TAG_ALIAS_OVERRIDES) can be added
+   * later following this same naming/placement convention.
+   */
+  const SONG_TAG_ALIAS_OVERRIDES = {
+    // 'incident on 57th street': 'incident57',
+  };
+
+  /** USPS state abbreviation -> full state name, for the event-name/venue-name location tag check. */
+  const US_STATE_NAMES = {
+    AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
+    CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware', DC: 'District of Columbia',
+    FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois',
+    IN: 'Indiana', IA: 'Iowa', KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana',
+    ME: 'Maine', MD: 'Maryland', MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota',
+    MS: 'Mississippi', MO: 'Missouri', MT: 'Montana', NE: 'Nebraska', NV: 'Nevada',
+    NH: 'New Hampshire', NJ: 'New Jersey', NM: 'New Mexico', NY: 'New York',
+    NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio', OK: 'Oklahoma', OR: 'Oregon',
+    PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina', SD: 'South Dakota',
+    TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont', VA: 'Virginia',
+    WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
+  };
+
+  /** Canadian province/territory abbreviation -> full name, for the event-name/venue-name location tag check. */
+  const CA_PROVINCE_NAMES = {
+    AB: 'Alberta', BC: 'British Columbia', MB: 'Manitoba', NB: 'New Brunswick',
+    NL: 'Newfoundland and Labrador', NS: 'Nova Scotia', NT: 'Northwest Territories',
+    NU: 'Nunavut', ON: 'Ontario', PE: 'Prince Edward Island', QC: 'Quebec',
+    SK: 'Saskatchewan', YT: 'Yukon',
+  };
+
+  /**
+   * Country name (as it appears in an event-name/venue-name title) -> extra
+   * tags expected alongside the country's own slug tag (e.g. "England" also
+   * expects "unitedkingdom" and "europe"). Not exhaustive — add entries as
+   * new countries appear in event/venue titles.
+   */
+  const COUNTRY_EXTRA_TAGS = {
+    England: ['unitedkingdom', 'europe'], Scotland: ['unitedkingdom', 'europe'],
+    Wales: ['unitedkingdom', 'europe'], 'Northern Ireland': ['unitedkingdom', 'europe'],
+    Ireland: ['europe'], Finland: ['europe', 'scandinavia'], Sweden: ['europe', 'scandinavia'],
+    Norway: ['europe', 'scandinavia'], Denmark: ['europe', 'scandinavia'], Iceland: ['europe', 'scandinavia'],
+    Germany: ['europe'], France: ['europe'], Italy: ['europe'], Spain: ['europe'],
+    Portugal: ['europe'], Netherlands: ['europe'], Belgium: ['europe'], Switzerland: ['europe'],
+    Austria: ['europe'], Poland: ['europe'], 'Czech Republic': ['europe'], Greece: ['europe'],
+    Australia: ['oceania'], 'New Zealand': ['oceania'], Japan: ['asia'],
+    Brazil: ['southamerica'], Mexico: ['northamerica'],
+  };
+
+  /**
+   * User-editable venue name/detail -> tag overrides for the event-name and
+   * venue-name location tag checks (see checkParsedLocationTags). Add an
+   * entry only when the plain slug doesn't match BruceBase's real tag, OR
+   * set the value to `null` to mean "no tag is expected for this venue name
+   * at all" (e.g. a generic building name like "Spotify HQ" that BruceBase
+   * never tags, favoring the more specific venue detail instead).
+   * Keyed by the lowercase, trimmed venue name/detail string.
+   */
+  const VENUE_TAG_ALIAS_OVERRIDES = {
+    // 'spotify hq': null,
   };
 
   /** SmartTable column definitions for YEAR OVERVIEW (list) pages. */
@@ -1193,13 +1279,18 @@
    */
   function rewireLoadedPage(container, pageType) {
     container.querySelectorAll(
-      '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff'
+      '.bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff'
     ).forEach(span => {
       span.addEventListener('mouseenter', e => showSongTooltip(e, span));
       span.addEventListener('mouseleave', hideTooltip);
     });
 
-    container.querySelectorAll('[data-msg]').forEach(el => {
+    // [data-msg] elements that ALSO carry a native [title] are one-line
+    // messages that intentionally rely on the browser's native tooltip only
+    // (title survives the innerHTML round-trip with no JS needed) — only
+    // elements with a genuinely rich (multi-line/HTML) tooltip and no title
+    // need their custom listener restored here.
+    container.querySelectorAll('[data-msg]:not([title])').forEach(el => {
       el.addEventListener('mouseenter', e => showErrorTooltip(e, el.dataset.msg));
       el.addEventListener('mouseleave', hideTooltip);
     });
@@ -1679,12 +1770,9 @@
     }
 
     // Re-wire tooltip listeners so the list view is fully interactive.
-    div.querySelectorAll('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff').forEach(span => {
+    // (.bb-para-warn carries its own native title tooltip — no listener needed.)
+    div.querySelectorAll('.bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff').forEach(span => {
       span.addEventListener('mouseenter', e => showSongTooltip(e, span));
-      span.addEventListener('mouseleave', hideTooltip);
-    });
-    div.querySelectorAll('.bb-para-warn').forEach(span => {
-      span.addEventListener('mouseenter', e => showErrorTooltip(e, span.dataset.msg));
       span.addEventListener('mouseleave', hideTooltip);
     });
 
@@ -2358,11 +2446,15 @@
       const warnParts = [];
       if (!nameMatch) warnParts.push('Event name mismatch between YEAR and DETAIL page');
       if (hasSetlistMismatch) warnParts.push('Setlist has differences between YEAR and DETAIL page');
-      warnSpan.dataset.msg = warnParts.join('; ');
+      const msg = warnParts.join('; ');
+      warnSpan.dataset.msg = msg;
+      warnSpan.title = msg;
+      warnSpan.style.cursor = 'help';
       em.appendChild(warnSpan);
     } else {
       // Class-based so the toggle can revert it without touching inline styles.
       em.classList.add('bb-setlist-tab-match');
+      em.title = 'Setlist tab verified: event name matches and no setlist differences were found between the YEAR and DETAIL page.';
     }
   }
 
@@ -2735,11 +2827,11 @@
   // the detail page has no section at this index, or undefined if not applicable.
   // Renders a raw YEAR-page token that contains a list connective (", and/or", etc.).
   // Each song part gets .bb-song-match colouring; the separators stay plain (original colour).
-  function renderMatchWithConnectives(raw) {
+  function renderMatchWithConnectives(raw, yearSong, detailSong) {
     const parts = raw.split(/(,\s+(?:(?:and\/or|and|or)\s+)?)/gi);
     return parts.map((part, i) =>
       i % 2 === 0
-        ? `<span class="bb-song-match">${esc(part.trim())}</span>`
+        ? `<span class="bb-song-match" data-year-song="${esc(yearSong)}" data-detail-song="${esc(detailSong)}">${esc(part.trim())}</span>`
         : esc(part)
     ).join('');
   }
@@ -2779,7 +2871,7 @@
         }
       }
       if (labelWarnMsg) {
-        html += `<span class="bb-section-label-warn bb-para-warn" data-msg="${esc(labelWarnMsg)}">⚠️</span> `;
+        html += `<span class="bb-section-label-warn bb-para-warn" data-msg="${esc(labelWarnMsg)}" title="${esc(labelWarnMsg)}">⚠️</span> `;
       }
     }
 
@@ -2802,20 +2894,21 @@
       }
 
       const paraWarn = item.paragraphBased
-        ? ` <span class="bb-para-warn" data-msg="Detail page lists this song as a paragraph (&lt;p&gt;) instead of a list item (&lt;ol&gt;/&lt;li&gt;). Setlist may be incomplete.">⚠️</span>`
+        ? ` <span class="bb-para-warn" data-msg="Detail page lists this song as a paragraph (&lt;p&gt;) instead of a list item (&lt;ol&gt;/&lt;li&gt;). Setlist may be incomplete." title="Detail page lists this song as a paragraph (&lt;p&gt;) instead of a list item (&lt;ol&gt;/&lt;li&gt;). Setlist may be incomplete.">⚠️</span>`
         : '';
       if (item.type === 'match') {
         const raw = item.rawYearSong || item.yearSong;
         // Test on the cleaned name so that ", and" inside a "(with ...)" suffix
         // does not trigger the connective split.
         if (/,\s+(?:and\/or|and|or)\s+/i.test(item.yearSong)) {
-          html += renderMatchWithConnectives(raw) + paraWarn;
+          html += renderMatchWithConnectives(raw, item.yearSong, item.detailSong) + paraWarn;
         } else {
           const rawSuffix = item.rawYearSong ? esc(item.rawYearSong.slice(item.yearSong.length)) : '';
+          const matchData = `data-year-song="${esc(item.yearSong)}" data-detail-song="${esc(item.detailSong)}"`;
           if (item.detailSongUrl) {
-            html += `<a href="${esc(item.detailSongUrl)}" class="bb-song-match">${esc(item.yearSong)}</a>${rawSuffix}${paraWarn}`;
+            html += `<a href="${esc(item.detailSongUrl)}" class="bb-song-match" ${matchData}>${esc(item.yearSong)}</a>${rawSuffix}${paraWarn}`;
           } else {
-            html += `<span class="bb-song-match">${esc(item.yearSong)}</span>${rawSuffix}${paraWarn}`;
+            html += `<span class="bb-song-match" ${matchData}>${esc(item.yearSong)}</span>${rawSuffix}${paraWarn}`;
           }
         }
       } else if (item.type === 'year-only') {
@@ -2847,12 +2940,9 @@
       });
     }
 
-    el.querySelectorAll('.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff').forEach(span => {
+    // (.bb-para-warn carries its own native title tooltip — no listener needed.)
+    el.querySelectorAll('.bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff').forEach(span => {
       span.addEventListener('mouseenter', e => showSongTooltip(e, span));
-      span.addEventListener('mouseleave', hideTooltip);
-    });
-    el.querySelectorAll('.bb-para-warn').forEach(span => {
-      span.addEventListener('mouseenter', e => showErrorTooltip(e, span.dataset.msg));
       span.addEventListener('mouseleave', hideTooltip);
     });
   }
@@ -2938,7 +3028,7 @@
       const detailTabMap = buildTabMap(document);
       const detailDateM  = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
       if (detailDateM) {
-        annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType);
+        annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType, detailSections, rawDetailName);
       }
 
       const allYearNamedAnchors = [...yearContent.querySelectorAll('a[name]')];
@@ -3454,8 +3544,7 @@
           warn.className = 'bb-para-warn';
           warn.textContent = ' ⚠️';
           warn.dataset.msg = msg;
-          warn.addEventListener('mouseenter', e => showErrorTooltip(e, warn.dataset.msg));
-          warn.addEventListener('mouseleave', hideTooltip);
+          warn.title = msg;
           el.appendChild(warn);
         }
       });
@@ -3510,8 +3599,7 @@
       warn.className = 'bb-para-warn';
       warn.textContent = ' ⚠️';
       warn.dataset.msg = msg;
-      warn.addEventListener('mouseenter', e => showErrorTooltip(e, warn.dataset.msg));
-      warn.addEventListener('mouseleave', hideTooltip);
+      warn.title = msg;
 
       const p = document.createElement('p');
       const strong = document.createElement('strong');
@@ -3615,8 +3703,7 @@
     span.className = 'bb-para-warn';
     span.textContent = ' ⚠️';
     span.dataset.msg = 'Unusual format: song listed as a paragraph (<p>) instead of a list item (<ol>/<li>). Setlist may be incomplete.';
-    span.addEventListener('mouseenter', e => showErrorTooltip(e, span.dataset.msg));
-    span.addEventListener('mouseleave', hideTooltip);
+    span.title = span.dataset.msg;
     el.appendChild(span);
   }
 
@@ -3626,10 +3713,13 @@
       // descriptive <span> nodes (e.g. "(parts)") don't inherit the green colour.
       // When no /song: link exists (plain-text <li>), fall back to the <li> itself.
       const songLinks = [...li.querySelectorAll('a[href^="/song:"]')];
-      if (songLinks.length > 0) {
-        songLinks.forEach(a => a.classList.add('bb-song-match'));
-      } else {
-        li.classList.add('bb-song-match');
+      const matchEls  = songLinks.length > 0 ? songLinks : [li];
+      for (const el of matchEls) {
+        el.classList.add('bb-song-match');
+        el.dataset.yearSong   = item.yearSong;
+        el.dataset.detailSong = item.detailSong;
+        el.addEventListener('mouseenter', e => showSongTooltip(e, el));
+        el.addEventListener('mouseleave', hideTooltip);
       }
     } else if (item.type === 'detail-only') {
       li.classList.add('bb-song-detail-only');
@@ -5311,8 +5401,7 @@
       warn.className  = 'bb-glyph bb-icon-sorry';
       warn.textContent = '⚠️';
       warn.dataset.msg = 'Retail icon on YEAR page but no retail reference found in the Recording tab.';
-      warn.addEventListener('mouseenter', e => showErrorTooltip(e, warn.dataset.msg));
-      warn.addEventListener('mouseleave', hideTooltip);
+      warn.title = warn.dataset.msg;
       icon.after(warn);
       icon.style.opacity = '0.45';
       return;
@@ -5485,6 +5574,219 @@
     return `Tag "${tag}" is present but its expected condition was not detected`;
   }
 
+  /**
+   * Builds a human-readable tooltip message for a tag that is present on the
+   * page and whose expected condition IS met (a "passing" tag).
+   * @param {string}      tag
+   * @param {Set<string>} expectedTags - Result of computeExpectedTags().
+   * @returns {string}
+   */
+  function passingTagMsg(tag, expectedTags) {
+    if (PASSING_TAG_REASONS[tag]) return `Tag "${tag}" verified: ${PASSING_TAG_REASONS[tag]}`;
+    if (/^\d{4}$/.test(tag))       return `Year tag "${tag}" verified: matches the event date`;
+    if (MONTH_NAMES.includes(tag)) return `Month tag "${tag}" verified: matches the event date`;
+    if (DAY_NAMES.includes(tag))   return `Weekday tag "${tag}" verified: matches the event date`;
+    if (/^\d{1,2}$/.test(tag) && parseInt(tag, 10) <= 31)
+                                    return `Day tag "${tag}" verified: matches the event date`;
+    if (KNOWN_EVENT_TYPES.has(tag)) return `Event-type tag "${tag}" verified: matches the event type`;
+    return `Tag "${tag}" verified: matches its expected condition`;
+  }
+
+  /**
+   * Styles tag <a> links that passed their consistency check in green and
+   * sets a native title tooltip explaining what was verified (single-line
+   * message — native tooltip only, no custom rich tooltip needed).
+   * @param {HTMLAnchorElement[]}     links - Tag links confirmed to match their expected condition.
+   * @param {(tag: string) => string} msgFn - Builds the explanatory tooltip message for a tag.
+   */
+  function markPassingTagLinks(links, msgFn) {
+    for (const a of links) {
+      const tag = a.textContent.trim().toLowerCase();
+      a.classList.add('bb-tag-ok');
+      a.style.color = '#2a2';
+      a.style.fontWeight = 'bold';
+      a.style.cursor = 'help';
+      a.title = msgFn(tag);
+    }
+  }
+
+  /**
+   * Derives a tag alias for a song title using BruceBase's apparent acronym
+   * convention. See SONG_TAG_ALIAS_OVERRIDES doc comment for the escape hatch
+   * when this doesn't match reality.
+   * @param {string} title - Song title (as found in parseDetailSetlist output).
+   * @returns {string} Lowercase alias, e.g. "AMERICAN SKIN (41 SHOTS)" -> "as41s".
+   */
+  function computeSongTagAlias(title) {
+    const rawWords = title.trim().split(/\s+/);
+    let alias = '';
+    for (const raw of rawWords) {
+      if (/^([A-Za-z]\.)+$/.test(raw)) {
+        alias += raw.replace(/\./g, '').toLowerCase();   // dotted initialism: all letters
+        continue;
+      }
+      const word = raw.replace(/[()'\-&,.]/g, '');        // delete punctuation, no space
+      if (!word) continue;
+      alias += /^\d+$/.test(word) ? word : word[0].toLowerCase();
+    }
+    return alias;
+  }
+
+  /**
+   * Checks that every unique setlist song (from an already-parsed
+   * parseDetailSetlist result) has a corresponding tag, trying exact match,
+   * then derived alias, then a manual override, in that order.
+   * @param {Section[]}   detailSections - Result of parseDetailSetlist(doc).
+   * @param {Set<string>} actualTags     - Lowercase tags present on the page.
+   * @returns {{song: string, matchedTag: string|null, method: 'exact'|'alias'|'override'|null}[]}
+   */
+  function checkSetlistSongTags(detailSections, actualTags) {
+    const uniqueSongs = [...new Set(detailSections.flatMap(s => s.songs))];
+    return uniqueSongs.map(song => {
+      const exactTag = song.toLowerCase().replace(/\s+/g, '');
+      if (isTagPresent(exactTag, actualTags)) return { song, matchedTag: exactTag, method: 'exact' };
+
+      const aliasTag = computeSongTagAlias(song);
+      if (aliasTag && isTagPresent(aliasTag, actualTags)) return { song, matchedTag: aliasTag, method: 'alias' };
+
+      const overrideTag = SONG_TAG_ALIAS_OVERRIDES[song.toLowerCase().trim()];
+      if (overrideTag && isTagPresent(overrideTag, actualTags)) return { song, matchedTag: overrideTag, method: 'override' };
+
+      return { song, matchedTag: null, method: null };
+    });
+  }
+
+  /**
+   * Slugifies a venue/city/state name into BruceBase's tag convention: drop a
+   * leading/trailing "The"/"Le"/"De" article, lowercase, delete every
+   * non-alphanumeric character (no acronym — unlike computeSongTagAlias).
+   * @param {string} str
+   * @returns {string} e.g. "West Long Branch" -> "westlongbranch", "Adelphi (The)" -> "adelphi".
+   */
+  function toLocationTagSlug(str) {
+    const stripped = str.trim()
+      .replace(/^(the|le|de)\s+/i, '')
+      .replace(/\s*\((?:the|le|de)\)\s*$/i, '');
+    return stripped.toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  /**
+   * Turns already-comma-split, trimmed title parts into location components.
+   * Handles both the 3-part (no venue detail) and 4-part (with detail) shape.
+   * @param {string[]} parts - e.g. ["Pollak Theatre","Monmouth University","West Long Branch","NJ"].
+   * @returns {{venueName: string, venueDetail: string|null, city: string, stateAbbr: string|null, country: string|null}|null}
+   */
+  function parseLocationParts(parts) {
+    if (parts.length < 3) return null;
+    const last     = parts[parts.length - 1];
+    const abbrM    = last.match(/^([A-Z]{2})$/);
+    const stateAbbr = abbrM && (US_STATE_NAMES[abbrM[1]] || CA_PROVINCE_NAMES[abbrM[1]]) ? abbrM[1] : null;
+    const country   = stateAbbr ? null : last;
+    const city       = parts[parts.length - 2];
+    const venueName  = parts[0];
+    const venueDetail = parts.length >= 4 ? parts.slice(1, -2).join(', ') : null;
+    return { venueName, venueDetail, city, stateAbbr, country };
+  }
+
+  /**
+   * Parses a DETAIL page's event-name title into its location components.
+   * @param {string} pageTitle - e.g. "2026-04-18 Pollak Theatre, Monmouth University, West Long Branch, NJ".
+   * @returns {ReturnType<typeof parseLocationParts>}
+   */
+  function parseEventNameLocation(pageTitle) {
+    const m = pageTitle.trim().match(/^\d{4}-\d{2}-\d{2}\s+(.+)$/);
+    if (!m) return null;
+    return parseLocationParts(m[1].split(',').map(s => s.trim()).filter(Boolean));
+  }
+
+  /**
+   * Parses a VENUE page's own title into its location components. Unlike
+   * parseEventNameLocation, there is no date prefix and no venue-detail
+   * segment ever appears — always exactly venueName, city, state/country.
+   * @param {string} venueTitle - e.g. "Pollak Theatre, West Long Branch, NJ".
+   * @returns {ReturnType<typeof parseLocationParts>}
+   */
+  function parseVenuePageLocation(venueTitle) {
+    return parseLocationParts(venueTitle.trim().split(',').map(s => s.trim()).filter(Boolean));
+  }
+
+  /**
+   * Checks a single venue/detail/city name against its expected tag, honoring
+   * VENUE_TAG_ALIAS_OVERRIDES (including explicit `null` = "not expected").
+   * @param {string}      label      - Human-readable field name, e.g. "Venue".
+   * @param {string}      name       - Raw name text, e.g. "West Long Branch".
+   * @param {Set<string>} actualTags - Lowercase tags present on the page.
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null}|null} null if suppressed by an override.
+   */
+  function checkLocationNameTag(label, name, actualTags) {
+    const key = name.toLowerCase().trim();
+    if (Object.prototype.hasOwnProperty.call(VENUE_TAG_ALIAS_OVERRIDES, key)) {
+      const override = VENUE_TAG_ALIAS_OVERRIDES[key];
+      if (override === null) return null; // explicitly not expected
+      return { label: `${label}: ${name}`, candidateTag: override, matchedTag: isTagPresent(override, actualTags) ? override : null, method: 'override' };
+    }
+    const slug = toLocationTagSlug(name);
+    return { label: `${label}: ${name}`, candidateTag: slug, matchedTag: isTagPresent(slug, actualTags) ? slug : null, method: slug ? 'exact' : null };
+  }
+
+  /**
+   * Checks a parsed location (venue, venue detail, city, state/province,
+   * country/region) against actualTags. Shared by the DETAIL-page and
+   * VENUE-page location checks; mirrors checkSetlistSongTags's result shape.
+   * @param {ReturnType<typeof parseLocationParts>} loc
+   * @param {Set<string>} actualTags
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null}[]}
+   */
+  function checkParsedLocationTags(loc, actualTags) {
+    if (!loc) return [];
+    const items = [];
+    const venueItem = checkLocationNameTag('Venue', loc.venueName, actualTags);
+    if (venueItem) items.push(venueItem);
+    if (loc.venueDetail) {
+      const detailItem = checkLocationNameTag('Venue detail', loc.venueDetail, actualTags);
+      if (detailItem) items.push(detailItem);
+    }
+    items.push(checkLocationNameTag('City', loc.city, actualTags));
+
+    if (loc.stateAbbr) {
+      const isUS      = !!US_STATE_NAMES[loc.stateAbbr];
+      const fullName   = isUS ? US_STATE_NAMES[loc.stateAbbr] : CA_PROVINCE_NAMES[loc.stateAbbr];
+      const stateTag   = `${toLocationTagSlug(fullName)}(${loc.stateAbbr.toLowerCase()})`;
+      items.push({ label: `State: ${loc.stateAbbr}`, candidateTag: stateTag, matchedTag: isTagPresent(stateTag, actualTags) ? stateTag : null, method: 'exact' });
+      const countryTag = isUS ? 'usa' : 'canada';
+      items.push({ label: `Country: ${isUS ? 'USA' : 'Canada'}`, candidateTag: countryTag, matchedTag: isTagPresent(countryTag, actualTags) ? countryTag : null, method: 'exact' });
+    } else if (loc.country) {
+      const countryTag = toLocationTagSlug(loc.country);
+      items.push({ label: `Country: ${loc.country}`, candidateTag: countryTag, matchedTag: isTagPresent(countryTag, actualTags) ? countryTag : null, method: 'exact' });
+      for (const extra of COUNTRY_EXTRA_TAGS[loc.country] || []) {
+        items.push({ label: `Region: ${extra}`, candidateTag: extra, matchedTag: isTagPresent(extra, actualTags) ? extra : null, method: 'exact' });
+      }
+    }
+    return items;
+  }
+
+  /**
+   * Checks that a DETAIL page's event-name title has a corresponding tag for
+   * each location component (venue, venue detail, city, state/country).
+   * @param {string} pageTitle
+   * @param {Set<string>} actualTags
+   * @returns {{label: string, matchedTag: string|null, method: string|null}[]}
+   */
+  function checkEventNameLocationTags(pageTitle, actualTags) {
+    return checkParsedLocationTags(parseEventNameLocation(pageTitle), actualTags);
+  }
+
+  /**
+   * Checks that a VENUE page's own title has a corresponding tag for each
+   * location component (venue name, city, state/province, country/region).
+   * @param {string} venueTitle
+   * @param {Set<string>} actualTags
+   * @returns {{label: string, matchedTag: string|null, method: string|null}[]}
+   */
+  function checkVenuePageLocationTags(venueTitle, actualTags) {
+    return checkParsedLocationTags(parseVenuePageLocation(venueTitle), actualTags);
+  }
+
   function computeExpectedTags(doc, tabMap, eventDate, eventType) {
     const expected = new Set();
 
@@ -5576,28 +5878,65 @@
     const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
 
-    // Merge existing tag links (with spurious flag) + missing placeholders → sorted.
+    // Setlist song → tag check: every song in the Setlist tab should have a
+    // corresponding tag (exact match, derived alias, or manual override).
+    const songResults      = checkSetlistSongTags(parseDetailSetlist(doc), actualTags);
+    const matchedSongsByTag = new Map(songResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
+    const unmatchedSongs    = songResults.filter(r => !r.matchedTag);
+    const songMethodLabel   = { exact: 'exact match', alias: 'derived alias', override: 'manual override' };
+
+    // Event-name → tag check: venue/city/state/country parts of the page
+    // title should each have a corresponding tag (exact match or manual override).
+    const locationResults       = checkEventNameLocationTags(extractDetailEventName(doc, href), actualTags);
+    const matchedLocationsByTag = new Map(locationResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
+    const unmatchedLocations    = locationResults.filter(r => !r.matchedTag);
+
+    // Merge existing tag links (with spurious/passing flag) + missing placeholders → sorted.
     const existingItems = tagLinks.map(a => {
-      const tag      = a.textContent.trim().toLowerCase();
-      const spurious = isManagedTag(tag) && !isTagPresent(tag, expectedTags);
+      const tag         = a.textContent.trim().toLowerCase();
+      const songMatch     = matchedSongsByTag.get(tag);
+      const locationMatch = matchedLocationsByTag.get(tag);
+      const spurious    = isManagedTag(tag) && !isTagPresent(tag, expectedTags);
+      const passing     = (isManagedTag(tag) && isTagPresent(tag, expectedTags)) || !!songMatch || !!locationMatch;
+      if (passing) {
+        a.style.color = '#2a2';
+        a.style.fontWeight = 'bold';
+        a.title = songMatch
+          ? `Tag "${tag}" verified: matches setlist song "${songMatch.song}" (${songMethodLabel[songMatch.method]})`
+          : locationMatch
+          ? `Tag "${tag}" verified: matches event ${locationMatch.label}`
+          : passingTagMsg(tag, expectedTags);
+      }
       return { tag, html: a.outerHTML, missing: false, spurious, tooltip: spurious ? spuriousTagMsg(tag, expectedTags) : '' };
     });
-    const missingItems = missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' }));
+    const missingItems = [
+      ...missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' })),
+      ...unmatchedSongs.map(r => {
+        const candidate = computeSongTagAlias(r.song) || r.song.toLowerCase().replace(/\s+/g, '');
+        return { tag: candidate, html: null, missing: true, spurious: false,
+          tooltip: `No tag found for setlist song "${r.song}" (tried exact match and derived alias "${candidate}")` };
+      }),
+      ...unmatchedLocations.map(r => ({ tag: r.candidateTag, html: null, missing: true, spurious: false,
+        tooltip: `No tag found for ${r.label}` })),
+    ];
     const allItems = [...existingItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
 
     const spuriousCount = existingItems.filter(i => i.spurious).length;
+    const totalMissing  = missingTags.length + unmatchedSongs.length + unmatchedLocations.length;
     const issueParts = [];
-    if (missingTags.length > 0)  issueParts.push(`${missingTags.length} missing`);
-    if (spuriousCount > 0)       issueParts.push(`${spuriousCount} spurious`);
+    if (totalMissing > 0)  issueParts.push(`${totalMissing} missing`);
+    if (spuriousCount > 0) issueParts.push(`${spuriousCount} spurious`);
 
     let html = '';
-    if (missingTags.length > 0) {
+    if (totalMissing > 0) {
       html += '<p style="color:red; font-weight:bold; margin:0 0 6px 0">⚠️ Missing expected tags:</p>';
     }
     html += '<ol class="bb-tags-list" style="margin:4px 0; padding-left:18px;">';
     for (const item of allItems) {
       if (item.missing) {
-        html += `<li style="color:red; font-weight:bold">⚠️ ${esc(item.tag)}</li>`;
+        const style     = `color:red; font-weight:bold${item.tooltip ? '; cursor:help' : ''}`;
+        const titleAttr = item.tooltip ? ` title="${esc(item.tooltip)}"` : '';
+        html += `<li style="${style}"${titleAttr}>⚠️ ${esc(item.tag)}</li>`;
       } else if (item.spurious) {
         html += `<li>${item.html} <span style="color:darkorange; font-weight:bold; cursor:help" title="${esc(item.tooltip)}">⚠️</span></li>`;
       } else {
@@ -5620,10 +5959,11 @@
     btn.textContent = issueParts.length > 0 ? `Tags ⚠️ (${issueParts.join(', ')})` : 'Tags';
     btn.title = issueParts.length > 0
       ? `Tags panel — issues detected: ${issueParts.join(', ')}`
-      : 'Click to expand/collapse the Tags panel';
+      : 'All tags verified — click to expand/collapse the Tags panel';
     if (issueParts.length > 0) btn.dataset.msg = `Tag issues: ${issueParts.join(', ')}`;
-    if (missingTags.length > 0)      btn.style.color = 'red';
+    if (totalMissing > 0)            btn.style.color = 'red';
     else if (spuriousCount > 0)      btn.style.color = 'darkorange';
+    else                             btn.style.color = '#2a2';
 
     btn.addEventListener('click', () => {
       if (!btn._bbPanel) {
@@ -5641,12 +5981,15 @@
 
   /**
    * Returns the set of lowercase tags expected for a venue page.
-   * Currently: "venue" (always) and the first letter of the venue name.
+   * Currently: "venue", "files", "info" (always) and the first letter of
+   * the venue name. Location tags (venue name/city/state/country slugs) are
+   * checked separately via checkVenuePageLocationTags — see annotateVenuePageTags
+   * / addVenueTagsButton.
    * @param {string} venueName  - Text from the venue page's #page-title.
    * @returns {Set<string>}
    */
   function computeExpectedVenueTags(venueName) {
-    const expected = new Set(['venue']);
+    const expected = new Set(['venue', 'files', 'info']);
     const first = (venueName || '').trim()[0];
     if (first && /[a-z]/i.test(first)) expected.add(first.toLowerCase());
     return expected;
@@ -5654,12 +5997,12 @@
 
   /**
    * Returns true for venue-page tags whose presence can be verified:
-   * the "venue" tag and single lowercase letter tags (first-letter index).
+   * "venue", "files", "info", and single lowercase letter tags (first-letter index).
    * @param {string} tag
    * @returns {boolean}
    */
   function isManagedVenueTag(tag) {
-    return tag === 'venue' || /^[a-z]$/.test(tag);
+    return tag === 'venue' || tag === 'files' || tag === 'info' || /^[a-z]$/.test(tag);
   }
 
   /**
@@ -5784,28 +6127,54 @@
     const expectedTags = computeExpectedVenueTags(venueName);
     const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
 
+    // Venue-name → tag check: venue/city/state/country parts of the venue
+    // page's own title should each have a corresponding tag.
+    const locationResults       = checkVenuePageLocationTags(venueName, actualTags);
+    const matchedLocationsByTag = new Map(locationResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
+    const unmatchedLocations    = locationResults.filter(r => !r.matchedTag);
+
     const existingItems = tagLinks.map(a => {
-      const tag     = a.textContent.trim().toLowerCase();
+      const tag           = a.textContent.trim().toLowerCase();
+      const locationMatch = matchedLocationsByTag.get(tag);
       const spurious = isManagedVenueTag(tag) && !expectedTags.has(tag);
+      const passing  = (isManagedVenueTag(tag) && expectedTags.has(tag)) || !!locationMatch;
       const tooltip  = spurious ? `Tag "${tag}" is present but not expected for this venue` : '';
+      if (passing) {
+        a.style.color = '#2a2';
+        a.style.fontWeight = 'bold';
+        a.title = locationMatch
+          ? `Tag "${tag}" verified: matches venue ${locationMatch.label}`
+          : tag === 'venue'
+          ? 'Tag "venue" verified: this is a venue page'
+          : (tag === 'files' || tag === 'info')
+          ? `Tag "${tag}" verified: standard venue page tag`
+          : `Tag "${tag}" verified: matches the first letter of venue name "${venueName}"`;
+      }
       return { tag, html: a.outerHTML, missing: false, spurious, tooltip };
     });
-    const missingItems = missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' }));
+    const missingItems = [
+      ...missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' })),
+      ...unmatchedLocations.map(r => ({ tag: r.candidateTag, html: null, missing: true, spurious: false,
+        tooltip: `No tag found for ${r.label}` })),
+    ];
     const allItems = [...existingItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
 
     const spuriousCount = existingItems.filter(i => i.spurious).length;
+    const totalMissing  = missingTags.length + unmatchedLocations.length;
     const issueParts = [];
-    if (missingTags.length > 0) issueParts.push(`${missingTags.length} missing`);
-    if (spuriousCount > 0)      issueParts.push(`${spuriousCount} spurious`);
+    if (totalMissing > 0)  issueParts.push(`${totalMissing} missing`);
+    if (spuriousCount > 0) issueParts.push(`${spuriousCount} spurious`);
 
     let html = '';
-    if (missingTags.length > 0) {
+    if (totalMissing > 0) {
       html += '<p style="color:red; font-weight:bold; margin:0 0 6px 0">⚠️ Missing expected venue tags:</p>';
     }
     html += '<ol class="bb-tags-list" style="margin:4px 0; padding-left:18px;">';
     for (const item of allItems) {
       if (item.missing) {
-        html += `<li style="color:red; font-weight:bold">⚠️ ${esc(item.tag)}</li>`;
+        const style     = `color:red; font-weight:bold${item.tooltip ? '; cursor:help' : ''}`;
+        const titleAttr = item.tooltip ? ` title="${esc(item.tooltip)}"` : '';
+        html += `<li style="${style}"${titleAttr}>⚠️ ${esc(item.tag)}</li>`;
       } else if (item.spurious) {
         html += `<li>${item.html} <span style="color:darkorange; font-weight:bold; cursor:help" title="${esc(item.tooltip)}">⚠️</span></li>`;
       } else {
@@ -5820,9 +6189,10 @@
     btn.textContent = issueParts.length > 0 ? `Tags ⚠️ (${issueParts.join(', ')})` : 'Tags';
     btn.title = issueParts.length > 0
       ? `Venue Tags panel — issues detected: ${issueParts.join(', ')}`
-      : 'Click to expand/collapse the Venue Tags panel';
-    if (missingTags.length > 0)  btn.style.color = 'red';
+      : 'All tags verified — click to expand/collapse the Venue Tags panel';
+    if (totalMissing > 0)       btn.style.color = 'red';
     else if (spuriousCount > 0)  btn.style.color = 'darkorange';
+    else                         btn.style.color = '#2a2';
 
     btn.addEventListener('click', () => {
       if (!btn._bbPanel) {
@@ -5841,13 +6211,16 @@
   // ── Song tab rows (triggered from list-view number clicks) ────────────────
 
   /**
-   * Returns the set of lowercase tags expected on a SONG page.
+   * Returns the set of lowercase tags expected on a SONG page, as checked from
+   * the YEAR page's nested "Song Tags" button (distinct from the simpler
+   * computeExpectedSongTags() used by the live SONG page's own annotation,
+   * which only knows about the "song" tag).
    * @param {Document}           songDoc
    * @param {Map<string,number>} songTabMap
    * @param {string}             songName  - Display name from the <a> text.
    * @returns {Set<string>}
    */
-  function computeExpectedSongTags(songDoc, songTabMap, songName) {
+  function computeExpectedYearSongTags(songDoc, songTabMap, songName) {
     const expected = new Set(['song']);
     const first = (songName || '').trim()[0];
     if (first && /[a-z]/i.test(first)) expected.add(first.toLowerCase());
@@ -5863,11 +6236,13 @@
   }
 
   /**
-   * Returns true for song-page tags whose presence can be verified.
+   * Returns true for song-page tags whose presence can be verified, as used
+   * by the YEAR page's nested "Song Tags" button (distinct from the simpler
+   * isManagedSongTag() used by the live SONG page's own annotation).
    * @param {string} tag
    * @returns {boolean}
    */
-  function isManagedSongTag(tag) {
+  function isManagedYearSongTag(tag) {
     return tag === 'song' || tag === 'lyricsheet' || /^[a-z]$/.test(tag);
   }
 
@@ -5887,13 +6262,23 @@
     if (tagLinks.length === 0) return;
 
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
-    const expectedTags = computeExpectedSongTags(songDoc, songTabMap, songName);
+    const expectedTags = computeExpectedYearSongTags(songDoc, songTabMap, songName);
     const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
 
     const existingItems = tagLinks.map(a => {
-      const tag     = a.textContent.trim().toLowerCase();
-      const spurious = isManagedSongTag(tag) && !expectedTags.has(tag);
+      const tag      = a.textContent.trim().toLowerCase();
+      const spurious = isManagedYearSongTag(tag) && !expectedTags.has(tag);
+      const passing  = isManagedYearSongTag(tag) && expectedTags.has(tag);
       const tooltip  = spurious ? `Tag "${tag}" is present but not expected for this song` : '';
+      if (passing) {
+        a.style.color = '#2a2';
+        a.style.fontWeight = 'bold';
+        a.title = tag === 'song'
+          ? 'Tag "song" verified: this is a song page'
+          : tag === 'lyricsheet'
+            ? 'Tag "lyricsheet" verified: Gallery tab has lyricsheet image(s)'
+            : `Tag "${tag}" verified: matches the first letter of song name "${songName}"`;
+      }
       return { tag, html: a.outerHTML, missing: false, spurious, tooltip };
     });
     const missingItems = missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' }));
@@ -5926,9 +6311,10 @@
     btn.textContent = issueParts.length > 0 ? `Tags ⚠️ (${issueParts.join(', ')})` : 'Tags';
     btn.title = issueParts.length > 0
       ? `Song Tags — issues: ${issueParts.join(', ')}`
-      : 'Click to expand/collapse the Song Tags panel';
+      : 'All tags verified — click to expand/collapse the Song Tags panel';
     if (missingTags.length > 0)  btn.style.color = 'red';
     else if (spuriousCount > 0)  btn.style.color = 'darkorange';
+    else                         btn.style.color = '#2a2';
 
     btn.addEventListener('click', () => {
       if (!btn._bbPanel) {
@@ -6043,6 +6429,108 @@
   }
 
   /**
+   * Returns the set of lowercase tags expected on a RELATION page, as checked
+   * from the YEAR page's nested "Tags" button (distinct from the live RELATION
+   * page's own computeExpectedRelationTags(), which reads the live document's
+   * tabs instead of a fetched relDoc).
+   * @param {Document} relDoc - Parsed relation page document.
+   * @returns {Set<string>}
+   */
+  function computeExpectedYearRelationTags(relDoc) {
+    const tabLabels = new Set(
+      [...relDoc.querySelectorAll('.yui-nav em')].map(em => em.textContent.trim())
+    );
+    const expected = new Set();
+    if (tabLabels.has('Bands'))   expected.add('person');
+    if (tabLabels.has('Members')) expected.add('band');
+    return expected;
+  }
+
+  /**
+   * Appends a "Tags" button (inside row) for the relation page's .page-tags.
+   * Consistency checks: "person" (if a "Bands" tab exists) or "band" (if a
+   * "Members" tab exists), based on relDoc's own tab set. No-op when neither
+   * tab is present (page type can't be determined) or there are no tags.
+   * @param {Document}    relDoc   - Parsed relation page document.
+   * @param {string}      relName  - Display name for the row label.
+   * @param {HTMLElement} section  - .bb-section-processed container (panel host).
+   * @param {HTMLElement} row      - .bb-relation-tab-row to append the button to.
+   */
+  function addRelationTagsButton(relDoc, relName, section, row) {
+    const tagsEl = relDoc.querySelector('.page-tags');
+    if (!tagsEl) return;
+    const tagLinks = [...tagsEl.querySelectorAll('a[href]')];
+    if (tagLinks.length === 0) return;
+
+    const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const expectedTags = computeExpectedYearRelationTags(relDoc);
+    if (expectedTags.size === 0) return;   // can't determine person vs band — skip
+    const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
+
+    const existingItems = tagLinks.map(a => {
+      const tag      = a.textContent.trim().toLowerCase();
+      const spurious = isManagedRelationTag(tag) && !expectedTags.has(tag);
+      const passing  = isManagedRelationTag(tag) && expectedTags.has(tag);
+      const tooltip  = spurious ? `Tag "${tag}" is present but not expected for this relation page` : '';
+      if (passing) {
+        a.style.color = '#2a2';
+        a.style.fontWeight = 'bold';
+        a.title = tag === 'person'
+          ? 'Tag "person" verified: page has a "Bands" tab (this entry belongs to bands)'
+          : 'Tag "band" verified: page has a "Members" tab (this entry has members)';
+      }
+      return { tag, html: a.outerHTML, missing: false, spurious, tooltip };
+    });
+    const missingItems = missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' }));
+    const allItems = [...existingItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
+
+    const spuriousCount = existingItems.filter(i => i.spurious).length;
+    const issueParts = [];
+    if (missingTags.length > 0) issueParts.push(`${missingTags.length} missing`);
+    if (spuriousCount > 0)      issueParts.push(`${spuriousCount} spurious`);
+
+    let html = '';
+    if (missingTags.length > 0) {
+      html += '<p style="color:red; font-weight:bold; margin:0 0 6px 0">⚠️ Missing expected relation tags:</p>';
+    }
+    html += '<ol class="bb-tags-list" style="margin:4px 0; padding-left:18px;">';
+    for (const item of allItems) {
+      if (item.missing) {
+        html += `<li style="color:red; font-weight:bold">⚠️ ${esc(item.tag)}</li>`;
+      } else if (item.spurious) {
+        html += `<li>${item.html} <span style="color:darkorange; font-weight:bold; cursor:help" title="${esc(item.tooltip)}">⚠️</span></li>`;
+      } else {
+        html += `<li>${item.html}</li>`;
+      }
+    }
+    html += '</ol>';
+
+    const content = { type: 'html', caption: `${relName} — Tags`, html };
+    const btn = document.createElement('button');
+    btn.className = 'bb-relation-tab-btn';
+    btn.textContent = issueParts.length > 0 ? `Tags ⚠️ (${issueParts.join(', ')})` : 'Tags';
+    btn.title = issueParts.length > 0
+      ? `Relation Tags — issues: ${issueParts.join(', ')}`
+      : 'All tags verified — click to expand/collapse the Relation Tags panel';
+    if (missingTags.length > 0)  btn.style.color = 'red';
+    else if (spuriousCount > 0)  btn.style.color = 'darkorange';
+    else                         btn.style.color = '#2a2';
+
+    btn.addEventListener('click', () => {
+      if (!btn._bbPanel) {
+        btn._bbPanel = buildIconPanel(content);
+        btn._bbPanel._bbIcon = btn;
+        section.appendChild(btn._bbPanel);
+      }
+      const open = btn._bbPanel.style.display !== 'none';
+      btn._bbPanel.style.display = open ? 'none' : '';
+      btn.classList.toggle('bb-icon-active', !open);
+    });
+
+    row.appendChild(btn);
+  }
+
+  /**
    * Builds a .bb-relation-tab-row containing one button per non-empty tab on
    * the relation page. Appended to section; returns the row (or null if empty).
    * @param {Document}    relDoc    - Parsed relation page document.
@@ -6086,8 +6574,6 @@
         const warnSpan = document.createElement('span');
         warnSpan.textContent = ' ⚠️';
         btn.appendChild(warnSpan);
-        btn.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
-        btn.addEventListener('mouseleave', hideTooltip);
       } else {
         const html = tab.innerHTML
           .replace(/href="\//g, `href="${location.protocol}//${location.host}/`);
@@ -6107,6 +6593,8 @@
 
       row.appendChild(btn);
     }
+
+    addRelationTagsButton(relDoc, relName, section, row);
 
     if (row.children.length <= 1) return null;
     section.appendChild(row);
@@ -6153,10 +6641,11 @@
    * expected-but-missing tags as bold-red spans inside the tag container.
    * No-op when all expected tags are present.
    * @param {Map<string,number>} tabMap
-   * @param {string}             eventDate  - "YYYY-MM-DD"
-   * @param {string}             eventType  - "gig" | "recording" | etc.
+   * @param {string}             eventDate      - "YYYY-MM-DD"
+   * @param {string}             eventType      - "gig" | "recording" | etc.
+   * @param {Section[]}          detailSections - Result of parseDetailSetlist(document).
    */
-  function annotateDetailPageTags(tabMap, eventDate, eventType) {
+  function annotateDetailPageTags(tabMap, eventDate, eventType, detailSections, rawDetailName) {
     const tagsContainer = document.querySelector('.page-tags');
     if (!tagsContainer) return;
 
@@ -6168,8 +6657,34 @@
       const tag = a.textContent.trim().toLowerCase();
       return isManagedTag(tag) && !isTagPresent(tag, expectedTags);
     });
+    const passingLinks = tagLinks.filter(a => {
+      const tag = a.textContent.trim().toLowerCase();
+      return isManagedTag(tag) && isTagPresent(tag, expectedTags);
+    });
+    markPassingTagLinks(passingLinks, tag => passingTagMsg(tag, expectedTags));
 
-    if (missingTags.length === 0 && spuriousLinks.length === 0) return;
+    // Setlist song → tag check: every song in the Setlist tab should have a
+    // corresponding tag (exact match, derived alias, or manual override).
+    const songResults   = checkSetlistSongTags(detailSections, actualTags);
+    const matchedSongs   = songResults.filter(r => r.matchedTag);
+    const unmatchedSongs = songResults.filter(r => !r.matchedTag);
+    const songMethodLabel = { exact: 'exact match', alias: 'derived alias', override: 'manual override' };
+    for (const r of matchedSongs) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.matchedTag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches setlist song "${r.song}" (${songMethodLabel[r.method]})`);
+    }
+
+    // Event-name → tag check: venue/city/state/country parts of the page
+    // title should each have a corresponding tag (exact match or manual override).
+    const locationResults    = checkEventNameLocationTags(rawDetailName, actualTags);
+    const matchedLocations   = locationResults.filter(r => r.matchedTag);
+    const unmatchedLocations = locationResults.filter(r => !r.matchedTag);
+    for (const r of matchedLocations) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.matchedTag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches event ${r.label}`);
+    }
+
+    if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedSongs.length === 0 && unmatchedLocations.length === 0) return;
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
@@ -6186,8 +6701,6 @@
       warnSpan.style.cssText = 'color:darkorange; font-weight:bold; cursor:help; margin:0 2px;';
       warnSpan.textContent = '⚠️';
       warnSpan.title = msg;
-      warnSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
-      warnSpan.addEventListener('mouseleave', hideTooltip);
       a.after(warnSpan);
     }
 
@@ -6199,6 +6712,29 @@
       missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
       missingSpan.title = `Tag "${tag}" expected based on event data but not present`;
       missingSpan.textContent = ` ⚠️${tag}`;
+      span.appendChild(missingSpan);
+    }
+
+    // Append one missing-tag span per setlist song with no corresponding tag,
+    // showing the derived-alias candidate so it's clear what to look for/add.
+    for (const r of unmatchedSongs) {
+      const candidate = computeSongTagAlias(r.song) || r.song.toLowerCase().replace(/\s+/g, '');
+      const missingSpan = document.createElement('span');
+      missingSpan.className = 'bb-tag-missing';
+      missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
+      missingSpan.title = `No tag found for setlist song "${r.song}" (tried exact match and derived alias "${candidate}")`;
+      missingSpan.textContent = ` ⚠️${candidate}`;
+      span.appendChild(missingSpan);
+    }
+
+    // Append one missing-tag span per unmatched event-name location part
+    // (venue, venue detail, city, state/country/region).
+    for (const r of unmatchedLocations) {
+      const missingSpan = document.createElement('span');
+      missingSpan.className = 'bb-tag-missing';
+      missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
+      missingSpan.title = `No tag found for ${r.label} (expected "${r.candidateTag}")`;
+      missingSpan.textContent = ` ⚠️${r.candidateTag}`;
       span.appendChild(missingSpan);
     }
   }
@@ -6221,8 +6757,27 @@
       const tag = a.textContent.trim().toLowerCase();
       return isManagedVenueTag(tag) && !expectedTags.has(tag);
     });
+    const passingLinks = tagLinks.filter(a => {
+      const tag = a.textContent.trim().toLowerCase();
+      return isManagedVenueTag(tag) && expectedTags.has(tag);
+    });
+    markPassingTagLinks(passingLinks, tag => tag === 'venue'
+      ? 'Tag "venue" verified: this is a venue page'
+      : (tag === 'files' || tag === 'info')
+      ? `Tag "${tag}" verified: standard venue page tag`
+      : `Tag "${tag}" verified: matches the first letter of venue name "${venueName}"`);
 
-    if (missingTags.length === 0 && spuriousLinks.length === 0) return;
+    // Venue-name → tag check: venue/city/state/country parts of the venue
+    // page's own title should each have a corresponding tag.
+    const locationResults    = checkVenuePageLocationTags(venueName, actualTags);
+    const matchedLocations   = locationResults.filter(r => r.matchedTag);
+    const unmatchedLocations = locationResults.filter(r => !r.matchedTag);
+    for (const r of matchedLocations) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.matchedTag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches venue ${r.label}`);
+    }
+
+    if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedLocations.length === 0) return;
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
@@ -6238,8 +6793,6 @@
       warnSpan.style.cssText = 'color:darkorange; font-weight:bold; cursor:help; margin:0 2px;';
       warnSpan.textContent = '⚠️';
       warnSpan.title = msg;
-      warnSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
-      warnSpan.addEventListener('mouseleave', hideTooltip);
       a.after(warnSpan);
     }
 
@@ -6250,6 +6803,17 @@
       missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
       missingSpan.title = `Tag "${tag}" expected for this venue but not present`;
       missingSpan.textContent = ` ⚠️${tag}`;
+      span.appendChild(missingSpan);
+    }
+
+    // Append one missing-tag span per unmatched venue-title location part
+    // (venue name, city, state/country/region).
+    for (const r of unmatchedLocations) {
+      const missingSpan = document.createElement('span');
+      missingSpan.className = 'bb-tag-missing';
+      missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
+      missingSpan.title = `No tag found for ${r.label} (expected "${r.candidateTag}")`;
+      missingSpan.textContent = ` ⚠️${r.candidateTag}`;
       span.appendChild(missingSpan);
     }
   }
@@ -6327,6 +6891,17 @@
       const tag = a.textContent.trim().toLowerCase();
       return isManagedRetailTag(tag) && !expectedTags.has(tag);
     });
+    const passingLinks = tagLinks.filter(a => {
+      const tag = a.textContent.trim().toLowerCase();
+      return isManagedRetailTag(tag) && expectedTags.has(tag);
+    });
+    markPassingTagLinks(passingLinks, tag => {
+      if (tag === 'retail') return 'Tag "retail" verified: this is a retail page';
+      if (/^[a-z]$/.test(tag)) return `Tag "${tag}" verified: matches the first letter of retail name "${retailName}"`;
+      if (MONTH_NAMES.includes(tag)) return `Month tag "${tag}" verified: matches the "Commercially Released" date`;
+      if (/^\d{4}$/.test(tag)) return `Year tag "${tag}" verified: matches the "Commercially Released" date`;
+      return `Day tag "${tag}" verified: matches the "Commercially Released" date`;
+    });
 
     if (missingTags.length === 0 && spuriousLinks.length === 0) return;
 
@@ -6344,8 +6919,6 @@
       warnSpan.style.cssText = 'color:darkorange; font-weight:bold; cursor:help; margin:0 2px;';
       warnSpan.textContent = '⚠️';
       warnSpan.title = msg;
-      warnSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
-      warnSpan.addEventListener('mouseleave', hideTooltip);
       a.after(warnSpan);
     }
 
@@ -6397,6 +6970,11 @@
       const tag = a.textContent.trim().toLowerCase();
       return isManagedSongTag(tag) && !expectedTags.has(tag);
     });
+    const passingLinks = tagLinks.filter(a => {
+      const tag = a.textContent.trim().toLowerCase();
+      return isManagedSongTag(tag) && expectedTags.has(tag);
+    });
+    markPassingTagLinks(passingLinks, () => 'Tag "song" verified: this is a song page');
 
     if (missingTags.length === 0 && spuriousLinks.length === 0) return;
 
@@ -6414,8 +6992,6 @@
       warnSpan.style.cssText = 'color:darkorange; font-weight:bold; cursor:help; margin:0 2px;';
       warnSpan.textContent = '⚠️';
       warnSpan.title = msg;
-      warnSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
-      warnSpan.addEventListener('mouseleave', hideTooltip);
       a.after(warnSpan);
     }
 
@@ -6489,9 +7065,8 @@
       const warn = document.createElement('span');
       warn.textContent = ' ⚠️';
       warn.dataset.msg = msg;
+      warn.title = msg;
       warn.style.cursor = 'help';
-      warn.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
-      warn.addEventListener('mouseleave', hideTooltip);
       em.appendChild(warn);
     }
   }
@@ -6509,6 +7084,13 @@
       const tag = a.textContent.trim().toLowerCase();
       return isManagedRelationTag(tag) && !expectedTags.has(tag);
     });
+    const passingLinks = tagLinks.filter(a => {
+      const tag = a.textContent.trim().toLowerCase();
+      return isManagedRelationTag(tag) && expectedTags.has(tag);
+    });
+    markPassingTagLinks(passingLinks, tag => tag === 'person'
+      ? 'Tag "person" verified: page has a "Bands" tab (this entry belongs to bands)'
+      : 'Tag "band" verified: page has a "Members" tab (this entry has members)');
 
     if (missingTags.length === 0 && spuriousLinks.length === 0) return;
 
@@ -6526,8 +7108,6 @@
       warnSpan.style.cssText = 'color:darkorange; font-weight:bold; cursor:help; margin:0 2px;';
       warnSpan.textContent = '⚠️';
       warnSpan.title = msg;
-      warnSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
-      warnSpan.addEventListener('mouseleave', hideTooltip);
       a.after(warnSpan);
     }
 
@@ -6582,8 +7162,7 @@
             warn.className = 'bb-glyph bb-icon-sorry';
             warn.textContent = '⚠️';
             warn.dataset.msg = `${canonical} icon on YEAR page but DETAIL page tab "${tabLabel}" reports no content available.`;
-            warn.addEventListener('mouseenter', e => showErrorTooltip(e, warn.dataset.msg));
-            warn.addEventListener('mouseleave', hideTooltip);
+            warn.title = warn.dataset.msg;
             icon.after(warn);
           }
         }
@@ -6945,7 +7524,13 @@
     const detailSong = el.dataset.detailSong || '';
     let html = '';
 
-    if (cls.includes('bb-song-year-only')) {
+    if (cls.includes('bb-song-match')) {
+      html = `<table class="bb-tip-table">
+        <tr><th>YEAR page:</th><td>${esc(yearSong || el.textContent.trim())}</td></tr>
+        <tr><th>DETAIL page:</th><td>${esc(detailSong || yearSong || el.textContent.trim())}</td></tr>
+        <tr><th>Result:</th><td><span class="bb-ok">Match ✅</span></td></tr>
+      </table>`;
+    } else if (cls.includes('bb-song-year-only')) {
       html = `<span class="bb-fail">Only on YEAR page (missing from detail):</span><br>${esc(yearSong || el.textContent.trim())}`;
     } else if (cls.includes('bb-song-detail-only')) {
       html = `<span class="bb-fail">Only on DETAIL page (missing from year):</span><br>${esc(detailSong || el.textContent.trim())}`;
@@ -7173,7 +7758,7 @@
       .bb-event-table tr:hover { background: #f4f8ff; }
 
       /* Setlist song states */
-      .bb-song-match       { color: #2a2; }
+      .bb-song-match       { color: #2a2; cursor: default; }
       a.bb-song-match      { text-decoration: none; }
       a.bb-song-match:hover { text-decoration: underline; }
       .bb-song-year-only   { background: #add8e6; border-radius: 3px; padding: 0 2px; cursor: default; }
@@ -7192,7 +7777,10 @@
       .bb-anchor-warn  { cursor: help; }
 
       /* Setlist tab label decoration (DETAIL page) */
-      .bb-setlist-tab-match { color: #2a2; font-weight: bold; }
+      .bb-setlist-tab-match { color: #2a2; font-weight: bold; cursor: help; }
+
+      /* Tag that passed its consistency check (DETAIL/VENUE/RETAIL/SONG/RELATION pages) */
+      .bb-tag-ok { color: #2a2 !important; font-weight: bold; cursor: help; }
 
       /* "Original Page" mode on DETAIL pages — hide all script annotations */
       .bb-original-view .bb-glyph,
@@ -7204,7 +7792,8 @@
       .bb-original-view .bb-icon-sorry,
       .bb-original-view .bb-setlist-tab-ann { display: none !important; }
       .bb-original-view .bb-tags-warn-box   { border: none !important; background: none !important; padding: 0 !important; }
-      .bb-original-view .bb-setlist-tab-match { color: inherit !important; font-weight: inherit !important; }
+      .bb-original-view .bb-setlist-tab-match,
+      .bb-original-view .bb-tag-ok { color: inherit !important; font-weight: inherit !important; cursor: inherit !important; }
 
       /* Year-only <li> rows inserted on detail pages */
       li.bb-song-year-only {

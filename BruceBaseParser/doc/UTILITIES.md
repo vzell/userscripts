@@ -85,10 +85,41 @@ hardcoded, because tab positions vary across event types.
 |---|---|
 | `showYearTooltip(evt, yearName, normalizedDetailName, rawDetailName, eventType, match, isEarlyLate, anchorName)` | Event name comparison table (YEAR / DETAIL page) |
 | `showListTooltip(evt, strippedName, rawName, yearName, anchor, match)` | LIST page name comparison table |
-| `showSongTooltip(evt, el)` | Song diff (year-only / detail-only / char-diff) |
+| `showSongTooltip(evt, el)` | Song diff (year-only / detail-only / char-diff / match) |
 | `showErrorTooltip(evt, msg)` | Generic error/warning message (red text) |
 | `hideTooltip()` | Hides `#bb-tooltip` |
 | `positionTooltip(tip, evt)` | Positions tooltip near cursor, clamped to viewport |
+
+### Native title vs. rich `#bb-tooltip` — when to use which
+
+A hover message is **either** a native `title` attribute **or** a custom
+`mouseenter`/`mouseleave` pair calling one of the functions above — never
+both on the same element, since both firing at once produces a duplicate
+(browser tooltip + floating `#bb-tooltip` box) for no benefit.
+
+- **One-line plain-text message** (a single sentence/phrase, no color-coding
+  or table needed): set `.title = msg` only. No JS listener. This covers
+  every `spuriousTagMsg`/`passingTagMsg` result, `.bb-tag-spurious` /
+  `.bb-tag-ok` / `.bb-para-warn` / `.bb-setlist-tab-ann` / `.bb-setlist-tab-match`
+  / empty-tab warnings, etc. Native tooltips render fine without any JS, so
+  these need **no cache-reload rewiring either** — `title` is a plain HTML
+  attribute and survives the `innerHTML` save/load round-trip on its own.
+- **Genuinely rich content** (a `<table>`, per-character diff, or a message
+  that is unavoidably multi-line/multi-item and benefits from color-coding):
+  wire `mouseenter`/`showErrorTooltip(evt, msg)` (or the dedicated
+  `showYearTooltip`/`showListTooltip`/`showSongTooltip`) and do **not** set
+  `.title` on the same element. Examples: `addVenueGlyphDetail` /
+  `renderVenueInfo` (3-line venue match/mismatch), `addAnchorMatchDetail` /
+  `addAnchorWarnYear` / `addAnchorWarnDetail` (issue lists joined with `\n`,
+  length varies 0–2+), `showSongTooltip`'s year-only/detail-only/char-diff/match
+  cases (colored table).
+- `rewireLoadedPage`'s generic re-wiring selector is `[data-msg]:not([title])`
+  — elements that keep `dataset.msg` *only* for aggregation
+  (`collectPageWarnings`/`collectSectionWarnings`) but are otherwise
+  native-title-only (e.g. `annotateEmptyRelationTabs`'s span) correctly fall
+  outside this selector once they also carry `.title`, so the generic handler
+  never re-attaches a listener that shouldn't exist. Only elements with
+  `dataset.msg` and no `.title` (the genuinely rich ones above) get re-wired.
 
 ---
 

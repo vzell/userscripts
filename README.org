@@ -3072,10 +3072,177 @@ On YEAR pages in the flat view songlist songs which are marked DETAIL page only 
 ** DONE mark event titles with a yellow OK check mark when differing only in Earl/Late etc
 ** DONE Mark venue name with middle name with a yellow OK check mark when differing only middle name
 
-** tags
+** DONE tags
 
 On YEAR pages tag issues on specific events do not show up in the warning icon tooltip of the event title
 @debug/tag-warnings.html
+
+** DONE tag values which pass checks, should be rendered in "green" with a rich tooltip which explains what has been checked
+
+1.)
+
+tag values on YEAR and all other pages like EVENT DETAIL, VENUE, SONG, RETAIL etc. which pass checks, should be rendered
+in "green" with a rich tooltip which explains what has been checked
+
+2.)
+
+on YEAR pages the button text "Tags" on '<button class="bb-venue-tab-btn bb-icon-active' should also be rendered in
+"green" so that the user nows that consistency checks have been performed without clicking
+
+** DONE add tooltip support for consistency checks for songs in setlist on YEAR and EVENT DETAIL detail pages (when they are rendered in "green") too plus tooltip on the "Setlist" tab of the EVENT DETAIL detail pages
+
+add tooltip support for consistency checks for songs in setlist on YEAR and EVENT DETAIL detail pages (when they are
+rendered in "green") too plus tooltip on the "Setlist" tab of the EVENT DETAIL detail pages
+
+** DONE tooltips which have just a one line text, should ONLY display the browser native tooltip instead of the rich HML version
+
+1.)
+
+tooltips which have just a one line text, should ONLY display the browser native tooltip instead of the rich HML version, currently some elements have both
+
+2.)
+
+currently if a relation specific row '<div class="bb-relation-tab-row">' is displayed, it's missing the relation specific "Tags" button, like e.g. the '<div class="bb-song-tab-row">' does
+
+3.)
+
+for both the "Tags" buttons on '<div class="bb-relation-tab-row">' and '<div class="bb-song-tab-row">' the "green" rendered button text should be present if all checks pass, otherwise the warning icon
+
+** DONE maybe extend to SONG and RELATION Tags
+
+YEAR page Tags/Venue Tags/Song Tags buttons now turn green (instead of staying the default grey) when all tags pass, so consistency status is visible without clicking.
+
+** plan: tag name aliases
+
+Introduce the concept of "lookup tables"/lookup functions" for tag name aliases in different contexts like EVENT DETAIL, SONG, VENUE,
+RELATION, RETAIL, etc pages to make additional consistency checks to tag name aliases
+
+These alias names are not always predictable, so they should be user editable/extendable when need arises. SO placement
+should be at the beginning of the userscript.
+
+The following tag values should be checked on EVENT DETAIL pages:
+
+Every song listed under the "Setlist" tab should have a corresponding tag value.
+
+1.)
+
+First check if the lowercase blank stripped version of a song title matches with a same named tag value, e.g.
+
+"WRECKING BALL" -> wreckingball
+
+2.)
+
+If the check in 1.) does not succeed, check with a lookup function for a song title if an alias can be deduced and if there is a match.
+
+For song titles the lookup function would get the first char of each word in a song title and concatenate them together to form the song alias, see also the special handling of non letter chars below
+
+E.g.:
+
+"AMERICAN SKIN (41 SHOTS)" -> as41s
+"BORN IN THE U.S.A." -> bitusa
+"BECAUSE THE NIGHT" -> btn
+"DARKNESS ON THE EDGE OF TOWN" -> doteot
+
+#+begin_example
+New setlist-song-tag consistency check on DETAIL pages
+
+  - SONG_TAG_ALIAS_OVERRIDES (new constant, top of file near PASSING_TAG_REASONS) — empty, user-editable manual override table (songTitleLowercase → expectedTag) for cases where BruceBase's real tag matches
+  neither of the two automatic checks below.
+  - computeSongTagAlias(title) — derives an acronym alias per the confirmed algorithm (first letter per word; whole numbers kept in full; dotted initialisms like U.S.A. keep all letters;
+  parens/apostrophes/hyphens/ampersands/periods deleted outright, letting adjacent letters merge only where there's no space). Verified against all 4 examples plus edge cases (DOESN'T→d, E-STREET→e) with a
+  standalone Node test.
+  - checkSetlistSongTags(detailSections, actualTags) — for every unique setlist song, tries exact match → derived alias → manual override, in order.
+  - Wired into annotateDetailPageTags (live DETAIL page, now takes the already-parsed detailSections to avoid a duplicate parse) and addTagsButton (YEAR page's nested "Tags" button, which parses the fetched
+  doc itself). Matched tags render green via the existing markPassingTagLinks path with a tooltip naming the song + method; unmatched songs are appended to the existing red missing-tag list, showing the
+  derived-alias candidate.
+
+  Updated doc/TAGS.md with a full "Setlist song tag check" section, bumped to v2.50, added a changelog entry. node --check and changelog-JSON validation both pass.
+
+  As scoped, this covers DETAIL pages only — VENUE/RELATION/RETAIL/SONG-page alias checks were explicitly deferred, though the naming convention (SONG_TAG_ALIAS_OVERRIDES) leaves room for siblings later.
+
+✻ Sautéed for 11m 54s
+
+※ recap: We've been extending BruceBaseParser's tag consistency checks; just finished adding a setlist-song-to-tag check on DETAIL pages with green/red markers. Next: verify it in a real browser session, since
+  it's untested end-to-end yet.
+#+end_example
+
+** plan: event names
+
+Extend our implementation that "Every song listed under the "Setlist" tab should have a corresponding tag value." to the different parts of an event name.
+
+Given the following table
+
+| Event name                                                           | Tags                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+|----------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 2026-04-18 Pollak Theatre, Monmouth University, West Long Branch, NJ | 18 2026 americanmusichonors april becausethenight brucespringsteen gig induction lightmyfire memorabilia monmouthuniversity newjersey(nj) news peoplehavethepower pollaktheatre printed roadhouseblues saturday setlist storyteller theweight thunderroad ticket tour_no usa westlongbranch                                                                                                                                                                                    |
+| 2026-04-20 Prudential Center, Newark, NJ                             | 10th 20 2026 americanland april as41s badlands bitusa bootleg brucespringsteen btn btr clampdown cof ditd doteot dtmh gig hoatg hungryheart ittsnip livedl lohad lohad.pgr lohadsnip lwh mcor memorabilia monday murderincorporated newark newjersey(nj) news nosurrender prudentialcenter solo som tgotj therising tour_lohad tour_lohadnk tpl twohearts usa war wreckingball youngstown                                                                                      |
+| 2025-05-14 Co-op Live, Manchester, England                           | 10th 3 14 2025 badlands bitusa bobbyjean brucespringsteen btn btr cof cooplive ditd doteot dtmh england europe eyewitness gig handwritten hoatg humantouch hungryheart livedl lohad lohad.pgr lohadsnip lonesomeday lty lwh manchester may mcor memorabilia mlwnlyd murderincorporated myhometown news prem printed r_lohadep rainmaker retail setlist solo storyteller therising thunderroad ticket tour_23int tour_lohad tpl unitedkingdom wednesday wreckingball youngstown |
+| 2025-10-14 Spotify HQ, Adelphi (The), London, England                | 14 2025 adelphi brucespringsteen edithbowman england europe interview jeremyallenwhite london memorabilia news october tuesday unitedkingdom                                                                                                                                                                                                                                                                                                                                   |
+| 2024-09-08 Roy Thomson Hall, Toronto, ON                             | 08 2024 brucespringsteen canada eyewitness festival film interview jonlandau memorabilia news nogig ontario(on) premiere roythomsonhall september stevenvanzandt sunday thomzimny toronto                                                                                                                                                                                                                                                                                      |
+| 2024-07-12 Olympiastadion, Helsinki, Finland                         | 1 10th 12 2024 backstreets badlands bitusa bobbyjean brucespringsteen btn btr darlingtoncounty ditd europe finland friday ghosts gig helsinki hungryheart isyimd ittsnip july livedl lms lonesomeday lty lwh memorabilia mlwnlyd myhometown nightshift olympiastadion pian prem printed rtb scandinavia setlist solo soundcheck sto tas tess therising theriver thunderroad tour_23int tpl twohearts woth wreckingball youngstown                                              |
+
+
+reliably determine the following information from the event name and deduce the country USA or Canada
+
+- date (e.g. 2016-04-18)
+- venue name (e.g. Pollak Theatre)
+- venue city (e.g. West Long Branch)
+- venue state (e.g. NJ (USA), ON (Canada), for other countries not applicable)
+- venue country (e.g. NJ => USA, ON => Canada, England)
+- venue detail (e.g. Monmouth University, Adelphi (The) => The Adelphi)
+
+Then check given the "Tags" column, which tag values should be present for an event name. Deduce helper functions which
+would produce the expected tag values.
+
+** act on @debug/event-names.tags
+
+act on @debug/event-names.tags
+
+** VENUE
+
+extend the tag checks also to the venue name (in the page title) in VENUE pages itself
+
+| Venue name                                            | Tags                                                                                 |
+|-------------------------------------------------------+--------------------------------------------------------------------------------------|
+| 2026-04-18 Pollak Theatre, West Long Branch, NJ       | files info monmouthuniversity newjersey(nj) p pollaktheatre usa venue westlongbranch |
+| 2026-04-20 Prudential Center, Newark, NJ              | files info newark newjersey(nj) p prudentialcenter usa venue                         |
+| 2025-05-14 Co-op Live, Manchester, England            | c cooplive england europe files info manchester unitedkingdom venue                  |
+| 2025-10-14 Spotify HQ, Adelphi (The), London, England | a adelphi england europe files info london unitedkingdom venue                       |
+| 2024-09-08 Roy Thomson Hall, Toronto, ON              | canada files info ontario(on) r roythomsonhall toronto venue                         |
+| 2024-07-12 Olympiastadion, Helsinki, Finland          | europe files finland helsinki info o olympiastadion olympicstadium scandinavia venue |
+
+One pattern here is, the venue detail which is present on EVENT DETAIL pages is never present on the VENUE page itself
+
+** Ocean Grove Youth Temple, Ocean Grove, NJ - rule
+
+
+** files tag value
+
+plus two new fixed expected tags, files and info
+
+** rename the current "Venue Tags"
+
+1.)
+
+rename the current "Venue Tags"
+
+#+begin_example
+<div class="bb-icon-panel-header"><span>Venue Tags</span><button class="bb-icon-panel-close">✕</button></div>
+#+end_example
+
+in the "Tags"-button panel of '<div class="bb-venue-tab-row">' to the complete venue name plus " Tags" appended
+
+2.)
+
+rename the current "Tags"
+
+#+begin_example
+<div class="bb-icon-panel-header"><span>Tags</span><button class="bb-icon-panel-close">✕</button></div>
+#+end_example
+
+in the "Tags"-button panel of '<div class="bb-event-tab-row">' to the complete event name plus " Tags" appended
+
+** all hyperlinks in the processed final page should be rendered in a new tab
 
 
 * question

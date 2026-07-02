@@ -1,5 +1,79 @@
 [
     {
+        "version": "2.51",
+        "date": "2026-07-02",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added an event-name/venue-name → tag consistency check on DETAIL pages (annotateDetailPageTags, addTagsButton) and VENUE pages (annotateVenuePageTags, addVenueTagsButton): the page title's venue name, venue detail, city, state/province, and country/region are each checked against .page-tags. Venue/city names are slugified (toLocationTagSlug — lowercase, punctuation deleted, no acronym, leading/trailing \"The\"/\"Le\"/\"De\" article dropped); US states and Canadian provinces map to a \"<state>(<abbr>)\" tag plus \"usa\"/\"canada\" (US_STATE_NAMES, CA_PROVINCE_NAMES); other countries map to their own slug plus continent/region extras from a new user-editable COUNTRY_EXTRA_TAGS table (e.g. England -> unitedkingdom, europe). A new VENUE_TAG_ALIAS_OVERRIDES table (empty by default, same pattern as SONG_TAG_ALIAS_OVERRIDES) lets a venue name be mapped to an explicit tag or marked null (\"no tag expected\") for cases like a generic building name that BruceBase never tags. Matched parts render green with a tooltip; unmatched parts are added to the existing red missing-tag list, showing the expected tag. VENUE pages also now expect two new fixed tags, \"files\" and \"info\", alongside the existing \"venue\"/first-letter-index check."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.50",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added a setlist-song-to-tag consistency check on DETAIL pages (annotateDetailPageTags) and the YEAR page's nested \"Tags\" button (addTagsButton): every song in the Setlist tab is now checked against .page-tags via a 3-tier lookup — exact lowercase/whitespace-stripped match, a derived acronym alias (computeSongTagAlias — first letter per word, whole numbers kept in full, dotted initialisms like \"U.S.A.\" keep all their letters), then a user-editable manual override table (SONG_TAG_ALIAS_OVERRIDES, empty by default, placed near the top of the file next to MANAGED_CONTENT_TAGS/PASSING_TAG_REASONS for easy editing). Matched tags render green (reusing markPassingTagLinks) with a tooltip naming the song and match method; unmatched songs are added to the existing red missing-tag list, showing the derived-alias candidate."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.49",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Removed duplicate tooltips: one-line messages (spurious/passing tags, para-warn, setlist-tab match/mismatch, empty relation tabs, empty relation-tab buttons, icon-sorry glyphs) previously showed both the native browser title tooltip AND a redundant custom rich tooltip. These now set only `title` — no JS listener, no showOkTooltip (now removed as dead code) or showErrorTooltip call. Genuinely rich/multi-line tooltips (venue match, anchor warnings, song diffs) are unaffected. rewireLoadedPage's generic re-wiring selector changed to `[data-msg]:not([title])` so cache reloads don't reintroduce the duplicate for elements that keep data-msg only for warning aggregation."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Added a relation-specific \"Tags\" button to .bb-relation-tab-row (addRelationTagsButton), matching the existing Song/Venue Tags buttons: checks \"person\"/\"band\" tags against the relation page's own Bands/Members tabs, with the same green (all pass) / red (missing) / dark-orange (spurious) button coloring and ⚠️ warning icon in the label."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.48",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Matching setlist songs (.bb-song-match, green) on YEAR and DETAIL pages now show a hover tooltip (YEAR/DETAIL value + green Match ✅ result), matching the existing tooltip support for year-only/detail-only/char-diff songs. Wired in renderSetlistElement (flat view), buildListDiv (list view), rewireLoadedPage (cache reload), and styleDetailLi (DETAIL page).",
+                    "The DETAIL page's \"Setlist\" tab label now shows a tooltip in both states: green match (fixed explanatory message) and ⚠️ mismatch (the existing data-msg reason, which was previously stored but never actually wired to a hover listener)."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.47",
+        "date": "2026-07-01",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Tags that pass their consistency check (YEAR event, DETAIL, VENUE, RETAIL, SONG, RELATION pages) are now rendered green with a hover tooltip explaining what was verified, instead of being left unstyled. New .bb-tag-ok class + passingTagMsg()/markPassingTagLinks() helper shared by all annotateXPageTags() functions.",
+                    "YEAR page Tags/Venue Tags/Song Tags buttons now turn green (instead of staying the default grey) when all tags pass, so consistency status is visible without clicking."
+                ]
+            },
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed a function-name collision where computeExpectedSongTags()/isManagedSongTag() were declared twice — once for the YEAR page's nested Song Tags button (with songDoc/songTabMap/songName params) and once for the live SONG page's own tag annotation (no params). The later, simpler declaration silently won, so the YEAR page's Song Tags button never actually checked the first-letter or lyricsheet tags — it only ever expected \"song\". Renamed the YEAR-page versions to computeExpectedYearSongTags()/isManagedYearSongTag() so both checks now run correctly."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.46",
         "date": "2026-07-01",
         "sections": [

@@ -115,7 +115,7 @@ Set on each `yearSection` before rendering:
 
 | CSS class | Meaning | Visual |
 |---|---|---|
-| `.bb-song-match` | Same in both — on `<a>` if DETAIL has `/song:` URL, else `<span>` | Green text; link underline on hover |
+| `.bb-song-match` | Same in both — on `<a>` if DETAIL has `/song:` URL, else `<span>` | Green text; link underline on hover; tooltip (see below) |
 | `.bb-song-year-only` | In YEAR, not DETAIL | Light-blue background |
 | `.bb-song-detail-only` | In DETAIL, not YEAR (inserted) | Yellow background |
 | `.bb-song-char-diff` | Similar but slightly different | Char-level red/green |
@@ -127,10 +127,25 @@ Set on each `yearSection` before rendering:
 | `.bb-anchor-warn` | Anchor/date/year mismatch | ⚠️ cursor:help |
 | `.bb-sep` | Song separator rendered as ` / ` | `.bb-sep` class; used by list-view builder to split songs |
 
+Every song span/link created by `renderSetlistElement` (including each part of
+a `renderMatchWithConnectives` split) carries `data-year-song`/`data-detail-song`
+and a `mouseenter`/`mouseleave` pair calling `showSongTooltip`, for all four
+song states (`match`, `year-only`, `detail-only`, `char-diff`) — not just the
+mismatch ones. For `.bb-song-match`, `showSongTooltip` renders a
+`.bb-tip-table` with YEAR/DETAIL values and a green `Match ✅` result row
+(same table shape as `showYearTooltip`/`showListTooltip`). This wiring is
+repeated in three places that must stay in sync: `renderSetlistElement` (flat
+view), `buildListDiv` (list view rebuild), and `rewireLoadedPage` (after a
+Save/Load cache round-trip).
+
 ### On the DETAIL page
 
 Same colour classes applied to `<li>` / `<p>` / `<a>` elements:
-- `match` → `.bb-song-match` on each `<a href="/song:">` (or the `<li>` itself).
+- `match` → `.bb-song-match` on each `<a href="/song:">` (or the `<li>` itself
+  when no song link exists), with `data-year-song`/`data-detail-song` and the
+  same `showSongTooltip` wiring as the YEAR page. For a medley `<li>` with
+  multiple `/song:` links, every link gets the same (joined) tooltip data —
+  there's no per-sub-song breakdown.
 - `detail-only` → `.bb-song-detail-only` on the existing element.
 - `char-diff` → `.bb-song-char-diff` + `buildCharDiffHtml` replaces `<a>` innerHTML.
 - `year-only` → new `<li>` or `<p>` inserted with `.bb-song-year-only`.
@@ -140,6 +155,20 @@ attributes on every non-year-only `<li>` inside each `<ol>`. This prevents
 year-only items (which use `list-style-type: disc`) from consuming a counter
 slot in the ordered list, so subsequent songs are numbered correctly regardless
 of browser CSS counter behaviour.
+
+---
+
+## Setlist tab tooltip (DETAIL page, `annotateSetlistTab`)
+
+The "Setlist" tab label (`<em>` in the wikidot nav) gets a tooltip in both states:
+- **Match** (`.bb-setlist-tab-match`, green): fixed message via `showOkTooltip`
+  — "event name matches and no setlist differences were found between the
+  YEAR and DETAIL page." Also stored in `title` so `rewireLoadedPage` can
+  re-derive the message after a cache reload without recomputing state.
+- **Mismatch** (`.bb-setlist-tab-ann`, ⚠️ span): existing `data-msg` (built from
+  which of "name mismatch" / "setlist differences" applied) is now wired to
+  `showErrorTooltip` on hover — previously the message was stored but never
+  shown.
 
 ---
 
@@ -187,13 +216,17 @@ sections exist.
 | `.bb-rel-extra` | Extra annotation inline after name, e.g. `(Guest)` |
 | `.bb-rel-loading` | Added to bullet while the relation page is being fetched |
 | `.bb-relation-tab-row` | Container row appended to `section` by `addRelationTabButtons` |
-| `.bb-relation-tab-btn` | Button per relation-page tab in the tab row |
+| `.bb-relation-tab-btn` | Button per relation-page tab in the tab row, plus the "Tags" button |
 
 Bullet click handling is wired in `injectEventRelations` immediately after
 injection. Clicks call `fetchAndToggleRelationTabRow(relHref, relName, section,
 bullet)` which fetches the relation page on first click and builds
 `.bb-relation-tab-row` (via `addRelationTabButtons`), caching the row on
 `section._bbRelRows` (keyed by `relHref`) for subsequent toggle clicks.
+
+`addRelationTabButtons` also appends a "Tags" button (`addRelationTagsButton`)
+as the last button in the row — same green/red/dark-orange consistency-check
+pattern as the Song/Venue Tags buttons; see [TAGS.md](TAGS.md).
 
 The `showView()` closure in both `insertSectionToggle` and
 `rewireSectionControls` queries `.bb-relations-flat` and `.bb-relations-list`
