@@ -3372,6 +3372,20 @@ be fetched too and appended to the original list
 
 add a descriptive icon if there are additional tags found on a "onstage" page right after the DETAIL page title '<span class="bb-glyph">'
 
+** add icon also to YEAR page and YEAR LIST pages after the '<span class="bb-glyph">'
+
+1.)
+
+add the 🏷️ glyph also to YEAR and YEAR LIST pages after the '<span class="bb-glyph">'
+
+2.)
+
+render the additional tags from the "onstage" URLs on the DETAIL pages together with the original ones in a sorted fashion
+
+3.)
+
+on the YEAR pages the Event "Tags" button when clicked should show ALL tags now
+
 ** relation check on event detail pages
 
 Now extend the event detail pages tag value checks with relation checks.
