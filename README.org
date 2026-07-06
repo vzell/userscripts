@@ -3716,7 +3716,7 @@ in it's name, treat the parts before and after the " & " as separate strings (al
 
 Also remove a "." e.g from "Dr. Zoom & The Sonic Boom" as a band, before deducing the tag, e.g. "drzoom"
 
-** for Bruce
+** DONE for Bruce
 
 for the relation http://brucebase.wikidot.com/relation:bruce-springsteen
 currently the following is being rendered for the tags @debug/bruce.html
@@ -3725,6 +3725,27 @@ Somehow all the relations starting from '<li><a href="/relation:the-rogues" targ
 doesn't seem to be checked for tag comparison
 
 ** TODO http://brucebase.wikidot.com/retail:darkness-on-the-edge-of-town - "Commercial Release: June 2, 1978" instead of "Commercially Released: June 2, 1978"
+
+1.)
+
+On RETAIL pages like e.g. http://brucebase.wikidot.com/retail:nebraska-82 or http://brucebase.wikidot.com/retail:live-from-asbury-park
+after the text "Commercially Released:" there could be multiple occurences of date parts like e.g.
+
+#+begin_example
+Commercially Released: April 18, 2026 (Vinyl) / May 29, 2026 (CD)
+#+end_example
+
+"green" colorize all the date part tags or warning flag them if no tag is present, with a descriptive tooltip
+
+2.)
+
+On any page, if there is the following container present
+
+#+begin_example
+<p><span style="color: red"><sup><em>!! Under Construction !! Come back soon.</em></sup></span></p>
+#+end_example
+
+the tag "underconstruction" should also be present. "Warning flag" and "green" colorize accordigngly with a descriptive tooltip
 
 ** DONE The "Original page" button on relation pages does not remove the warning box and green highlightning for tags
 
@@ -3770,8 +3791,7 @@ What was and is never working is "/song:the-river", probably because here the "P
 load and parse both pages to understand the bug. when I call the "/song:the-river" in a browser without my userscript installed, pagination is working, but still after every click on a pagination button for "/song:the-river" the first tab "Credits" is selected
 Hope this helps in fixing the bug
 
-** TODO "/song:the-river" stiil switches to rab 1 when paginating
-
+** TODO "/song:the-river" still switches to tab 1 when paginating
 ** TODO colorize "green" the bands and members names in relation pages under their respective tabs when they match tags
 *** DONE initial
 
@@ -3780,6 +3800,322 @@ colorize "green" the bands and members names in relation pages under their respe
 *** bug
 
 also colorize the tab name green if no errors
+
+** DONE add "underconstruction" tag support
+** DONE add tooltip when hovering over a link with 'class="bb-song-num"'
+
+on YEAR pages add a descriptive tooltip when hovering over a link with 'class="bb-song-num"'
+
+#+begin_example
+<a href="/song:when-you-dance" class="bb-song-num" data-sn="WHEN YOU DANCE" target="_blank" rel="noopener noreferrer">5.</a>
+#+end_example
+
+** DONE pages of event type "interview" e.g. http://brucebase.wikidot.com/interview:2016-09-06-stone-hill-studio-colts-neck-nj
+
+pages of event type "interview" e.g. http://brucebase.wikidot.com/interview:2016-09-06-stone-hill-studio-colts-neck-nj
+should also get the same "On Stage" tab treatment like "gig" or "rehearsal"
+
+** DONE e-street members with a "." in the tag name
+
+When member of the E Street Band use, "stevenvanzandt", in all othercases use "steven.vanzandt". Only use "littlesteven"
+in combination with "disciplesofsoul" when a performance is done by "Little Steven & The Disciples of Soul". Also tag
+"stevenvanzandt" can be added in that case.
+
+The following relation names (in first column) should get a special treatment when deducing the tag name to use for comparison
+
+| Relation         | Tag              |
+|------------------+------------------|
+| Charles Giordano | charles.giordano |
+| Clarence Clemons | clarence.clemons |
+| Danny Federici   | danny.federici   |
+| Garry Tallent    | garry.tallent    |
+| Jake Clemons     | jake.clemons     |
+| Max Weinberg     | max.weinberg     |
+| Nils Lofgren     | nils.lofgren     |
+| Patti Scialfa    | patti.scialfa    |
+| Roy Bittan       | roy.bittan       |
+| Soozie Tyrell    | soozie.tyrell    |
+| Steven Van Zandt | steven.vanzandt  |
+
+1.)
+
+On "gig" and "rehearsal" event typ pages e.g.
+
+http://brucebase.wikidot.com/gig:1993-06-24-brendan-byrne-arena-east-rutherford-nj
+
+where "The E Street Band" is not explicitly mentioned under the "On Stage" tab, the above Tag names with a dot "." in the tag name should be used.
+
+2.)
+
+On "gig" and "rehearsal" event typ pages e.g.
+
+http://brucebase.wikidot.com/rehearsal:2026-03-19-youth-temple-ocean-grove-nj
+
+where "The E Street Band" is explicitly mentioned under the "On Stage" tab, the non-dot version should be used as it is now
+
+** special handling
+
+|                  | david.sancious   |
+|                  | ernest.carter    |
+|                  | vini.lopez       |
+
+
+** DONE featured tag
+
+when the following icon
+
+#+begin_example
+<div class="image-container floatright"><img src="http://brucebase.wdfiles.com/local--files/content:files/00Star-32.png" title="Featured" alt="00Star-32.png" class="image"></div>
+#+end_example
+
+is present on a YEAR page, the "featured" tag is also expected on the corresponding DETAIL page
+
+Colorize in "green" on the DETAIL page if present, otherwise add a warning icon on YEAR and DETAIL with a tooltip
+
+** DONE guest tag only present when Bruce is guest ?
+
+Should the "guest" tag be present as soon as any artist is flagged as "(Guest)" on the DETAIL pages ?
+
+Yes, or when Bruce guesting on the show of another artist.
+
+** DONE no "Original Page" button present
+
+There is no no "Original Page" button present
+
+#+begin_example
+<button id="bb-global-toggle" class="bb-toggle-btn" title="Toggle between the original unprocessed setlist and the annotated processed view">⇄ Original Page</button>
+#+end_example
+
+on some pages e.g.
+
+#+begin_example
+http://brucebase.wikidot.com/interview:2016-09-06-stone-hill-studio-colts-neck-nj
+http://brucebase.wikidot.com/gig:1971-01-08-upstage-asbury-park-nj-late
+http://brucebase.wikidot.com/gig:1974-02-24-main-point-bryn-mawr-pa-early
+#+end_example
+
+Why, please fix
+
+** DONE "usa" and "newjersey(nj)"
+
+On e.g. http://brucebase.wikidot.com/gig:1971-01-08-upstage-asbury-park-nj-late
+
+the tags "usa" and "newjersey(nj)" are not colored "green" although they match 'Country: USA' and 'State: NJ'
+
+
+** DONE colorize the relation names in "green"
+
+colorize the relation names in "green" under the different relation tabs like "On Stage"/"In Studio"/"On Audio" when
+they pass their tag checks, otherwise add a warning flag with a tooltip to the relation name
+
+** DONE add special handling for non obvious relation name matching to tags
+
+1.)
+
+add special handling for non obvious relation name matching to tags like in e.g. http://brucebase.wikidot.com/gig:1993-06-24-brendan-byrne-arena-east-rutherford-nj
+
+| Relation name               | Tag       |
+|-----------------------------+-----------|
+| The 1992–93 World Tour Band | otherband |
+|                             |           |
+
+make it end-user expandable by placing the info at the start of the userscript
+
+2.)
+
+add the same code like here
+
+#+begin_example
+    // Storyteller tab.
+    const storytellerTab = getTabEl(doc, tabMap, 'Storyteller');
+    if (storytellerTab && !SORRY_RE.test(storytellerTab.textContent.trim())) expected.add('storyteller');
+
+    return expected;
+#+end_example
+
+also for the "Eyewitness" tab and the associated "eyewitness" tag
+
+** DONE guest
+
+The current handling of the '(Guest)' postfix of a relation only handles the "Bruce Springsteen" relation case.
+It should be extended to whatever relation name has a '(Guest)' postfix. In ALL these cases, the "guest" tag should be present as a tag, otherwise flag with a warning icon and tooltip
+
+** DONE why
+
+On the http://brucebase.wikidot.com/interview:2016-09-06-stone-hill-studio-colts-neck-nj
+the tags "brucespringsteen" and "guest" are flagged as not being found as relations under the "On Stage" tabe
+
+Why, please fix
+
+** DONE "youcanlook", "wroth" tags
+
+http://brucebase.wikidot.com/2016#060916
+http://brucebase.wikidot.com/gig:1980-10-03-crisler-arena-ann-arbor-mi - "wroth"
+http://brucebase.wikidot.com/rehearsal:2016-01-00-expo-theater-fort-monmouth-nj - "youcanlook"
+
+| Song name                               | Tag        |
+|-----------------------------------------+------------|
+| wreck on the highway                    | wroth      |
+| you can look (but you better not touch) | youcanlook |
+|                                         |            |
+
+** "handwritten" not present in the filename http://brucebase.wdfiles.com/local--files/files:setlist-2016/20160100_Setlist_01.jpg
+** DONE wire library
+*** DONE initial
+
+1.)
+
+wire the userscript library @/home/vzell/git/musicbrainz-userscripts/lib to our userscript.
+
+So e.g. the userscript @/home/vzell/git/musicbrainz-userscripts/MB_PageEnhancer what needs to be done
+
+2.)
+
+Add the following configuration section
+
+#+begin_example
+    // CONFIG SCHEMA
+    //
+    // All keys use the prefix "bbp_" (BruceBaseParser) to namespace settings
+    // for this specific userscript and avoid collisions with other scripts
+    // sharing the same VZ_MBLibrary storage backend.
+    const configSchema = {
+        // ============================================================
+        // GENERIC SECTION
+        // ============================================================
+        divider_generic: {
+            type: 'divider',
+            label: '🛠️ GENERIC SETTINGS'
+        },
+
+        bbp_enable_debug_logging: {
+            label: "Enable debug logging",
+            type: "checkbox",
+            default: false,
+            description: "Enable debug logging in the browser developer console"
+        },
+#+end_example
+
+*** DONE act on @debug/library.org
+
+act on @debug/library.org
+
+*** DONE sticky-bar toggling with keyboard shortcut
+
+sticky-bar toggling with keyboard shortcut
+
+'<div id="bb-sticky-bar">'
+
+*** DONE act on @debug/keyboard.org
+
+act on @debug/keyboard.org
+
+#+begin_example
+● Done. Summary of what's in debug/keyboard.org:
+
+  Config schema — added the exact KEYBOARD SHORTCUTS section from the org file, renaming the sa_ prefixes to bbp_ (only bbp_shortcut_toggle_sticky_bar was already given with the right prefix).
+
+  Keyboard engine — ported the generic Emacs-style shortcut framework from ShowAllEntityData (ctrlMFunctionMap, parsePrefixShortcut, isPrefixKeyEvent/isShortcutEvent, getShortcutDisplay/buildShortcutHint, the tooltip, and both dispatch listeners — prefix-mode capture-phase +
+  direct-shortcut bubble-phase). I intentionally left out three things that don't apply here: the numbered action-button selection (BruceBase has no "Show all"-style buttons), isSpecialDialogOpen() (dead code even in the source — defined but never called), and
+  createInfoDialog/quick-filter (built a plain custom overlay instead, since there's only one shortcut to list so far).
+
+  Wired up, as requested:
+  1. Ctrl+M, then B (prefix mode) → toggles #bb-sticky-bar
+  2. bbp_shortcut_toggle_sticky_bar (direct shortcut, default Ctrl+B) → same action
+
+  Both restricted to HOME/YEAR pages (per your note), even though #bb-sticky-bar also exists on LIST and RECENT_CHANGES — toggleStickyBar() warns and no-ops elsewhere.
+
+  Also added: a ?//-triggered "🎹 Keyboard Shortcuts" help dialog, and a ⌨️ Shortcuts button in #bb-btn-container (HOME and YEAR only for now).
+
+  Docs: new doc/KEYBOARD.md, updated the quick-reference table, button-order table, and (while I was there) fixed the root CLAUDE.md's external-dependencies list which had missed VZ_MBLibrary from the last session.
+
+  Version bumped to 2.97, changelog entry added, node --check and JSON parse both pass. Not yet exercised in a real browser — worth loading a BruceBase HOME/YEAR page to confirm Ctrl+M→B and Ctrl+B both toggle the bar, and that the settings dialog renders the new
+  keyboard-shortcut capture widgets correctly.
+#+end_example
+
+*** DONE extend the keyboard functionality also to LIST and RECENT_CHANGES pages and future ones which use the sticky-bar '<div id="bb-sticky-bar">'
+
+extend the keyboard functionality also to LIST and RECENT_CHANGES pages and future ones which use the sticky-bar '<div id="bb-sticky-bar">'
+
+** DONE Refused to connect
+
+1.)
+
+#+begin_example
+VM1265:10 injected: Refused to connect to "https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser/BruceBaseParser_CHANGELOG.json": This domain is not a part of the @connect list
+index.js:65 17:47:38.930 [VZ: BruceBase Parser] 📝 Fetch failed for https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser/BruceBaseParser_CHANGELOG.json: Network error 
+index.js:65 17:47:38.930 [VZ: BruceBase Parser] 📝 Changelog not available remotely: Network error 
+index.js:65 17:47:38.930 [VZ: BruceBase Parser] 📝 Changelog source: none (remote failed, no static entries available as fallback) 
+#+end_example
+
+2.)
+
+add toggle "Original Page" button to homepage and make '<div id="bb-home-results">' disappear/appear when clicking it
+
+** flag the song name with a warning icon when the tag check does not succeed
+
+** DONE Venue mismatch check for e.g. "University..."
+
+1.)
+
+When doing the venue name check between the venue name on EVENT DETAIL and VENUE pages, e.g.
+http://brucebase.wikidot.com/gig:1980-10-03-crisler-arena-ann-arbor-mi and http://brucebase.wikidot.com/venue:crisler-arena-ann-arbor-mi
+we currently flag the following mismatch
+on the event entry on the YEAR and the EVENT DETAIL page:
+
+#+begin_example
+<span class="bb-venue-warn" data-msg="Venue mismatch ⚠️
+VENUE page: &quot;Crisler Arena, Ann Arbor, MI&quot;
+DETAIL event: &quot;Crisler Arena, University Of Michigan, Ann Arbor, MI&quot;" style="cursor: help;"> ⚠️</span>
+#+end_example
+
+For venue names which only differ in the event detail part e.g. "University Of Michigan" between the venue location
+string e.g. "Crisler Arena" before it and the venue city/state e.g. "Ann Arbor, MI" after it don't flag the fact with an
+"orange" warning glyph ⚠️, but instead flag it with a "green" warning glyph and don't report it as a general mismatch in the
+'<span class="bb-event-title-warn"' tooltip neither count it in the '<button id="bb-mismatch-toggle"'
+
+2.)
+
+do not report the deduced tag value for such an event detail part e.g. "universityofmichigan" on the EVEN DETAIL page
+
+** DONE downgrade late/early warnings
+
+Also downgrade the current "(Early)"/"(Late)"/etc. warnings on e.g. EVENT DETAIL http://brucebase.wikidot.com/gig:1971-07-29-d-scene-south-amboy-nj-late and VENUE DETAIL http://brucebase.wikidot.com/venue:d-scene-south-amboy-nj pages
+
+#+begin_example
+<span class="bb-venue-warn" data-msg="Venue mismatch ⚠️
+VENUE page: &quot;D'Scene, South Amboy, NJ&quot;
+DETAIL event: &quot;D'Scene, South Amboy, NJ (Late)&quot;" style="cursor: help;"> ⚠️</span>
+#+end_example
+
+and flag it with a "green" warning glyph and don't report it as a general mismatch in the
+'<span class="bb-event-title-warn"' tooltip neither count it in the '<button id="bb-mismatch-toggle"'
+
+** DONE Also downgrade the title warning
+
+Also downgrade the event title warning 'Event variant on same day ⚠️' on the events on a YEAR page e.g. http://brucebase.wikidot.com/1971 and the corresponding EVEN DETAIL page e.g. http://brucebase.wikidot.com/gig:1971-07-29-d-scene-south-amboy-nj-late
+if they only differ by a trailing (Early)/(Late)/(Afternoon)/(Evening)/etc.
+and flag it with a "green" warning glyph instead of the curretn '<span class="bb-glyph"> ⚠️</span>' and don't report it as a general mismatch in the
+'<span class="bb-event-title-warn"' tooltip neither count it in the '<button id="bb-mismatch-toggle"'
+
+** "university" tag when University is in the event detail
+
+add "university" tag when "University" string
+
+http://brucebase.wikidot.com/venue:american-university-washington-dc
+
+only if it has sub pages
+
+like "http://brucebase.wikidot.com/venue:leonard-gym-washington-dc"
+
+
+
+
+* Problems
+** http://brucebase.wikidot.com/content:five-rings-farm-wellington-fl tag "appearnaces"
+
+
+
 
 * question
 ** initial
