@@ -71,16 +71,28 @@ Fetches the DETAIL page with `fetchPage(url)`, then runs in sequence:
 - `normalizeDetailName(rawDetailName)` — moves `(The)` / `(Le)` / `(De)`
   before a comma, inserts ` - ` after the date, uppercases everything.
 - Compares with `yearName.trim().toUpperCase()`.
-- Detects early/late variants: if the normalized detail name equals the YEAR
-  name + one of `(EARLY)`, `(LATE)`, `(AFTERNOON)`, `(EVENING)`, flags ⚠️
-  instead of ❌.
+- Detects early/late variants (`isEarlyLate`): if the normalized detail name
+  equals the YEAR name + one of `(EARLY)`, `(LATE)`, `(AFTERNOON)`,
+  `(EVENING)`, flags it as an informational variant instead of a mismatch.
 - `extractEventAlias(doc)` — reads the alias/alternate name from the DETAIL
   page (if any) and passes it to `addYearGlyph` for display.
-- `addYearGlyph(element, nameMatch, isEarlyLate, …)` — appends ✅/⚠️/❌ glyph
-  after the event link; hover shows a tooltip via `showYearTooltip`.
-  Also appends a `bb-event-type` span showing the event type in grey italics.
-  Returns the inserted `.bb-glyph` span, so a further glyph (below) can be
-  inserted right after it via `glyphSpan.after(...)`.
+- `addYearGlyph(element, nameMatch, isEarlyLate, …)` — appends the glyph
+  after the event link (`makeGlyphSpan('✅')` / `makeVariantInfoGlyphSpan()`
+  for `isEarlyLate` / `makeGlyphSpan('❌')`); hover shows a tooltip via
+  `showYearTooltip`. Also appends a `bb-event-type` span showing the event
+  type in grey italics. Returns the inserted glyph span (`.bb-glyph` or
+  `.bb-variant-info`), so a further glyph (below) can be inserted right after
+  it via `glyphSpan.after(...)`.
+  `isEarlyLate` renders green `.bb-variant-info` (text-presentation `⚠︎`, see
+  UTILITIES.md) instead of orange `.bb-glyph` ⚠️ — deliberately not classed
+  `bb-glyph`, so `isYearMismatch`'s generic `.bb-glyph` text scan
+  (`#bb-mismatch-toggle`'s count/filter) no longer treats it as a mismatch.
+  It was already excluded from the `.bb-event-title-warn` aggregated tooltip
+  (`collectSectionWarnings` never queried `.bb-glyph` — this glyph's tooltip
+  is wired via `mouseenter`, not `dataset.msg`); `annotateEventTitleWithWarnings`'s
+  sibling-walk was extended to recognize `.bb-variant-info` too, so a
+  genuinely different, coexisting issue on the same event still inserts its
+  aggregated warning glyph after (not before) the variant glyph.
 
 ### 1a. Onstage companion page (tags-per-page cap spillover)
 
@@ -114,19 +126,40 @@ Fetches the DETAIL page with `fetchPage(url)`, then runs in sequence:
 - Extracts the raw venue part from `rawDetailName` with
   `/^\d{4}-\d{2}-\d{2}\s*(?:-\s*)?(.*)/s` (Title Case, no normalization).
 - Compares `venueName === detailVenuePart` (case-sensitive, no article rewrite).
-- `renderVenueInfo(lastScheduledDiv || anchorEl, venueHref, venueName, match, detailVenuePart, venuePrefix)`:
+- When not an exact match, `findVenueDetailExtra(venueName, detailVenuePart)`
+  checks two cases, in order: (1) a trailing show-variant suffix —
+  `"(Early)"`/`"(Late)"`/`"(Afternoon)"`/`"(Evening)"` — that VENUE page
+  titles never carry (e.g. `"D'Scene, South Amboy, NJ (Late)"` vs. the venue
+  page's own `"D'Scene, South Amboy, NJ"`); (2) an extra descriptive
+  venue-detail segment (e.g. `"University Of Michigan"`) — reuses
+  `parseLocationParts`'s existing venue-detail extraction (see TAGS.md's
+  "Event-name / venue-name location tag check"), so it's the same value the
+  tag check computes. Only case (2) has a matching tag-report suppression
+  (see TAGS.md) — case (1)'s suffix is already stripped before
+  `parseEventNameLocation` ever runs, so no spurious tag was ever deduced for
+  it.
+- `renderVenueInfo(lastScheduledDiv || anchorEl, venueHref, venueName, match, detailVenuePart, venuePrefix, extra)`:
   - If `afterEl` is a `.bb-scheduled` div, appends inline:
-    `Scheduled: … at <strong><em><a>Venue</a></em></strong> ✅/⚠️`.
+    `Scheduled: … at <strong><em><a>Venue</a></em></strong> ✅/⚠️/⚠︎`.
   - Otherwise creates a new `.bb-scheduled` div after `afterEl`.
   - A `venuePrefix` (`"Recording session"` / `"No gig"`) is prepended for
     non-gig event types.
   - The `<strong>` around the venue name is at `font-size: 1.1em`.
+  - Three glyph states: exact match → `.bb-glyph` ✅; extra-only difference →
+    `.bb-venue-info` (green, text-presentation `⚠︎` so it's actually
+    colorable — see UTILITIES.md), deliberately excluded from `isYearMismatch`
+    / `collectSectionWarnings` / `#bb-mismatch-toggle` counting since it's
+    informational, not a real mismatch; anything else → `.bb-glyph
+    bb-venue-warn` ⚠️ (the pre-existing real-mismatch path).
 - The fetched `venueDoc` is saved and passed to `addVenueTabButtons` (no
   extra network request).
+- `venueDetailExtra` is also forwarded to `wireIconHandlers` → `addTagsButton`
+  so the YEAR page's nested "Tags" button panel suppresses the same
+  now-informational "Venue detail" missing-tag entry (see TAGS.md).
 
 ### 4. Clickable icons
 
-`wireIconHandlers(eventLink, doc, onstageResult)` — see
+`wireIconHandlers(eventLink, doc, onstageResult, venueDetailExtra)` — see
 [ICONS_PANELS.md](ICONS_PANELS.md). `onstageResult` (from step 1a) is passed
 through to `addTagsButton` so its panel includes the onstage-companion tags.
 

@@ -29,12 +29,18 @@ c. **Find event link** on YEAR page: locates the `<a href>` whose
    suffix mismatches (e.g. anchor `150571a` vs URL without suffix).
 
 d. **Event name check** — compare `yearNameUpper` with `normalizedDetailName`.
-   Same early/late variant logic as on YEAR pages.
+   Same early/late variant logic as on YEAR pages (see YEAR_PAGE.md).
    `addDetailTitleAnnotation(eventType, yearNameUpper, normalizedDetailName, rawDetailName, nameMatch, isEarlyLate)`:
    - Appends a `bb-event-type-detail` span (`(eventType)` in small grey italic)
      to `#page-title h1`.
-   - Appends a ✅/⚠️/❌ glyph; hover shows `showYearTooltip` with all four
-     name variants (YEAR, raw DETAIL, normalized DETAIL, diff).
+   - Appends the glyph (`makeGlyphSpan('✅')` / `makeVariantInfoGlyphSpan()`
+     for `isEarlyLate` / `makeGlyphSpan('❌')`); hover shows `showYearTooltip`
+     with all four name variants (YEAR, raw DETAIL, normalized DETAIL, diff).
+     `isEarlyLate` renders green, informational `.bb-variant-info` instead of
+     orange `.bb-glyph` ⚠️ — excluded from `collectPageWarnings`'s
+     `.bb-page-title-warn` aggregation (never had a `dataset.msg` in the
+     first place) and, being a distinct class from `.bb-glyph`, from any
+     generic `.bb-glyph`-based mismatch scan.
 
 e. **Onstage companion page fetch** — `fetchOnstageCompanionTags(path, eventType, tabMap)`:
    for "gig"/"rehearsal" pages with an "On Stage" tab, fetches the companion
@@ -42,10 +48,22 @@ e. **Onstage companion page fetch** — `fetchOnstageCompanionTags(path, eventTy
    tags for these events only exist there) and returns its `.page-tags` as a
    `Set`. Returns `null` when not applicable or the fetch fails.
 
-f. **Tag annotation** — `annotateDetailPageTags(tabMap, eventDate, eventType,
-   detailSections, rawDetailName, onstageResult, hasHelp)`. Merges any
-   onstage-only tags into its internal tag set before running all
-   consistency checks (see [TAGS.md](TAGS.md)), and returns
+f. **Venue name check (computed early)** — `findVenueLink(document)` → fetch
+   venue page → compare venue name with detail venue part. Deliberately runs
+   here, *before* the tag annotation step below (rather than after the anchor
+   check, where the actual glyph is still rendered — see step h), so its
+   `venueDetailExtra` result (from `findVenueDetailExtra(venueName,
+   detailVenuePart)` — non-null when the only difference from the VENUE page
+   title is a trailing show-variant suffix like "(Late)", or an extra
+   descriptive venue-detail segment, e.g. "University Of Michigan") can be
+   threaded into `annotateDetailPageTags` in time to
+   suppress the corresponding "Venue detail" missing-tag entry (see TAGS.md's
+   "Event-name / venue-name location tag check").
+
+g. **Tag annotation** — `annotateDetailPageTags(tabMap, eventDate, eventType,
+   detailSections, rawDetailName, onstageResult, hasHelp, hasFeatured,
+   venueDetailExtra)`. Merges any onstage-only tags into its internal tag set
+   before running all consistency checks (see [TAGS.md](TAGS.md)), and returns
    `{ additionalTags, onstageUrl }`. When `additionalTags.length > 0`,
    `addOnstageTagsGlyph(additionalTags, onstageUrl)` appends a 🏷️ glyph to
    `#page-title h1` with a rich tooltip listing the extra tags and linking
@@ -53,17 +71,22 @@ f. **Tag annotation** — `annotateDetailPageTags(tabMap, eventDate, eventType,
    per-first-letter lines (`groupTagsIntoLines` — see TAGS.md), regardless
    of whether any consistency issues were found.
 
-g. **Anchor consistency check** — find `<a href="/YEAR#FRAGMENT">Info & Setlist</a>`
+h. **Anchor consistency check** — find `<a href="/YEAR#FRAGMENT">Info & Setlist</a>`
    on the current page via `findInfoSetlistLink(document)`. Compare `FRAGMENT`
    with `yearAnchorName`. See [ANCHORS.md](ANCHORS.md).
 
-h. **Venue name check** — `findVenueLink(document)` → fetch venue page →
-   compare venue name with detail venue part.
-   `addVenueGlyphDetail(venueLink, venueName, venueMatch, detailVenuePart)`:
-   - ✅ (`bb-anchor-match`) or ⚠️ (`bb-venue-warn`) appended after venue link.
+i. **Venue glyph** — reuses the venue check already computed in step f (no
+   re-fetch); only renders the glyph, in its original DOM position (after the
+   anchor check).
+   `addVenueGlyphDetail(venueLink, venueName, venueMatch, detailVenuePart, venueDetailExtra)`:
+   - Exact match → ✅ (`bb-anchor-match`).
+   - Extra-descriptive-segment-only difference → green, informational
+     `.bb-venue-info` (text-presentation `⚠︎`, not the `⚠️` emoji — see
+     UTILITIES.md), excluded from mismatch counting.
+   - Any other difference → ⚠️ (`bb-venue-warn`), the pre-existing real-mismatch path.
    - Comparison is case-sensitive; `(The)` article rewrite NOT applied.
 
-i. **Setlist comparison** — when `hasSetlist` is true:
+j. **Setlist comparison** — when `hasSetlist` is true:
    - `collectSetlistElements(eventLink, nextAnchor, yearContent)` — gathers
      YEAR page setlist elements.
    - `parseYearSetlist(setlistEls)` — parses into `Section[]`.
@@ -137,6 +160,8 @@ called. It collects all warning messages from the live DOM via
 - `.bb-tag-missing`, `.bb-tag-spurious`, `.bb-anchor-warn`, `.bb-venue-warn`,
   `.bb-para-warn` → `dataset.msg || title`
 - `.yui-nav em span[data-msg]` → `dataset.msg` (covers `bb-setlist-tab-ann`)
+- `.bb-venue-info` is deliberately *not* in this list — it's informational
+  (see step i above), not a real issue.
 
 When any messages exist, appends `<span class="bb-page-title-warn"> ⚠️</span>`
 to `#page-title`. Hovering shows a numbered rich tooltip listing every issue in

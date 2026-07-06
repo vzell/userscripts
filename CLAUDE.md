@@ -67,7 +67,7 @@ immediately after `#page-title`.
 
 | Page | Button order |
 |------|-------------|
-| HOME | ▶ Fetch All Year Pages \| ▶ Fetch All Year-List Pages \| ⚡ Mismatches \| 💾 Save \| 📂 Load \| ⌨️ Shortcuts |
+| HOME | ▶ Fetch All Year Pages \| ▶ Fetch All Year-List Pages \| ⚡ Mismatches \| ⇄ Original Page \| 💾 Save \| 📂 Load \| ⌨️ Shortcuts |
 | YEAR | ▶ Start \| 💾 Save \| 📂 Load \| ⇄ Original Page \| ⚡ Mismatches \| Hide Relations \| ⌨️ Shortcuts \| [SmartTable] |
 | LIST | ⇄ Original Page \| ⚡ Mismatches \| 💾 Save \| 📂 Load \| ⌨️ Shortcuts |
 | DETAIL | 💾 Save \| 📂 Load (⇄ Original Page prepended after processing) |
@@ -103,6 +103,14 @@ YEAR page event anchors, DETAIL page "Info & Setlist" anchor, LIST page event li
 `GM_xmlhttpRequest`, `GM_addStyle`, `GM_info`, `GM_setValue`, `GM_getValue`, `GM_registerMenuCommand`
 (the last four added in v2.96 to wire in `VZ_MBLibrary` for settings/changelog/logging). Do not add
 further grants without explicit discussion.
+
+### `@connect` declarations
+
+`brucebase.wikidot.com`, `raw.githubusercontent.com` (the latter added in v2.99 — required for
+`GM_xmlhttpRequest` requests to succeed; a missing `@connect` entry makes Tampermonkey silently
+refuse the request rather than erroring at the network layer). Any new remote host used via
+`GM_xmlhttpRequest`/`Lib.fetchCachedText` needs a matching `@connect` line or the request is refused
+outright with "This domain is not a part of the @connect list".
 
 ### VZ_MBLibrary wiring
 

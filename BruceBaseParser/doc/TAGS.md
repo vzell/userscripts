@@ -362,6 +362,32 @@ corresponding tag. Checked independently of `isManagedTag`/`isManagedVenueTag`
 - `annotateVenuePageTags` (live VENUE page) / `addVenueTagsButton` (nested
   "Tags" button) via `checkVenuePageLocationTags(venueTitle, actualTags)`.
 
+**Venue-detail suppression** (`findVenueDetailExtra`, see also VENUE.md-style
+notes in the source near `renderVenueInfo`): when a DETAIL page's venue
+string differs from the actual VENUE page title *only* by an extra
+descriptive venue-detail segment (e.g. `"Crisler Arena, University Of
+Michigan, Ann Arbor, MI"` vs. the venue page's own `"Crisler Arena, Ann
+Arbor, MI"`), the resulting `"Venue detail: …"` entry from
+`checkEventNameLocationTags` is filtered out of `unmatchedLocations` in both
+`annotateDetailPageTags` and `addTagsButton` (via a `venueDetailExtra`
+parameter threaded from the venue-name check) — no missing-tag report for a
+tag that was never expected to exist. This does *not* apply to
+`checkVenuePageLocationTags` — venue detail never appears in a VENUE page's
+own title (see `parseVenuePageLocation` below), so there's nothing to
+suppress there. See YEAR_PAGE.md / DETAIL_PAGE.md for the matching
+`bb-venue-info` (green, informational) glyph this same detection feeds.
+
+`findVenueDetailExtra` also detects a second, unrelated case that feeds the
+same glyph but needs *no* tag-report suppression: a trailing show-variant
+suffix (`"(Early)"`/`"(Late)"`/`"(Afternoon)"`/`"(Evening)"`) on the DETAIL
+page's venue string that the VENUE page naturally never has (e.g.
+`"D'Scene, South Amboy, NJ (Late)"` vs. `"D'Scene, South Amboy, NJ"`).
+Because `parseEventNameLocation` already strips this exact suffix (see
+below) before ever calling `parseLocationParts`, no spurious tag is derived
+from it in the first place — `venueDetailExtra` is non-null here purely for
+the glyph, and the `r.label === \`Venue detail: ${venueDetailExtra}\`` filter
+above never matches it (no `"Venue detail: (Late)"` entry can exist).
+
 Both delegate to the shared `checkParsedLocationTags(loc, actualTags)`, fed
 by one of two title parsers:
 - `parseEventNameLocation(pageTitle)` — DETAIL-page title, e.g. `"2026-04-18

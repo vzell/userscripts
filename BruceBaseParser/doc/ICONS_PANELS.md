@@ -184,7 +184,11 @@ messages from within the event's `bb-section-processed` via
 with the same rich tooltip format.
 
 `renderVenueInfo` sets `glyph.dataset.msg` on the venue warning span so it is
-visible to both collectors.
+visible to both collectors. Its informational sibling class, `.bb-venue-info`
+(see YEAR_PAGE.md / DETAIL_PAGE.md / TAGS.md), is deliberately *not* queried
+by either collector — it's not a real mismatch, just a note that the DETAIL
+page's title has an extra descriptive venue-detail segment the VENUE page
+doesn't.
 
 ---
 
@@ -211,6 +215,8 @@ At the end, `addVenueTagsButton(venueDoc, venueName, section, row)` appends a
 |---|---|
 | `.bb-scheduled` | Monospace timing block below event title (0.9em, #555) |
 | `.bb-venue-warn` | Orange ⚠️ glyph for venue name mismatches |
+| `.bb-venue-info` | Green, informational glyph (text-presentation `⚠︎`) when the only difference from the VENUE page title is an extra descriptive venue-detail segment or show-variant suffix — not counted as a mismatch |
+| `.bb-variant-info` | Green, informational glyph (text-presentation `⚠︎`) for the isEarlyLate case (event name differs from the YEAR page only by a trailing show-variant suffix) — not counted as a mismatch |
 | `img.bb-icon-active` | Blue outline on a currently-open icon |
 | `.bb-icon-panel` | Inline collapsible panel container |
 | `.bb-icon-panel-header` | Panel title + ✕ button row |

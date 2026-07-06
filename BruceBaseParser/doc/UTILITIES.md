@@ -60,8 +60,9 @@ hardcoded, because tab positions vary across event types.
 | Function | Purpose |
 |---|---|
 | `findVenueLink(doc)` | Returns first `<a href="/venue:…">` in `doc`, or `null` |
-| `renderVenueInfo(afterEl, venueHref, venueName, match, detailVenuePart, venuePrefix)` | Appends venue info to a `.bb-scheduled` div or creates a new one |
-| `addVenueGlyphDetail(linkEl, venueName, match, detailVenuePart)` | Appends ✅/⚠️ after venue link on DETAIL page |
+| `findVenueDetailExtra(venueName, detailVenuePart)` | Returns the extra text found when that's the *only* difference from an exact match, else `null`. Checks two cases: (1) a trailing "(Early)"/"(Late)"/"(Afternoon)"/"(Evening)" show-variant suffix, e.g. `"(Late)"`; (2) a descriptive venue-detail segment, e.g. `"University Of Michigan"` (reuses `parseLocationParts`, TAGS.md) |
+| `renderVenueInfo(afterEl, venueHref, venueName, match, detailVenuePart, venuePrefix, extra)` | Appends venue info to a `.bb-scheduled` div or creates a new one; `extra` (from `findVenueDetailExtra`) selects the green informational glyph instead of the orange mismatch one |
+| `addVenueGlyphDetail(linkEl, venueName, match, detailVenuePart, extra)` | Appends ✅ / informational `⚠︎` / ⚠️ after venue link on DETAIL page |
 | `computeExpectedVenueTags(venueName)` | Returns `Set` containing `"venue"` and first letter of `venueName` (lowercased) |
 | `isManagedVenueTag(tag)` | Returns true for `"venue"` and single `[a-z]` tags |
 
@@ -128,9 +129,10 @@ both on the same element, since both firing at once produces a duplicate
 | Function | Purpose |
 |---|---|
 | `makeGlyphSpan(char)` | Creates `<span class="bb-glyph"> char</span>` |
+| `makeVariantInfoGlyphSpan()` | Creates `<span class="bb-variant-info"> ⚠︎</span>` (text-presentation, colorable green) for the isEarlyLate case — not `.bb-glyph`, so mismatch scans skip it |
 | `makeEventTypeSpan(type)` | Creates `<span class="bb-event-type"> (type)</span>` — grey italic suffix on YEAR page event links |
-| `addYearGlyph(element, nameMatch, isEarlyLate, yearName, normalizedDetailName, rawDetailName, eventType, eventAlias, anchorName)` | Appends event-type span + ✅/⚠️/❌ glyph after event link on YEAR page |
-| `addDetailTitleAnnotation(…)` | Appends `bb-event-type-detail` + glyph to `#page-title h1` on DETAIL page |
+| `addYearGlyph(element, nameMatch, isEarlyLate, yearName, normalizedDetailName, rawDetailName, eventType, eventAlias, anchorName)` | Appends event-type span + glyph (✅ / green `⚠︎` for isEarlyLate / ❌) after event link on YEAR page |
+| `addDetailTitleAnnotation(…)` | Appends `bb-event-type-detail` + glyph (✅ / green `⚠︎` for isEarlyLate / ❌) to `#page-title h1` on DETAIL page |
 | `addWarningGlyph(element, msg, eventType?)` | Appends ⚠️ glyph (fetch error or unknown type fallback) |
 | `addUnknownGlyph(element, eventType, url)` | Appends ❓ glyph for unrecognised event type URLs |
 | `addListGlyph(element, match, strippedName, rawName, yearName, anchor)` | Appends ✅/❌ glyph on LIST pages |

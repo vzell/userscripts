@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.98
+// @version      3.02
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -26,6 +26,7 @@
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
 // @connect      brucebase.wikidot.com
+// @connect      raw.githubusercontent.com
 // @license      MIT
 // ==/UserScript==
 
@@ -1105,13 +1106,19 @@
     filterBtn.title = 'Filter to show only events or year sections with detected issues';
     filterBtn.disabled = true;
 
+    const homeOriginalBtn = document.createElement('button');
+    homeOriginalBtn.id = 'bb-global-toggle';
+    homeOriginalBtn.className = 'bb-toggle-btn';
+    homeOriginalBtn.textContent = '⇄ Original Page';
+    homeOriginalBtn.title = 'Toggle between the original page title and the aggregated results view';
+
     const btnContainer = document.createElement('div');
     btnContainer.id = 'bb-btn-container';
 
     const [homeSaveBtn, homeLoadBtn] = makeSaveLoadBtns(
       'home', () => resultsEl, () => ''
     );
-    btnContainer.append(fetchBtn, overviewBtn, filterBtn, homeSaveBtn, homeLoadBtn);
+    btnContainer.append(fetchBtn, overviewBtn, filterBtn, homeOriginalBtn, homeSaveBtn, homeLoadBtn);
     if (Lib.settings.bbp_enable_keyboard_shortcuts) addShortcutsHelpButton(btnContainer);
 
     // ── Progress indicator (same structure as YEAR page) ─────────────────────
@@ -1142,6 +1149,16 @@
     const resultsEl = document.createElement('div');
     resultsEl.id = 'bb-home-results';
     stickyBar.after(resultsEl);
+
+    // ── "⇄ Original Page" toggle — shows the original page title, hides results ──
+    let homeShowingOriginal = false;
+    homeOriginalBtn.addEventListener('click', () => {
+      homeShowingOriginal = !homeShowingOriginal;
+      resultsEl.style.display = homeShowingOriginal ? 'none' : '';
+      pageTitle.style.display = homeShowingOriginal ? ''     : 'none';
+      homeOriginalBtn.textContent = homeShowingOriginal ? '⇄ Processed Page' : '⇄ Original Page';
+      log(`HOME: ${homeShowingOriginal ? 'showing' : 'hiding'} original page via toggle`);
+    });
 
     // Measure heights for sticky positioning (mirrors setupStickyBar logic).
     const bbHeader = document.getElementById('header');
@@ -3632,6 +3649,7 @@
       let _venueTabDoc  = null;
       let _venueTabHref = '';
       let _venueTabName = '';
+      let venueDetailExtra = null; // non-null: extra descriptive segment, not a real mismatch
       if (venueLink) {
         try {
           const venueHref  = venueLink.getAttribute('href');
@@ -3641,11 +3659,12 @@
             const rawVenuePartM   = rawDetailName.match(/^\d{4}-\d{2}-\d{2}\s*(?:-\s*)?(.*)/s);
             const detailVenuePart = rawVenuePartM ? rawVenuePartM[1].trim() : '';
             const match           = !!detailVenuePart && venueName === detailVenuePart;
+            if (!match) venueDetailExtra = findVenueDetailExtra(venueName, detailVenuePart);
             const anchorEl        = element.closest('p') || element.parentNode;
             const venuePrefix = eventType === 'recording' ? 'Recording session'
                                             : eventType === 'nogig'     ? 'No gig'
                                             : '';
-            renderVenueInfo(lastScheduledDiv || anchorEl, venueHref, venueName, match, detailVenuePart, venuePrefix);
+            renderVenueInfo(lastScheduledDiv || anchorEl, venueHref, venueName, match, detailVenuePart, venuePrefix, venueDetailExtra);
             _venueTabDoc  = venueDoc;
             _venueTabHref = venueHref;
             _venueTabName = venueName;
@@ -3656,7 +3675,7 @@
       }
 
       // ── Clickable icons ──────────────────────────────────────────────────
-      wireIconHandlers(element, doc, onstageResult);
+      wireIconHandlers(element, doc, onstageResult, venueDetailExtra);
 
       // ── Venue tab buttons ─────────────────────────────────────────────────
       if (_venueTabDoc) {
@@ -3971,8 +3990,33 @@
       const detailDateM  = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
       const detailHasHelp = eventHasHelpIcon(eventLink, nextAnchor, yearContent);
       const detailHasFeatured = eventHasFeaturedIcon(eventLink, nextAnchor, yearContent);
+
+      // ── Venue name check on DETAIL page ────────────────────────────────────
+      // Computed here (before annotateDetailPageTags) so venueDetailExtra can
+      // suppress a spurious "Venue detail" missing-tag report there; the glyph
+      // itself is still rendered later, in its original position after the
+      // anchor consistency check.
+      const detailVenueLink = findVenueLink(document);
+      let detailVenueName = '', detailVenueMatch = false, detailVenuePart = '', venueDetailExtra = null;
+      if (detailVenueLink) {
+        try {
+          const venueHref = detailVenueLink.getAttribute('href');
+          const venueDoc  = await fetchPage(`${location.protocol}//${location.host}${venueHref}`);
+          detailVenueName = venueDoc.querySelector('#page-title')?.textContent.trim() ?? '';
+          if (detailVenueName) {
+            const rawVenuePartM = rawDetailName.match(/^\d{4}-\d{2}-\d{2}\s*(?:-\s*)?(.*)/s);
+            detailVenuePart = rawVenuePartM ? rawVenuePartM[1].trim() : '';
+            detailVenueMatch = !!detailVenuePart && detailVenueName === detailVenuePart;
+            if (!detailVenueMatch) venueDetailExtra = findVenueDetailExtra(detailVenueName, detailVenuePart);
+            log(`  Venue: "${detailVenueName}" ${detailVenueMatch ? '✅' : venueDetailExtra ? '⚠️(info)' : '⚠️'} vs detail "${detailVenuePart}"`);
+          }
+        } catch (e) {
+          logWarn(`  Venue page fetch failed: ${e.message}`);
+        }
+      }
+
       if (detailDateM) {
-        const tagResult = annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType, detailSections, rawDetailName, onstageResult, detailHasHelp, detailHasFeatured);
+        const tagResult = annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType, detailSections, rawDetailName, onstageResult, detailHasHelp, detailHasFeatured, venueDetailExtra);
         if (tagResult.additionalTags.length > 0) {
           addOnstageTagsGlyph(tagResult.additionalTags, tagResult.onstageUrl);
         }
@@ -4042,23 +4086,10 @@
         }
       }
 
-      // ── Venue name check on DETAIL page ────────────────────────────────────
-      const detailVenueLink = findVenueLink(document);
-      if (detailVenueLink) {
-        try {
-          const venueHref  = detailVenueLink.getAttribute('href');
-          const venueDoc   = await fetchPage(`${location.protocol}//${location.host}${venueHref}`);
-          const venueName  = venueDoc.querySelector('#page-title')?.textContent.trim() ?? '';
-          if (venueName) {
-            const rawVenuePartM   = rawDetailName.match(/^\d{4}-\d{2}-\d{2}\s*(?:-\s*)?(.*)/s);
-            const detailVenuePart = rawVenuePartM ? rawVenuePartM[1].trim() : '';
-            const venueMatch      = !!detailVenuePart && venueName === detailVenuePart;
-            log(`  Venue: "${venueName}" ${venueMatch ? '✅' : '⚠️'} vs detail "${detailVenuePart}"`);
-            addVenueGlyphDetail(detailVenueLink, venueName, venueMatch, detailVenuePart);
-          }
-        } catch (e) {
-          logWarn(`  Venue page fetch failed: ${e.message}`);
-        }
+      // ── Venue glyph on DETAIL page ─────────────────────────────────────────
+      // Uses the venue check computed earlier (before annotateDetailPageTags).
+      if (detailVenueLink && detailVenueName) {
+        addVenueGlyphDetail(detailVenueLink, detailVenueName, detailVenueMatch, detailVenuePart, venueDetailExtra);
       }
 
       // Setlist comparison — only when the detail page actually has a setlist.
@@ -5288,14 +5319,14 @@
   // ── DOM mutation ──────────────────────────────────────────────────────────
 
   /**
-   * @returns {HTMLElement} the inserted `.bb-glyph` match/mismatch glyph span,
-   *   so callers can insert further glyphs (e.g. the onstage-tags glyph)
+   * @returns {HTMLElement} the inserted match/mismatch/variant glyph span
+   *   (`.bb-glyph` or, for the isEarlyLate case, `.bb-variant-info`), so
+   *   callers can insert further glyphs (e.g. the onstage-tags glyph)
    *   right after it via `glyphSpan.after(...)`.
    */
   function addYearGlyph(element, match, isEarlyLate, yearName, normalizedDetailName, rawDetailName, eventType, alias, anchorName = null) {
-    const glyph     = match ? '✅' : isEarlyLate ? '⚠️' : '❌';
     const typeSpan  = makeEventTypeSpan(eventType);
-    const glyphSpan = makeGlyphSpan(glyph);
+    const glyphSpan = match ? makeGlyphSpan('✅') : isEarlyLate ? makeVariantInfoGlyphSpan() : makeGlyphSpan('❌');
     const nodes     = alias ? [typeSpan, glyphSpan, makeAliasSpan(alias)] : [typeSpan, glyphSpan];
     element.after(...nodes);
     addCollapseToggle(element.parentElement);
@@ -6054,8 +6085,14 @@
    * @param {string}      venueName      Text from the venue page's #page-title
    * @param {boolean}     match          True when venueName matches DETAIL event-name venue part
    * @param {string}      detailVenuePart Uppercase venue part from normalizedDetailName
+   * @param {string}      [prefix]       Optional text prepended to a newly-created container
+   * @param {string|null} [extra]        When match is false, a non-null value from
+   *   findVenueDetailExtra means the only difference is expected extra text (a show-variant
+   *   suffix like "(Late)", or a descriptive "venue detail" segment) — rendered as an
+   *   informational green glyph instead of an orange mismatch, and excluded from mismatch
+   *   counting / tooltips (see bb-venue-info).
    */
-  function renderVenueInfo(afterEl, venueHref, venueName, match, detailVenuePart, prefix = '') {
+  function renderVenueInfo(afterEl, venueHref, venueName, match, detailVenuePart, prefix = '', extra = null) {
     const isScheduled = afterEl.classList && afterEl.classList.contains('bb-scheduled');
     let container;
     if (isScheduled) {
@@ -6081,12 +6118,23 @@
     strong.appendChild(em);
     container.appendChild(strong);
 
-    const msg = match
-      ? `Venue match ✅\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`
-      : `Venue mismatch ⚠️\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
+    let msg, glyphClass, glyphChar;
+    if (match) {
+      msg = `Venue match ✅\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
+      glyphClass = 'bb-glyph';
+      glyphChar  = ' ✅';
+    } else if (extra) {
+      msg = `Extra text "${extra}" on DETAIL page not present on VENUE page — informational only, not a mismatch\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
+      glyphClass = 'bb-venue-info';
+      glyphChar  = ' ⚠︎'; // text-presentation warning sign (colorable via CSS, unlike the emoji form)
+    } else {
+      msg = `Venue mismatch ⚠️\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
+      glyphClass = 'bb-glyph bb-venue-warn';
+      glyphChar  = ' ⚠️';
+    }
     const glyph = document.createElement('span');
-    glyph.className = match ? 'bb-glyph' : 'bb-glyph bb-venue-warn';
-    glyph.textContent = match ? ' ✅' : ' ⚠️';
+    glyph.className = glyphClass;
+    glyph.textContent = glyphChar;
     glyph.style.cursor = 'help';
     glyph.dataset.msg = msg;
     glyph.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
@@ -7107,6 +7155,42 @@
   }
 
   /**
+   * Detects whether a DETAIL page's venue-part-of-title differs from the
+   * actual VENUE page title only by some extra descriptive text that's
+   * expected to legitimately differ, not a real mismatch. Two cases:
+   *
+   * 1. A trailing show-variant suffix — "(Early)"/"(Late)"/"(Afternoon)"/
+   *    "(Evening)" — used to disambiguate multiple same-day shows (e.g.
+   *    "D'Scene, South Amboy, NJ (Late)" vs. the venue page's own "D'Scene,
+   *    South Amboy, NJ"). VENUE page titles never carry this suffix.
+   * 2. An extra descriptive "venue detail" segment inserted between the
+   *    venue name and city/state/country — e.g. "University Of Michigan"
+   *    in "Crisler Arena, University Of Michigan, Ann Arbor, MI" vs. the
+   *    venue page's own "Crisler Arena, Ann Arbor, MI". Reuses
+   *    parseLocationParts's venueDetail extraction so this stays in
+   *    lock-step with the venue-detail tag check (checkParsedLocationTags)
+   *    — same derivation, same value.
+   * @param {string} venueName       VENUE page's own #page-title text.
+   * @param {string} detailVenuePart Venue portion of the DETAIL page's title.
+   * @returns {string|null} The extra text found (the suffix or the venue-detail
+   *   segment), else null.
+   */
+  function findVenueDetailExtra(venueName, detailVenuePart) {
+    const suffixM = detailVenuePart.match(/\s*(\((?:Early|Late|Afternoon|Evening)\))\s*$/i);
+    if (suffixM) {
+      const withoutSuffix = detailVenuePart.slice(0, suffixM.index).trim();
+      if (withoutSuffix === venueName) return suffixM[1];
+    }
+
+    const loc = parseLocationParts(detailVenuePart.split(',').map(s => s.trim()).filter(Boolean));
+    if (!loc || !loc.venueDetail) return null;
+    const tail = loc.stateAbbr || loc.country;
+    if (!tail) return null;
+    const withoutDetail = `${loc.venueName}, ${loc.city}, ${tail}`;
+    return withoutDetail === venueName ? loc.venueDetail : null;
+  }
+
+  /**
    * Checks a single venue/detail/city name against its expected tag, honoring
    * VENUE_TAG_ALIAS_OVERRIDES (including explicit `null` = "not expected").
    * When `cityHint` is given and `name` begins with it (e.g. venue "Ocean
@@ -7344,8 +7428,13 @@
    * @param {Map<string,number>} tabMap
    * @param {HTMLElement}        section   - .bb-section-processed element.
    * @param {HTMLElement}        eventLink - The event <a> element on the YEAR page.
+   * @param {string|null}        [venueDetailExtra] - Non-null when the venue check found
+   *   this event's venue-detail segment (e.g. "University Of Michigan") is the only
+   *   difference from the VENUE page title (see findVenueDetailExtra) — suppresses the
+   *   corresponding "Venue detail" entry from the missing-tag report below, since it's
+   *   informational rather than a genuinely expected tag.
    */
-  function addTagsButton(doc, tabMap, section, eventLink, onstageResult = null) {
+  function addTagsButton(doc, tabMap, section, eventLink, onstageResult = null, venueDetailExtra = null) {
     const tagsEl = doc.querySelector('.page-tags');
     if (!tagsEl) return;
     const tagLinks = [...tagsEl.querySelectorAll('a[href]')];
@@ -7389,7 +7478,9 @@
     const rawEventName          = extractDetailEventName(doc, href);
     const locationResults       = checkEventNameLocationTags(rawEventName, actualTags);
     const matchedLocationsByTag = new Map(locationResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
-    const unmatchedLocations    = locationResults.filter(r => !r.matchedTag);
+    const unmatchedLocations    = locationResults.filter(r =>
+      !r.matchedTag && !(venueDetailExtra && r.label === `Venue detail: ${venueDetailExtra}`)
+    );
 
     // "On Stage"/"In Studio"/"On Audio" tab → relation tag check: the tab's
     // fixed tag (if any — "onstage"/"studio") plus every relation name
@@ -8316,9 +8407,13 @@
    *   "Featured" icon for this event (see eventHasFeaturedIcon). ORed with a check
    *   of the live DETAIL page's own content (see hasFeaturedIcon). When either is
    *   true, "featured" is always expected as a tag.
+   * @param {string|null} [venueDetailExtra] - Non-null when the venue check found this
+   *   event's venue-detail segment is the only difference from the VENUE page title
+   *   (see findVenueDetailExtra) — suppresses the corresponding "Venue detail" entry
+   *   from the missing-tag report below, since it's informational, not a real gap.
    * @returns {{additionalTags: string[], onstageUrl: string|null}} Tags found only on the onstage companion page, for addOnstageTagsGlyph.
    */
-  function annotateDetailPageTags(tabMap, eventDate, eventType, detailSections, rawDetailName, onstageResult = null, hasHelp = false, hasFeatured = false) {
+  function annotateDetailPageTags(tabMap, eventDate, eventType, detailSections, rawDetailName, onstageResult = null, hasHelp = false, hasFeatured = false, venueDetailExtra = null) {
     const tagsContainer = document.querySelector('.page-tags');
     if (!tagsContainer) return { additionalTags: [], onstageUrl: null };
     hasHelp = hasHelp || hasHelpIcon(document);
@@ -8411,7 +8506,9 @@
     // title should each have a corresponding tag (exact match or manual override).
     const locationResults    = checkEventNameLocationTags(rawDetailName, actualTags);
     const matchedLocations   = locationResults.filter(r => r.matchedTag);
-    const unmatchedLocations = locationResults.filter(r => !r.matchedTag);
+    const unmatchedLocations = locationResults.filter(r =>
+      !r.matchedTag && !(venueDetailExtra && r.label === `Venue detail: ${venueDetailExtra}`)
+    );
     for (const r of matchedLocations) {
       const a = tagToAnchor.get(r.matchedTag);
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches event ${r.label}`);
@@ -9184,7 +9281,7 @@
     icon.after(warn);
   }
 
-  function wireIconHandlers(eventLink, doc, onstageResult = null) {
+  function wireIconHandlers(eventLink, doc, onstageResult = null, venueDetailExtra = null) {
     const section = eventLink.closest('.bb-section-processed');
     if (!section) return;
     const tabMap = buildTabMap(doc);
@@ -9247,7 +9344,7 @@
       }
     }
     addEventTabButtons(doc, tabMap, section);
-    addTagsButton(doc, tabMap, section, eventLink, onstageResult);
+    addTagsButton(doc, tabMap, section, eventLink, onstageResult, venueDetailExtra);
   }
 
   // Returns the first <a href> on doc whose href matches INFO_SETLIST_HREF_RE
@@ -9347,19 +9444,35 @@
   }
 
   /**
-   * Appends a ✅ or ⚠️ glyph after the Venue link on the DETAIL page.
+   * Appends a ✅, ⚠️, or informational green glyph after the Venue link on
+   * the DETAIL page.
    * @param {HTMLAnchorElement} linkEl
    * @param {string} venueName      VENUE page #page-title text
    * @param {boolean} match
    * @param {string} detailVenuePart Raw venue part from the DETAIL event name
+   * @param {string|null} [extra]   Non-null when the only difference from an
+   *   exact match is expected extra text — a show-variant suffix like "(Late)" or a
+   *   descriptive "venue detail" segment (see findVenueDetailExtra) — rendered as
+   *   bb-venue-info instead of bb-venue-warn.
    */
-  function addVenueGlyphDetail(linkEl, venueName, match, detailVenuePart) {
-    const msg = match
-      ? `Venue match ✅\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`
-      : `Venue mismatch ⚠️\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
+  function addVenueGlyphDetail(linkEl, venueName, match, detailVenuePart, extra = null) {
+    let msg, spanClass, spanChar;
+    if (match) {
+      msg = `Venue match ✅\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
+      spanClass = 'bb-anchor-match';
+      spanChar  = ' ✅';
+    } else if (extra) {
+      msg = `Extra text "${extra}" on DETAIL page not present on VENUE page — informational only, not a mismatch\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
+      spanClass = 'bb-venue-info';
+      spanChar  = ' ⚠︎'; // text-presentation warning sign (colorable via CSS, unlike the emoji form)
+    } else {
+      msg = `Venue mismatch ⚠️\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
+      spanClass = 'bb-venue-warn';
+      spanChar  = ' ⚠️';
+    }
     const span = document.createElement('span');
-    span.className = match ? 'bb-anchor-match' : 'bb-venue-warn';
-    span.textContent = match ? ' ✅' : ' ⚠️';
+    span.className = spanClass;
+    span.textContent = spanChar;
     span.dataset.msg = msg;
     span.style.cursor = 'help';
     span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
@@ -9371,6 +9484,22 @@
     const span = document.createElement('span');
     span.className = 'bb-glyph';
     span.textContent = ' ' + char;
+    return span;
+  }
+
+  /**
+   * Builds the informational green glyph for an event name that differs from
+   * the YEAR page only by a trailing show-variant suffix — "(Early)"/"(Late)"/
+   * "(Afternoon)"/"(Evening)" — i.e. isEarlyLate. Deliberately not
+   * bb-glyph (isYearMismatch's generic .bb-glyph ⚠️/❌/❓ text scan would
+   * otherwise count it as a real mismatch); uses the text-presentation ⚠︎ so
+   * it's actually colorable via CSS, unlike the ⚠️ emoji form.
+   * @returns {HTMLSpanElement}
+   */
+  function makeVariantInfoGlyphSpan() {
+    const span = document.createElement('span');
+    span.className = 'bb-variant-info';
+    span.textContent = ' ⚠︎';
     return span;
   }
 
@@ -9394,8 +9523,7 @@
     typeSpan.textContent = ` (${eventType})`;
     h1.appendChild(typeSpan);
 
-    const glyph     = nameMatch ? '✅' : isEarlyLate ? '⚠️' : '❌';
-    const glyphSpan = makeGlyphSpan(glyph);
+    const glyphSpan = nameMatch ? makeGlyphSpan('✅') : isEarlyLate ? makeVariantInfoGlyphSpan() : makeGlyphSpan('❌');
     h1.appendChild(glyphSpan);
 
     const enter = e => showYearTooltip(e, yearNameUpper, normalizedDetailName, rawDetailName, eventType, nameMatch, isEarlyLate, anchorName);
@@ -9449,7 +9577,7 @@
     const resultHtml = match
       ? '<span class="bb-ok">Match ✅</span>'
       : isEarlyLate
-        ? '<span class="bb-warn">Event variant on same day ⚠️</span>'
+        ? '<span style="color:green;">Event variant on same day (informational, not a mismatch)</span>'
         : '<span class="bb-fail">Mismatch ❌</span>';
     tip.innerHTML = `
       <table class="bb-tip-table">
@@ -9534,6 +9662,7 @@
       if (sib.nodeType === Node.ELEMENT_NODE &&
           (sib.classList.contains('bb-event-type') ||
            sib.classList.contains('bb-glyph') ||
+           sib.classList.contains('bb-variant-info') ||
            sib.classList.contains('bb-event-alias'))) {
         insertAfter = sib;
       } else {
@@ -9742,13 +9871,21 @@
         padding: 0 2px;
       }
       .bb-ok   { color: #6f6; }
-      .bb-warn { color: #c80; }
       .bb-fail { color: #f66; }
       .bb-event-type        { color: #888; font-style: italic; font-weight: normal; }
       .bb-event-type-detail { font-size: 0.6em; font-weight: normal; color: #666; font-style: italic; vertical-align: middle; }
       .bb-event-alias       { font-style: italic; font-weight: bold; color: #555; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }
       .bb-event-title-warn { cursor: help; font-style: normal; margin-left: 2px; }
+      /* Informational (not a real mismatch) venue-detail glyph — see findVenueDetailExtra.
+         Deliberately excluded from .bb-glyph / .bb-venue-warn so it's never counted as an
+         issue (isYearMismatch, collectSectionWarnings/collectPageWarnings, #bb-mismatch-toggle). */
+      .bb-venue-info { color: green; cursor: help; font-style: normal; margin-left: 4px; }
+      /* Informational (not a real mismatch) event-name glyph for the isEarlyLate case
+         (name differs from the YEAR page only by a trailing show-variant suffix).
+         Deliberately excluded from .bb-glyph so it's never counted as an issue
+         (isYearMismatch, collectSectionWarnings/collectPageWarnings, #bb-mismatch-toggle). */
+      .bb-variant-info { color: green; cursor: default; font-style: normal; margin-left: 4px; }
       .bb-scheduled { font-size: 0.9em; font-family: monospace; color: #555; margin: 1px 0 3px; }
       .bb-event-heading { background: #f0f0f0; border-radius: 2px; padding: 1px 4px; }
       .bb-event-collapse-toggle { display: inline-block; cursor: pointer; user-select: none; padding: 0 10px 0 6px; color: #999; font-size: 0.9em; font-style: normal; }
@@ -9918,6 +10055,8 @@
       .bb-original-view .bb-anchor-match,
       .bb-original-view .bb-anchor-warn,
       .bb-original-view .bb-venue-warn,
+      .bb-original-view .bb-venue-info,
+      .bb-original-view .bb-variant-info,
       .bb-original-view .bb-tag-missing,
       .bb-original-view .bb-tag-spurious,
       .bb-original-view .bb-tag-onstage,

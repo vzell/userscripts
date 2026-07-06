@@ -1,5 +1,60 @@
 [
     {
+        "version": "3.02",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Downgraded the 'Event variant on same day' event-title warning (isEarlyLate — YEAR page event name vs. DETAIL page title differing only by a trailing \"(Early)\"/\"(Late)\"/\"(Afternoon)\"/\"(Evening)\" suffix, e.g. gig:1971-07-29-d-scene-south-amboy-nj-late) from an orange <span class=\"bb-glyph\"> ⚠️</span> to a new green, informational <span class=\"bb-variant-info\"> ⚠︎</span> (text-presentation warning sign, colorable via CSS unlike the ⚠️ emoji), on both the YEAR page (addYearGlyph) and the DETAIL page's own title (addDetailTitleAnnotation) — new shared makeVariantInfoGlyphSpan() helper. Deliberately not classed bb-glyph, so isYearMismatch's generic .bb-glyph ⚠️/❌/❓ text scan (used by #bb-mismatch-toggle's count/filter) no longer treats it as a mismatch. The .bb-event-title-warn tooltip (collectSectionWarnings) and the DETAIL page's .bb-page-title-warn tooltip (collectPageWarnings) never picked up this glyph's message in the first place (it only ever had a mouseenter-wired rich tooltip, no dataset.msg matching either collector's selector list), so no change was needed there beyond adding bb-variant-info to annotateEventTitleWithWarnings's sibling-walk (so a genuinely different, coexisting issue on the same event still inserts the aggregated ⚠️ after — not before — the variant glyph). showYearTooltip's 'Result' row wording changed from an orange 'Event variant on same day ⚠️' to a green 'Event variant on same day (informational, not a mismatch)'; the now-unused .bb-warn CSS rule (its only use) was removed."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.01",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Extended v3.00's venue-mismatch downgrade to a second case: a trailing show-variant suffix — \"(Early)\"/\"(Late)\"/\"(Afternoon)\"/\"(Evening)\" — on the DETAIL page's venue string that the VENUE page naturally never has (e.g. gig:1971-07-29-d-scene-south-amboy-nj-late's \"D'Scene, South Amboy, NJ (Late)\" vs. venue:d-scene-south-amboy-nj's own \"D'Scene, South Amboy, NJ\"). findVenueDetailExtra now checks this suffix case first (strip \"(Late)\" etc. and compare) before falling back to the existing extra-middle-segment case, reusing the same regex parseEventNameLocation already uses to strip these suffixes before its own tag check. Same downgrade as before: green informational bb-venue-info glyph instead of orange bb-venue-warn, excluded from bb-event-title-warn's tooltip and #bb-mismatch-toggle's count. Tooltip wording generalized from \"Venue detail ... not on VENUE page\" to \"Extra text ... on DETAIL page not present on VENUE page\" to cover both cases. No corresponding tag-report suppression was needed for this case: parseEventNameLocation already strips the suffix before deriving location tags, so no spurious tag was ever being deduced/reported for it in the first place."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.00",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Venue name mismatch check (YEAR event glyph, DETAIL page venue-link glyph): when a DETAIL page's venue string differs from the actual VENUE page title only by an extra descriptive middle segment (e.g. \"Crisler Arena, University Of Michigan, Ann Arbor, MI\" vs. the venue page's own \"Crisler Arena, Ann Arbor, MI\"), this is no longer flagged as an orange ⚠️ mismatch. New findVenueDetailExtra(venueName, detailVenuePart) reuses parseLocationParts's existing venueDetail extraction (the same value the venue-detail tag check already computes) to detect this case; when found, renderVenueInfo/addVenueGlyphDetail render a new informational bb-venue-info glyph (green, using the text-presentation ⚠︎ so it's actually colorable, unlike the ⚠️ emoji) instead of bb-venue-warn/bb-glyph. Deliberately excluded from isYearMismatch, collectSectionWarnings/collectPageWarnings, and #bb-mismatch-toggle counting, so it's purely informational.",
+                    "The corresponding 'Venue detail' missing-tag report (e.g. the deduced \"universityofmichigan\" candidate tag) is now suppressed wherever this same extra-segment condition holds: the live DETAIL page's .page-tags annotation (annotateDetailPageTags) and the YEAR page's per-event \"Tags\" button panel (addTagsButton) — both take a new venueDetailExtra parameter threaded from the venue check (runDetailPage's venue check was hoisted earlier in the function, before annotateDetailPageTags, so the value is available in time; wireIconHandlers gained the same parameter to reach addTagsButton from processOneYearEvent). Applied to both surfaces for consistency even though the request only mentioned the DETAIL page, since they share the identical checkEventNameLocationTags data — leaving one hidden and the other still flagging it would be a visible inconsistency."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.99",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Added @connect raw.githubusercontent.com to the userscript header. VZ_MBLibrary's remote changelog fetch (added in v2.96) uses GM_xmlhttpRequest against raw.githubusercontent.com, but that host was never added to @connect, so Tampermonkey refused the request outright ('This domain is not a part of the @connect list') and the ChangeLog GM menu command never appeared."
+                ]
+            },
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Added a '⇄ Original Page' toggle button to the HOME page's #bb-btn-container (between ⚡ Issues and 💾 Save), matching the button used on other page types. Clicking it hides #bb-home-results and restores the original #page-title (hidden by runHomePage on load); clicking again reverses it. Unlike the YEAR/DETAIL toggle, this is a plain visibility swap — there's no separate original-vs-processed HTML snapshot on the HOME page, just the aggregated results view vs. whatever wikidot originally rendered there."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.98",
         "date": "2026-07-06",
         "sections": [
