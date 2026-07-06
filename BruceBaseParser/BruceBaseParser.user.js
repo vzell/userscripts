@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      2.85
+// @version      2.98
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -11,6 +11,7 @@
 // @updateURL    https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser.user.js
 // @require      file:///V:/home/vzell/git/springsteen-site-parser/dist/smarttable.js
 // @require      file:///V:/home/vzell/git/springsteen-site-parser/adapters/brucebase.js
+// @require      file:///V:/home/vzell/git/musicbrainz-userscripts/lib/VZ_MBLibrary.user.js
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64(-list)?|start)?$/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/venue:/
@@ -20,12 +21,27 @@
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/system:recent-changes$/
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
+// @grant        GM_info
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_registerMenuCommand
 // @connect      brucebase.wikidot.com
 // @license      MIT
 // ==/UserScript==
 
 (async function () {
   'use strict';
+
+  const SCRIPT_BASE_NAME = "BruceBaseParser";
+  // SCRIPT_ID is derived from SCRIPT_BASE_NAME: CamelCase → kebab-case, lower-cased, prepend "vz-bb-"
+  const SCRIPT_ID   = 'vz-bb-' + SCRIPT_BASE_NAME.replace(/([A-Z])/g, '-$1').toLowerCase().replace(/^-/, '');
+  const SCRIPT_NAME = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.name : SCRIPT_BASE_NAME;
+  // Remote changelog is fetched and the GM menu item registered by VZ_MBLibrary
+  // (via remoteConfig passed to the constructor below).
+  const REMOTE_BASE          = 'https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser/';
+  const REMOTE_CHANGELOG_URL = REMOTE_BASE + SCRIPT_BASE_NAME + '_CHANGELOG.json';
+  const REMOTE_CACHE_TTL_MS  = 60 * 60 * 1000; // 1 hour
+  const CACHE_KEY_CHANGELOG  = SCRIPT_BASE_NAME.toLowerCase() + '-remote-changelog';
 
   const KNOWN_EVENT_TYPES = new Set([
     'gig', 'interview', 'nogig', 'offstage', 'onstage', 'recording', 'rehearsal', 'soundcheck'
@@ -78,7 +94,8 @@
   const MANAGED_CONTENT_TAGS = new Set([
     'gig', 'interview', 'nogig', 'offstage', 'onstage', 'recording', 'rehearsal', 'soundcheck',
     'bootleg', 'livedl', 'news', 'memorabilia', 'ticket',
-    'setlist', 'handwritten', 'printed', 'storyteller', 'help',
+    'setlist', 'handwritten', 'printed', 'storyteller', 'eyewitness', 'help', 'underconstruction',
+    'featured',
   ]);
 
   /** Human-readable reasons why each managed tag might be present but spurious. */
@@ -93,7 +110,10 @@
     printed:     'No printed setlist images found in News/Memorabilia tab',
     soundcheck:  'No "Soundcheck" section header found in setlist content',
     storyteller: 'Storyteller tab is empty or unavailable',
+    eyewitness:  'Eyewitness tab is empty or unavailable',
     help:        'No "Help Us" call-to-action icon found on the YEAR page or the DETAIL page itself for this event',
+    underconstruction: 'Page does not show the "Under Construction" banner',
+    featured:    'No "Featured" icon found on the YEAR page or the DETAIL page itself for this event',
   };
 
   /** Human-readable reasons why each managed tag is correctly present ("passing"). */
@@ -108,7 +128,10 @@
     printed:     'Printed setlist image(s) found in the News/Memorabilia tab',
     soundcheck:  '"Soundcheck" section header found in the setlist content',
     storyteller: 'Storyteller tab has content',
+    eyewitness:  'Eyewitness tab has content',
     help:        '"Help Us" call-to-action icon found on the YEAR page or the DETAIL page itself for this event',
+    underconstruction: 'Page shows the "Under Construction" banner',
+    featured:    '"Featured" icon found on the YEAR page or the DETAIL page itself for this event',
   };
 
   /**
@@ -129,6 +152,8 @@
     // 'incident on 57th street': 'incident57',
     'rosalita (come out tonight)': 'rosalita',
     'tenth avenue freeze-out': '10th',
+    'wreck on the highway': 'wroth',
+    'you can look (but you better not touch)': 'youcanlook',
   };
 
   /** USPS state abbreviation -> full state name, for the event-name/venue-name location tag check. */
@@ -191,13 +216,51 @@
    * entry only when neither the exact match, the "The "-stripped, the
    * suffix-stripped (Jr./Sr./II/III/IV), nor the nickname-stripped (quoted
    * substring removed) form matches BruceBase's real tag — e.g. a plain
-   * typo/irregularity in the real tag itself, like "jake.clemons" (with a
-   * stray period) instead of the expected "jakeclemons". Keyed by the
-   * lowercase, trimmed relation name (as it appears in
-   * extractOnStageRelationNames's output).
+   * typo/irregularity in the real tag itself, or a non-obvious/unrelated
+   * tag name BruceBase happens to use for that relation (like an old or
+   * internal band nickname). Keyed by the lowercase, trimmed relation name
+   * (as it appears in extractOnStageRelationNames's output). See
+   * ESTREETBAND_DOTTED_TAG_OVERRIDES for the E Street Band members' own
+   * dotted-vs-plain tag exception, which isn't a plain unconditional
+   * override like these.
    */
   const RELATION_TAG_ALIAS_OVERRIDES = {
-    'jake clemons': 'jake.clemons',
+    // gig:1993-06-24-brendan-byrne-arena-east-rutherford-nj lists "The
+    // 1992–93 World Tour Band" on the "On Stage" tab, but the page's real
+    // tag for it is "otherband" — no relation to the band's actual name.
+    'the 1992–93 world tour band': 'otherband',
+  };
+
+  /**
+   * Individual E Street Band members whose expected "On Stage" tab tag is a
+   * dotted "first.last" form (e.g. "Charles Giordano" -> "charles.giordano")
+   * instead of the usual concatenated slug ("charlesgiordano") — but only
+   * on a gig/rehearsal page whose "On Stage" tab does NOT explicitly list
+   * "The E Street Band" itself (see checkOnStageRelationTags's
+   * preferDottedEStreetTag). Confirmed against two live pages:
+   * gig:1993-06-24-brendan-byrne-arena-east-rutherford-nj ("The E Street
+   * Band" not mentioned — the "1992-93 World Tour Band" played instead;
+   * several of these people's companion "onstage:" page tags are dotted)
+   * and rehearsal:2026-03-19-youth-temple-ocean-grove-nj ("The E Street
+   * Band" explicitly listed; the same people's tags are the plain
+   * concatenated form). Keyed by the lowercase, trimmed relation name.
+   * checkSingleRelationName tries BOTH forms regardless of context (so an
+   * exception like gig1993's non-dotted "Roy Bittan"/"Patti Scialfa" still
+   * matches), but this table decides which form is *reported* as the
+   * missing/expected tag when neither is present.
+   */
+  const ESTREETBAND_DOTTED_TAG_OVERRIDES = {
+    'charles giordano': 'charles.giordano',
+    'clarence clemons': 'clarence.clemons',
+    'danny federici':   'danny.federici',
+    'garry tallent':    'garry.tallent',
+    'jake clemons':     'jake.clemons',
+    'max weinberg':     'max.weinberg',
+    'nils lofgren':     'nils.lofgren',
+    'patti scialfa':    'patti.scialfa',
+    'roy bittan':       'roy.bittan',
+    'soozie tyrell':    'soozie.tyrell',
+    'steven van zandt': 'steven.vanzandt',
   };
 
   /**
@@ -248,11 +311,12 @@
   function relationMethodLabel(method, tabLabel) {
     const labels = {
       fixed: `always expected because this page has a "${tabLabel}" tab`,
-      guest: `always expected because Bruce Springsteen is listed under the "${tabLabel}" tab marked "(Guest)"`,
+      guest: `always expected because a relation is listed under the "${tabLabel}" tab marked "(Guest)"`,
       exact: `matches a relation listed under the "${tabLabel}" tab (lowercase, whitespace/punctuation stripped)`,
       'the-stripped': `matches a relation listed under the "${tabLabel}" tab (leading "The " stripped, lowercase, whitespace/punctuation stripped)`,
       'suffix-stripped': `matches a relation listed under the "${tabLabel}" tab (trailing Jr./Sr./II/III/IV stripped, lowercase, whitespace/punctuation stripped)`,
       'nickname-stripped': `matches a relation listed under the "${tabLabel}" tab (quoted nickname removed, lowercase, whitespace/punctuation stripped)`,
+      'estreetband-dotted': `matches a relation listed under the "${tabLabel}" tab (dotted "first.last" form — ESTREETBAND_DOTTED_TAG_OVERRIDES)`,
       override: `matches a manual override for a relation listed under the "${tabLabel}" tab (RELATION_TAG_ALIAS_OVERRIDES)`,
       'ampersand-combined': `matches a relation listed under the "${tabLabel}" tab (combined name with "&" removed, lowercase, whitespace/punctuation stripped)`,
     };
@@ -316,9 +380,505 @@
     LiveDL:       'Recording',
   };
 
-  function log(...a)     { console.log  ('[BruceBase]', ...a); }
-  function logWarn(...a) { console.warn ('[BruceBase]', ...a); }
-  function logErr(...a)  { console.error('[BruceBase]', ...a); }
+  // CONFIG SCHEMA
+  //
+  // All keys use the prefix "bbp_" (BruceBaseParser) to namespace settings
+  // for this specific userscript and avoid collisions with other scripts
+  // sharing the same VZ_MBLibrary storage backend.
+  const configSchema = {
+      // ============================================================
+      // GENERIC SECTION
+      // ============================================================
+      divider_generic: {
+          type: 'divider',
+          label: '🛠️ GENERIC SETTINGS'
+      },
+
+      bbp_enable_debug_logging: {
+          label: "Enable debug logging",
+          type: "checkbox",
+          default: false,
+          description: "Enable debug logging in the browser developer console"
+      },
+
+      // ============================================================
+      // KEYBOARD SHORTCUTS SECTION
+      // ============================================================
+      divider_keyboard_shortcuts: {
+          type: 'divider',
+          label: '🎹 KEYBOARD SHORTCUTS'
+      },
+
+      bbp_enable_keyboard_shortcuts: {
+          label: 'Enable Keyboard Shortcuts',
+          type: 'checkbox',
+          default: true,
+          description: 'Enable keyboard shortcuts and show the "⌨️ Shortcuts" help button'
+      },
+
+      bbp_enable_keyboard_shortcut_tooltip: {
+          label: 'Enable Keyboard Shortcut Tooltip',
+          type: 'checkbox',
+          default: true,
+          description: 'Enable keyboard shortcut tooltip for the prefix shortcut map'
+      },
+
+      bbp_keyboard_shortcut_prefix: {
+          label: "Keyboard Shortcut Prefix",
+          type: "keyboard_shortcut",
+          default: "Ctrl+M",
+          description: "Keyboard shortcut prefix key combination (expects a second key press to be complete, e.g. Ctrl+M, Ctrl+., Alt+X, Ctrl+Shift+,)"
+      },
+
+      bbp_enable_direct_ctrl_char_shortcuts: {
+          label: 'Enable Direct Ctrl+Letter Shortcuts',
+          type: 'checkbox',
+          default: false,
+          description: 'When enabled, direct Ctrl+<letter> shortcuts (Ctrl+B, etc.) fire globally at all times. ' +
+                       'When disabled (default), ALL Ctrl+<a-z> shortcuts are suppressed everywhere. ' +
+                       'Use the Keyboard Shortcut Prefix (default: Ctrl+M) and a second key instead of blocked Ctrl+letter shortcuts.'
+      },
+
+      // ---- Configurable direct shortcuts ----
+      // Every entry below controls a single-chord shortcut (no prefix second-key needed).
+      // Use the 🎹 Capture button to record a new combination. Changes take effect after Save.
+
+      bbp_shortcut_toggle_sticky_bar: {
+          label: "Shortcut: Toggle Sticky Bar",
+          type: "keyboard_shortcut",
+          default: "Ctrl+B",
+          description: "Toggle sticky bar display on any page with a sticky bar (default: Ctrl+B)"
+      },
+  };
+
+  //--------------------------------------------------------------------------------
+  // Initialize VZ-MBLibrary (Logging + Settings + Changelog)
+  // Use a ref object to avoid circular dependency during initialization
+  const settings = {};
+  const remoteConfig = {
+      changelogUrl:      REMOTE_CHANGELOG_URL,
+      cacheKeyChangelog: CACHE_KEY_CHANGELOG,
+      cacheTtlMs:        REMOTE_CACHE_TTL_MS
+  };
+  const Lib = (typeof VZ_MBLibrary !== 'undefined')
+        ? new VZ_MBLibrary(SCRIPT_ID, SCRIPT_NAME, configSchema, null, () => {
+            // Dynamic check: returns current value of debug setting
+            return settings.bbp_enable_debug_logging ?? false;
+        }, remoteConfig)
+        : {
+            settings: {},
+            info: console.log, debug: console.log, error: console.error, warn: console.warn, time: console.time, timeEnd: console.timeEnd
+        };
+  const scriptVersion = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'unknown';
+  const libVersion = (Lib && Lib.version) ? Lib.version : 'unknown';
+  // Copy settings reference so the callback above can access them
+  Object.assign(settings, Lib.settings);
+
+  Lib.info('init', `Script v${scriptVersion} loaded (lib v${libVersion}).`);
+
+  /**
+   * Format a single log argument for console output: Error instances render as
+   * their message (JSON.stringify on an Error yields "{}" since message/stack
+   * are non-enumerable), plain objects are JSON-stringified, everything else
+   * is coerced to a string.
+   * @param {*} a
+   * @returns {string}
+   */
+  function fmtLogArg(a) {
+    if (a instanceof Error) return a.message;
+    if (typeof a === 'object' && a !== null) {
+      try { return JSON.stringify(a); } catch (e) { return String(a); }
+    }
+    return String(a);
+  }
+
+  /**
+   * Join variadic log arguments into a single space-separated string.
+   * @param {Array<*>} args
+   * @returns {string}
+   */
+  function fmtArgs(args) { return args.map(fmtLogArg).join(' '); }
+
+  /** Debug-level log, gated on the bbp_enable_debug_logging setting. */
+  function log(...a)     { Lib.debug('meta', fmtArgs(a)); }
+  /** Warn-level log, always visible regardless of the debug setting. */
+  function logWarn(...a) { Lib.warn('warn', fmtArgs(a)); }
+  /** Error-level log, always visible regardless of the debug setting. */
+  function logErr(...a)  { Lib.error('error', fmtArgs(a)); }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // KEYBOARD SHORTCUTS SECTION
+  // Config keys: bbp_enable_keyboard_shortcuts, bbp_enable_keyboard_shortcut_tooltip,
+  //              bbp_keyboard_shortcut_prefix, bbp_enable_direct_ctrl_char_shortcuts,
+  //              bbp_shortcut_toggle_sticky_bar
+  // Ported from ShowAllEntityData's Emacs-style prefix-key shortcut engine (sa_
+  // settings renamed to bbp_). Two dispatch paths share one ctrlMFunctionMap:
+  // pressing the prefix key (default Ctrl+M) then a single character always
+  // works; pressing the direct Ctrl+<letter> combo only works when
+  // bbp_enable_direct_ctrl_char_shortcuts is on.
+  // Functions  : parsePrefixShortcut, getPrefixDisplay, isPrefixKeyEvent, isShortcutEvent,
+  //              getShortcutDisplay, buildShortcutHint, showCtrlMTooltip, hideCtrlMTooltip,
+  //              toggleStickyBar, showShortcutsHelp, addShortcutsHelpButton, initKeyboardShortcuts
+  // ════════════════════════════════════════════════════════════════════════════
+
+  let ctrlMModeActive = false;
+  let ctrlMModeTimeout;
+  const ctrlMFunctionMap = {}; // populated below, once the actions it dispatches to are defined
+  let ctrlMTooltipElement = null;
+
+  /**
+   * Parse a shortcut string such as "Ctrl+M", "Ctrl+.", "Alt+Shift+X" into its
+   * component parts.
+   * @param {string} str - The shortcut string to parse
+   * @returns {{ ctrl: boolean, meta: boolean, alt: boolean, shift: boolean, key: string }}
+   */
+  function parsePrefixShortcut(str) {
+    const parts = (str || 'Ctrl+M').trim().split('+');
+    let key = parts.pop().trim();
+    // A trailing '+' (e.g. "Ctrl++") means the actual key character is '+'
+    if (key === '') key = '+';
+    const mods = parts.map(p => p.trim().toLowerCase());
+    return {
+      ctrl:  mods.includes('ctrl'),
+      meta:  mods.includes('meta') || mods.includes('cmd') || mods.includes('super'),
+      alt:   mods.includes('alt'),
+      shift: mods.includes('shift'),
+      key:   key
+    };
+  }
+
+  /**
+   * Returns the display string for the configured prefix shortcut (e.g. "Ctrl+M").
+   * Falls back to "Ctrl+M" when the setting is not yet available.
+   * @returns {string}
+   */
+  function getPrefixDisplay() {
+    return (Lib.settings && Lib.settings.bbp_keyboard_shortcut_prefix) || 'Ctrl+M';
+  }
+
+  /**
+   * Returns true when a keyboard event matches the configured prefix shortcut.
+   * When "Ctrl" appears in the prefix it matches BOTH Ctrl and Meta/Cmd keys,
+   * preserving cross-platform (Mac/Windows/Linux) compatibility.
+   * @param {KeyboardEvent} e
+   * @returns {boolean}
+   */
+  function isPrefixKeyEvent(e) {
+    const p = parsePrefixShortcut(getPrefixDisplay());
+    const ctrlMatch  = p.ctrl  ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey);
+    const altMatch   = p.alt   ? e.altKey                 : !e.altKey;
+    const shiftMatch = p.shift ? e.shiftKey               : !e.shiftKey;
+    const keyMatch   = e.key.toLowerCase() === p.key.toLowerCase();
+    return ctrlMatch && altMatch && shiftMatch && keyMatch;
+  }
+
+  /**
+   * Returns true when a keyboard event matches a configured single-chord shortcut.
+   * Mirrors isPrefixKeyEvent logic but reads an arbitrary setting key. "Ctrl" in
+   * the stored value matches both Ctrl and Meta/Cmd for cross-platform compat.
+   * @param {KeyboardEvent} e
+   * @param {string} settingKey - The configSchema key to read (e.g. 'bbp_shortcut_toggle_sticky_bar')
+   * @param {string} fallback   - Default shortcut string when the setting is absent
+   * @returns {boolean}
+   */
+  function isShortcutEvent(e, settingKey, fallback) {
+    const raw = (Lib.settings && Lib.settings[settingKey]) || fallback;
+    const p = parsePrefixShortcut(raw);
+    const ctrlMatch  = p.ctrl  ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey);
+    const altMatch   = p.alt   ? e.altKey                 : !e.altKey;
+    const shiftMatch = p.shift ? e.shiftKey               : !e.shiftKey;
+    const keyMatch   = e.key.toLowerCase() === p.key.toLowerCase();
+    return ctrlMatch && altMatch && shiftMatch && keyMatch;
+  }
+
+  /**
+   * Returns the display string for a configured single-chord shortcut.
+   * Falls back to the supplied default when the setting is not yet available.
+   * @param {string} settingKey - The configSchema key to read
+   * @param {string} fallback   - Value to return when the setting is absent
+   * @returns {string}
+   */
+  function getShortcutDisplay(settingKey, fallback) {
+    return (Lib.settings && Lib.settings[settingKey]) || fallback;
+  }
+
+  /**
+   * Builds a keyboard shortcut hint string for button/tooltip titles. Always
+   * includes the prefix-mode form (e.g. "Ctrl+M, then B"). Appends the direct
+   * shortcut (e.g. "or Ctrl+B") only when bbp_enable_direct_ctrl_char_shortcuts
+   * is on, or when the shortcut is not a Ctrl+<a-z> key and is therefore never
+   * suppressed.
+   * @param {string} settingKey  configSchema key for the direct shortcut
+   * @param {string} fallback    default direct shortcut string
+   * @param {string} prefixKey   single key label used after the prefix (e.g. 'B')
+   * @returns {string}  e.g. "Ctrl+M, then B" or "Ctrl+M, then B, or Ctrl+B"
+   */
+  function buildShortcutHint(settingKey, fallback, prefixKey) {
+    const directKey   = getShortcutDisplay(settingKey, fallback);
+    const prefixHint  = `${getPrefixDisplay()}, then ${prefixKey}`;
+    const p = parsePrefixShortcut(directKey);
+    const isBlockedLetter = p.ctrl && !p.alt && !p.shift
+                         && p.key.length === 1
+                         && p.key.toLowerCase() >= 'a' && p.key.toLowerCase() <= 'z';
+    const directOn = !!(Lib.settings && Lib.settings.bbp_enable_direct_ctrl_char_shortcuts);
+    return (!isBlockedLetter || directOn) ? `${prefixHint}, or ${directKey}` : prefixHint;
+  }
+
+  /**
+   * Displays a floating tooltip listing all prefix-mode function shortcuts
+   * (from ctrlMFunctionMap) in the upper-right corner of the page.
+   * No-ops when the tooltip is disabled in settings.
+   */
+  function showCtrlMTooltip() {
+    if (!Lib.settings.bbp_enable_keyboard_shortcut_tooltip) return;
+
+    hideCtrlMTooltip();
+
+    ctrlMTooltipElement = document.createElement('div');
+    ctrlMTooltipElement.id = 'bb-ctrl-m-tooltip';
+    ctrlMTooltipElement.style.cssText = `
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background-color: #f0f0f0;
+      border: 1px solid #999;
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 0.75em;
+      max-width: 250px;
+      z-index: 10000;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      line-height: 1.4;
+    `;
+
+    let tooltipHTML = `<strong>${getPrefixDisplay()} Shortcuts:</strong><br/><strong>Functions:</strong><br/>`;
+    for (const [key, entry] of Object.entries(ctrlMFunctionMap)) {
+      tooltipHTML += `<div style="margin-left: 4px;"><strong>${key}</strong>: ${entry.description}</div>`;
+    }
+
+    ctrlMTooltipElement.innerHTML = tooltipHTML;
+    document.body.appendChild(ctrlMTooltipElement);
+  }
+
+  /**
+   * Removes the prefix-mode tooltip from the DOM if it is currently visible.
+   * Safe to call even when no tooltip is present.
+   */
+  function hideCtrlMTooltip() {
+    if (ctrlMTooltipElement) {
+      ctrlMTooltipElement.remove();
+      ctrlMTooltipElement = null;
+    }
+  }
+
+  /**
+   * Toggles #bb-sticky-bar between displayed and hidden, keeping the
+   * --bb-sticky-bar-h CSS variable (used by other sticky elements for their
+   * top offset) in sync. Page-agnostic by design: works on any page type that
+   * happens to render a #bb-sticky-bar (HOME, YEAR, LIST, RECENT CHANGES today,
+   * and any future page mode that adopts the same element) — driven entirely
+   * by the element's presence, not by a page-type allowlist.
+   */
+  function toggleStickyBar() {
+    const bar = document.getElementById('bb-sticky-bar');
+    if (!bar) {
+      logWarn('No #bb-sticky-bar found on this page — nothing to toggle');
+      return;
+    }
+    const isHidden = bar.style.display === 'none';
+    if (isHidden) {
+      bar.style.display = '';
+      document.documentElement.style.setProperty('--bb-sticky-bar-h', `${bar.offsetHeight}px`);
+    } else {
+      document.documentElement.style.setProperty('--bb-sticky-bar-h', '0px');
+      bar.style.display = 'none';
+    }
+    log(`Sticky bar ${isHidden ? 'shown' : 'hidden'} via keyboard shortcut`);
+  }
+
+  ctrlMFunctionMap['b'] = {
+    fn: () => toggleStickyBar(),
+    description: 'Toggle Sticky Bar'
+  };
+
+  /**
+   * Displays a dialog listing the available keyboard shortcuts. Acts as a
+   * toggle — calling it again while already open closes it. Closes on Escape,
+   * on clicking outside the box, or via its ✕ button.
+   */
+  function showShortcutsHelp() {
+    const existing = document.getElementById('bb-shortcuts-help');
+    if (existing) { existing.remove(); return; }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'bb-shortcuts-help';
+    overlay.style.cssText = `
+      position: fixed; inset: 0; z-index: 10001;
+      background: rgba(0,0,0,0.35);
+      display: flex; align-items: center; justify-content: center;
+    `;
+
+    const box = document.createElement('div');
+    box.style.cssText = `
+      background: #fff; border-radius: 8px; padding: 16px 20px;
+      max-width: 420px; width: 90vw; max-height: 80vh; overflow-y: auto;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3); font-size: 0.9em;
+    `;
+
+    const directOn = !!Lib.settings.bbp_enable_direct_ctrl_char_shortcuts;
+    box.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <strong style="font-size:1.1em;">🎹 Keyboard Shortcuts</strong>
+        <button id="bb-shortcuts-help-close" type="button" style="background:none; border:none; font-size:1.2em; cursor:pointer;">✕</button>
+      </div>
+      <div style="margin-bottom:8px;">
+        <span style="font-family:monospace; background:#f5f5f5; padding:2px 6px; border-radius:3px;">${esc(getPrefixDisplay())}</span>
+        <span style="color:#666; margin-left:10px;">Enter prefix mode (then a second key runs a function)</span>
+      </div>
+      <div style="margin-bottom:8px;">
+        <span style="font-family:monospace; background:#f5f5f5; padding:2px 6px; border-radius:3px;">${esc(buildShortcutHint('bbp_shortcut_toggle_sticky_bar', 'Ctrl+B', 'B'))}</span>
+        <span style="color:#666; margin-left:10px;">Toggle sticky bar (any page with one)</span>
+      </div>
+      <div style="margin-bottom:8px;">
+        <span style="font-family:monospace; background:#f5f5f5; padding:2px 6px; border-radius:3px;">? or /</span>
+        <span style="color:#666; margin-left:10px;">Show this help</span>
+      </div>
+      <div style="margin-top:12px; padding-top:8px; border-top:1px solid #eee; font-size:0.85em; color:#666; font-style:italic;">
+        ${directOn
+          ? 'Direct Ctrl+letter shortcuts are enabled globally (fire at all times).'
+          : `Direct Ctrl+letter shortcuts are suppressed everywhere. Use ${esc(getPrefixDisplay())} followed by the letter key instead, or enable "Direct Ctrl+Letter Shortcuts" in Settings.`}
+      </div>
+    `;
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    box.querySelector('#bb-shortcuts-help-close').addEventListener('click', close);
+    document.addEventListener('keydown', function onEsc(e) {
+      if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); }
+    });
+
+    log('Shortcuts help displayed');
+  }
+
+  /**
+   * Adds the "⌨️ Shortcuts" help button to the given button container, unless
+   * it is already present. No-ops when the container is missing.
+   * @param {Element} container - The #bb-btn-container element to append to.
+   */
+  function addShortcutsHelpButton(container) {
+    if (!container || document.getElementById('bb-shortcuts-help-btn')) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'bb-shortcuts-help-btn';
+    btn.className = 'bb-toggle-btn';
+    btn.type = 'button';
+    btn.textContent = '⌨️ Shortcuts';
+    btn.title = `Show keyboard shortcuts (or press ? / ${buildShortcutHint('bbp_shortcut_toggle_sticky_bar', 'Ctrl+B', 'B')})`;
+    btn.addEventListener('click', showShortcutsHelp);
+    container.appendChild(btn);
+  }
+
+  /**
+   * Registers the prefix-mode and direct-shortcut keydown listeners once per
+   * page load. Safe to call multiple times — guarded by
+   * document._bbKeyboardShortcutsInitialized.
+   */
+  function initKeyboardShortcuts() {
+    if (document._bbKeyboardShortcutsInitialized) return;
+
+    // Prefix-mode listener — capture phase so it always wins the key, matching
+    // the "always available, never suppressed" guarantee described in Settings.
+    document.addEventListener('keydown', (e) => {
+      if (isPrefixKeyEvent(e)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        if (ctrlMModeActive) {
+          ctrlMModeActive = false;
+          clearTimeout(ctrlMModeTimeout);
+          hideCtrlMTooltip();
+          log(`Exited ${getPrefixDisplay()} mode`);
+          return;
+        }
+
+        ctrlMModeActive = true;
+        showCtrlMTooltip();
+        log(`Entered ${getPrefixDisplay()} mode. Press a shortcut key or Escape to cancel.`);
+
+        clearTimeout(ctrlMModeTimeout);
+        ctrlMModeTimeout = setTimeout(() => {
+          ctrlMModeActive = false;
+          hideCtrlMTooltip();
+          log(`Exited ${getPrefixDisplay()} mode (timeout)`);
+        }, 5000);
+        return;
+      }
+
+      if (ctrlMModeActive && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+        const key = e.key.toLowerCase();
+        const entry = ctrlMFunctionMap[key];
+        if (entry) {
+          e.preventDefault();
+          if (typeof entry.fn === 'function') {
+            entry.fn();
+            log(`Function "${entry.description}" triggered via ${getPrefixDisplay()} then '${e.key}'`);
+          } else {
+            logWarn(`Function "${entry.description}" not available`);
+          }
+        }
+        ctrlMModeActive = false;
+        clearTimeout(ctrlMModeTimeout);
+        hideCtrlMTooltip();
+        return;
+      }
+
+      if (e.key === 'Escape' && ctrlMModeActive) {
+        e.preventDefault();
+        ctrlMModeActive = false;
+        clearTimeout(ctrlMModeTimeout);
+        hideCtrlMTooltip();
+        log(`Exited ${getPrefixDisplay()} mode (Escape pressed)`);
+        return;
+      }
+
+      if (ctrlMModeActive && (e.ctrlKey || e.metaKey || e.altKey) && e.key !== 'Escape') {
+        ctrlMModeActive = false;
+        clearTimeout(ctrlMModeTimeout);
+        hideCtrlMTooltip();
+      }
+    }, { capture: true });
+
+    // Direct Ctrl+<letter> shortcuts and "?"/"/" help — bubble phase.
+    document.addEventListener('keydown', (e) => {
+      const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+
+      if ((e.key === '?' || e.key === '/') && !isTyping) {
+        e.preventDefault();
+        showShortcutsHelp();
+        return;
+      }
+
+      // Block ALL direct Ctrl+<letter> (a-z) shortcuts when
+      // bbp_enable_direct_ctrl_char_shortcuts is off.
+      if (!Lib.settings.bbp_enable_direct_ctrl_char_shortcuts &&
+          e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey &&
+          e.key.length === 1 &&
+          e.key.toLowerCase() >= 'a' && e.key.toLowerCase() <= 'z') {
+        return;
+      }
+
+      if (isShortcutEvent(e, 'bbp_shortcut_toggle_sticky_bar', 'Ctrl+B')) {
+        e.preventDefault();
+        toggleStickyBar();
+      }
+    });
+
+    document._bbKeyboardShortcutsInitialized = true;
+    log('Keyboard shortcuts initialized');
+  }
 
   /**
    * Tests whether an href's first path segment has a "<category>:" prefix
@@ -480,6 +1040,8 @@
       '| retail:', isRetailPage, '| song:', isSongPage,
       '| relation:', isRelationPage, '| recent:', isRecentChangesPage);
 
+  if (Lib.settings.bbp_enable_keyboard_shortcuts) initKeyboardShortcuts();
+
   if (isHomePage) {
     log('Detected HOME page');
     await runHomePage();
@@ -550,6 +1112,7 @@
       'home', () => resultsEl, () => ''
     );
     btnContainer.append(fetchBtn, overviewBtn, filterBtn, homeSaveBtn, homeLoadBtn);
+    if (Lib.settings.bbp_enable_keyboard_shortcuts) addShortcutsHelpButton(btnContainer);
 
     // ── Progress indicator (same structure as YEAR page) ─────────────────────
     const timerSpan = document.createElement('span');
@@ -1060,6 +1623,7 @@
     yearStartBtn.title = 'Start processing all events on this page';
 
     btnContainer.append(yearStartBtn, yearSaveBtn, yearLoadBtn, globalBtn, mismatchBtn, relToggleBtn);
+    if (Lib.settings.bbp_enable_keyboard_shortcuts) addShortcutsHelpButton(btnContainer);
 
     // ── SmartTable integration (optional) ────────────────────────────────────
     if (stRows) {
@@ -2638,26 +3202,41 @@
     };
   }
 
-  // Wraps the processed td children and an original snapshot in show/hide divs,
-  // then prepends the ⇄ Original Page button to the existing #bb-btn-container.
-  // The container is created earlier in runDetailPage so Load works immediately.
+  /**
+   * Wires up the "⇄ Original Page" button for DETAIL pages, prepended to
+   * the existing #bb-btn-container (created earlier in runDetailPage so
+   * Load works immediately). Always creates the button, even when there's
+   * no setlist container (e.g. most interview pages, or an early/sparsely-
+   * documented gig with no parseable setlist) — DETAIL pages annotate far
+   * more than just the setlist (tags, icons, title warnings, anchor/venue
+   * checks, etc.), all hidden/shown via the shared body.bb-original-view
+   * CSS class (see addStyles), so the toggle is still meaningful even with
+   * nothing setlist-specific to swap. When a setlist container IS present,
+   * its processed content is additionally moved into a live wrapper div
+   * (keeping its own diff-rendering listeners) alongside a hidden original
+   * snapshot div, and the two are shown/hidden together with the button.
+   * @param {string} originalTdHtml - Pre-render snapshot of the setlist
+   *   container's innerHTML, or '' when there's no setlist container.
+   */
   function insertDetailToggle(originalTdHtml) {
     const td = getSetlistContainer(document);
-    if (!td) return;
+    let processedDiv = null;
+    let originalDiv  = null;
+    if (td) {
+      // Move processed nodes (with their event listeners) into a wrapper div
+      processedDiv = document.createElement('div');
+      processedDiv.className = 'bb-detail-processed';
+      while (td.firstChild) processedDiv.appendChild(td.firstChild);
 
-    // Move processed nodes (with their event listeners) into a wrapper div
-    const processedDiv = document.createElement('div');
-    processedDiv.className = 'bb-detail-processed';
-    while (td.firstChild) processedDiv.appendChild(td.firstChild);
+      // Hidden div holds the original (unprocessed) snapshot
+      originalDiv = document.createElement('div');
+      originalDiv.className = 'bb-detail-original';
+      originalDiv.style.display = 'none';
+      originalDiv.innerHTML = originalTdHtml;
 
-    // Hidden div holds the original (unprocessed) snapshot
-    const originalDiv = document.createElement('div');
-    originalDiv.className = 'bb-detail-original';
-    originalDiv.style.display = 'none';
-    originalDiv.innerHTML = originalTdHtml;
-
-    td.appendChild(processedDiv);
-    td.appendChild(originalDiv);
+      td.appendChild(processedDiv);
+      td.appendChild(originalDiv);
+    }
 
     const btn = document.createElement('button');
     btn.id = 'bb-global-toggle';
@@ -2668,8 +3247,10 @@
     let showingOriginal = false;
     btn.addEventListener('click', () => {
       showingOriginal = !showingOriginal;
-      processedDiv.style.display = showingOriginal ? 'none'  : 'block';
-      originalDiv.style.display  = showingOriginal ? 'block' : 'none';
+      if (processedDiv && originalDiv) {
+        processedDiv.style.display = showingOriginal ? 'none'  : 'block';
+        originalDiv.style.display  = showingOriginal ? 'block' : 'none';
+      }
       btn.textContent = showingOriginal ? '⇄ Processed Page' : '⇄ Original Page';
       // Hide all script-added annotation artefacts outside the setlist tab when
       // showing original, restore them when switching back to processed view.
@@ -2847,6 +3428,57 @@
       const beforeNext = !nextAnchorEl || (nextAnchorEl.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_PRECEDING);
       return afterLink && beforeNext;
     });
+  }
+
+  /**
+   * Returns true when a "Featured" icon (`<img title="Featured">`, BruceBase's
+   * gold-star call-out for a notable event) is present in `container`.
+   * Presence means the "featured" tag is expected on the DETAIL page (see
+   * computeExpectedTags). For use with an already-per-event-scoped
+   * container (e.g. `.bb-section-processed`, which wraps exactly one
+   * event) — see eventHasFeaturedIcon for scanning a multi-event container.
+   * @param {Element} container
+   * @returns {boolean}
+   */
+  function hasFeaturedIcon(container) {
+    return !!container.querySelector('img.image[title="Featured"]');
+  }
+
+  /**
+   * Same check as hasFeaturedIcon, but scoped to the HTML between
+   * eventLinkEl and nextAnchorEl within a multi-event container (e.g. a
+   * YEAR page's `#page-content`, or to the end of `content` when
+   * nextAnchorEl is null) — for use when there's no already-per-event-
+   * scoped container at hand (e.g. the DETAIL page pipeline, which only
+   * has the fetched YEAR page's full content). Mirrors eventHasHelpIcon.
+   * @param {Element}      eventLinkEl
+   * @param {Element|null} nextAnchorEl
+   * @param {Element}      content
+   * @returns {boolean}
+   */
+  function eventHasFeaturedIcon(eventLinkEl, nextAnchorEl, content) {
+    return [...content.querySelectorAll('img.image[title="Featured"]')].some(img => {
+      const afterLink  = eventLinkEl.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING;
+      const beforeNext = !nextAnchorEl || (nextAnchorEl.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_PRECEDING);
+      return afterLink && beforeNext;
+    });
+  }
+
+  /**
+   * Returns true when a page shows BruceBase's "!! Under Construction !!
+   * Come back soon." banner — a red, italicized, superscript note editors
+   * place on pages still being filled in, e.g.
+   * `<p><span style="color: red"><sup><em>!! Under Construction !! Come
+   * back soon.</em></sup></span></p>`. Presence means the
+   * "underconstruction" tag is expected on that page. Matched on the
+   * `<sup><em>` text content rather than the exact style attribute, since
+   * that's the distinguishing structural marker and is more robust to
+   * incidental style-attribute formatting differences.
+   * @param {Document|Element} [doc=document]
+   * @returns {boolean}
+   */
+  function hasUnderConstructionBanner(doc = document) {
+    return [...doc.querySelectorAll('sup em')].some(em => /under construction/i.test(em.textContent));
   }
 
   // Section = { label: string, songs: string[], sourceEl: Element }
@@ -3236,6 +3868,7 @@
       el.querySelectorAll('a.bb-song-num').forEach(numLink => {
         const songHref = numLink.getAttribute('href');
         const songName = numLink.dataset.sn || '';
+        numLink.title = `${songName} — click to load song page tabs`;
         numLink.addEventListener('click', e => {
           e.preventDefault();
           fetchAndToggleSongTabRow(songHref, songName, numSection, numLink);
@@ -3337,8 +3970,9 @@
       const onstageResult = await fetchOnstageCompanionTags(path, detailEventType, detailTabMap);
       const detailDateM  = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
       const detailHasHelp = eventHasHelpIcon(eventLink, nextAnchor, yearContent);
+      const detailHasFeatured = eventHasFeaturedIcon(eventLink, nextAnchor, yearContent);
       if (detailDateM) {
-        const tagResult = annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType, detailSections, rawDetailName, onstageResult, detailHasHelp);
+        const tagResult = annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType, detailSections, rawDetailName, onstageResult, detailHasHelp, detailHasFeatured);
         if (tagResult.additionalTags.length > 0) {
           addOnstageTagsGlyph(tagResult.additionalTags, tagResult.onstageUrl);
         }
@@ -3458,14 +4092,18 @@
 
       renderDetailSetlist(diffItems);
       flagDetailSectionHeaders(yearSections, detailSections, diffItems);
-      insertDetailToggle(_detailOriginalHtml);
       annotateSetlistTab(nameMatch, true);
 
       detailSaveBtn.disabled = false;
     }
 
-    // Auto-process on page load.
+    // Auto-process on page load. insertDetailToggle runs unconditionally
+    // afterward (not just on the setlist happy path above) so the "⇄
+    // Original Page" button still appears on pages with no setlist at all
+    // (most interview pages, or a sparsely-documented early gig) — those
+    // still get title/tag/icon annotations toggled via body.bb-original-view.
     await runDetailProcessing();
+    insertDetailToggle(_detailOriginalHtml);
     annotatePageTitleWithWarnings();
   }
 
@@ -3679,6 +4317,7 @@
     const btnContainer = document.createElement('div');
     btnContainer.id = 'bb-btn-container';
     btnContainer.append(tableViewBtn);
+    if (Lib.settings.bbp_enable_keyboard_shortcuts) addShortcutsHelpButton(btnContainer);
 
     const controlsEl = document.createElement('div');
     controlsEl.id = 'bb-controls';
@@ -4224,6 +4863,7 @@
     );
 
     btnContainer.append(globalBtn, mismatchBtn, listSaveBtn, listLoadBtn);
+    if (Lib.settings.bbp_enable_keyboard_shortcuts) addShortcutsHelpButton(btnContainer);
 
     // ── Progress ─────────────────────────────────────────────────────────────
     const progressEl = document.createElement('p');
@@ -4864,7 +5504,7 @@
    * intervening header are merged into the same group (case b: Guest pattern).
    * Stops at <hr> or <ol> (setlist area begins).
    * @param {Document} doc
-   * @returns {Array<{header:string|null, items:Array<{href:string, name:string, extra:string|null, members:Array<{href:string,name:string,extra:string|null}>}>}>}
+   * @returns {Array<{header:string|null, items:Array<{href:string, name:string, extra:string|null, el:Element, members:Array<{href:string,name:string,extra:string|null,el:Element}>}>}>}
    */
   function extractRelations(doc) {
     const tab = doc.getElementById('wiki-tab-0-0');
@@ -4909,7 +5549,8 @@
                 return {
                   href:  ma.getAttribute('href'),
                   name:  ma.textContent.trim(),
-                  extra: mExtra ? mExtra.textContent.trim() : null
+                  extra: mExtra ? mExtra.textContent.trim() : null,
+                  el:    ma,
                 };
               }).filter(Boolean)
             : [];
@@ -4917,6 +5558,7 @@
             href:    a.getAttribute('href'),
             name:    a.textContent.trim(),
             extra:   extraEl ? extraEl.textContent.trim() : null,
+            el:      a,
             members
           });
         }
@@ -4947,26 +5589,27 @@
   }
 
   /**
-   * Returns true when extractRelations(doc) contains a relation entry
-   * (top-level or band member) whose name matches `name` (case-insensitive)
-   * and whose "extra" annotation mentions "Guest", e.g.
-   * `<li><a href="/relation:bruce-springsteen">Bruce Springsteen</a>
-   * <span style="font-size:80%;"><em>(Guest)</em></span></li>`.
+   * Returns the names of every relation entry (top-level or band member)
+   * in extractRelations(doc) whose "extra" annotation mentions "Guest",
+   * e.g. `<li><a href="/relation:bruce-springsteen">Bruce Springsteen</a>
+   * <span style="font-size:80%;"><em>(Guest)</em></span></li>`. Not
+   * limited to any specific person — ANY relation marked "(Guest)" (Bruce
+   * Springsteen himself, a sit-in musician, etc.) means the page's own
+   * "guest" tag is expected (see checkOnStageRelationTags).
    * @param {Document} doc
-   * @param {string}   name
-   * @returns {boolean}
+   * @returns {string[]}
    */
-  function isRelationMarkedGuest(doc, name) {
-    const target = name.toLowerCase();
+  function extractGuestMarkedRelationNames(doc) {
+    const names = [];
     for (const group of extractRelations(doc)) {
       for (const item of group.items) {
-        if (item.name.toLowerCase() === target && item.extra && /guest/i.test(item.extra)) return true;
+        if (item.extra && /guest/i.test(item.extra)) names.push(item.name);
         for (const m of item.members) {
-          if (m.name.toLowerCase() === target && m.extra && /guest/i.test(m.extra)) return true;
+          if (m.extra && /guest/i.test(m.extra)) names.push(m.name);
         }
       }
     }
-    return false;
+    return [...new Set(names)];
   }
 
   /**
@@ -4990,24 +5633,37 @@
    *    III/IV) stripped first, e.g. `"Curtis King Jr."` -> `"curtisking"`.
    * 4. Same as #1, but with a quoted nickname removed first, e.g.
    *    `Steve "Muddy" Shews` -> `"steveshews"`.
-   * 5. Manual override (`RELATION_TAG_ALIAS_OVERRIDES`) for the rare case
-   *    where BruceBase's real tag matches none of the above, e.g. a typo
-   *    like `"jake.clemons"` (with a stray period).
-   * Rules 1-4 are tried in that order (first match wins).
+   * 5. The dotted "first.last" form (`ESTREETBAND_DOTTED_TAG_OVERRIDES`),
+   *    for the specific E Street Band members listed there, e.g.
+   *    `"Charles Giordano"` -> `"charles.giordano"`.
+   * 6. Manual override (`RELATION_TAG_ALIAS_OVERRIDES`) for the rare case
+   *    where BruceBase's real tag matches none of the above, e.g. a plain
+   *    typo/irregularity in the real tag itself.
+   * Rules 1-5 are tried in that order (first match wins) — both the plain
+   * and dotted forms are always tried regardless of context, so an
+   * exception (e.g. a non-dotted "Roy Bittan" on a page that otherwise
+   * prefers dotted tags) still matches. `preferDottedTag`, when true, only
+   * affects which form is *reported* as the expected tag when NEITHER is
+   * present (see checkOnStageRelationTags's preferDottedEStreetTag).
    * @param {string}      name
    * @param {Set<string>} actualTags
-   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: 'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|null}}
+   * @param {boolean}     [preferDottedTag] - Report the dotted tag (not the
+   *   plain one) as the expected/missing tag when this name is one of
+   *   ESTREETBAND_DOTTED_TAG_OVERRIDES and neither form is present.
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: 'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'estreetband-dotted'|'override'|null}}
    */
-  function checkSingleRelationName(name, actualTags) {
+  function checkSingleRelationName(name, actualTags, preferDottedTag = false) {
     const theStripped = name.replace(/^the\s+/i, '');
     const suffixStripped = name.replace(/\s+(?:Jr\.?|Sr\.?|III|II|IV)$/i, '').trim();
     const nicknameStripped = name.replace(/\s*"[^"]*"\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    const dottedTag = ESTREETBAND_DOTTED_TAG_OVERRIDES[name.toLowerCase().trim()] || null;
     const candidates = [
       { tag: relationTagSlug(name), method: 'exact' },
       { tag: relationTagSlug(theStripped), method: 'the-stripped' },
       { tag: relationTagSlug(suffixStripped), method: 'suffix-stripped' },
       { tag: relationTagSlug(nicknameStripped), method: 'nickname-stripped' },
     ];
+    if (dottedTag) candidates.push({ tag: dottedTag, method: 'estreetband-dotted' });
     const seen = new Set();
     let match = null;
     for (const c of candidates) {
@@ -5022,37 +5678,101 @@
     if (overrideTag && isTagPresent(overrideTag, actualTags)) {
       return { label: `Relation: ${name}`, candidateTag: overrideTag, matchedTag: overrideTag, method: 'override' };
     }
-    return { label: `Relation: ${name}`, candidateTag: candidates[0].tag, matchedTag: null, method: null };
+    const fallbackTag = (preferDottedTag && dottedTag) ? dottedTag : candidates[0].tag;
+    return { label: `Relation: ${name}`, candidateTag: fallbackTag, matchedTag: null, method: null };
   }
 
   /**
-   * Checks that a DETAIL page's "On Stage" (gig/rehearsal), "In Studio"
-   * (recording), or "On Audio" (nogig) tab relation names each have a
+   * Checks a relation name (as it appears in extractOnStageRelationNames'
+   * flattened output, or a single extractRelations entry's own name) against
+   * its expected tag(s), handling an "&"-joined name (e.g. "Joe Grushecky &
+   * The Houserockers") by splitting it into two independent checks first,
+   * falling back to the combined name only if neither half matches.
+   * Factored out of checkOnStageRelationTags's inline loop so a single name
+   * can be checked without re-deriving the whole tab's relationResults array
+   * — used by colorizeOnStageRelationNames for the live-DOM name-coloring
+   * pass.
+   * @param {string}      name
+   * @param {Set<string>} actualTags
+   * @param {boolean}     [preferDottedTag] - See checkSingleRelationName.
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null}[]}
+   */
+  function checkRelationNameTags(name, actualTags, preferDottedTag = false) {
+    const ampM = name.match(/^(.+?)\s*&\s*(.+)$/);
+    if (!ampM) return [checkSingleRelationName(name, actualTags, preferDottedTag)];
+    const partA = checkSingleRelationName(ampM[1].trim(), actualTags, preferDottedTag);
+    const partB = checkSingleRelationName(ampM[2].trim(), actualTags, preferDottedTag);
+    if (partA.matchedTag && partB.matchedTag) return [partA, partB];
+    const combinedTag = relationTagSlug(name.replace(/^the\s+/i, '').replace(/\s*&\s*/g, ''));
+    if (isTagPresent(combinedTag, actualTags)) {
+      return [{ label: `Relation: ${name}`, candidateTag: combinedTag, matchedTag: combinedTag, method: 'ampersand-combined' }];
+    }
+    return [partA, partB];
+  }
+
+  /**
+   * Computes whether ESTREETBAND_DOTTED_TAG_OVERRIDES's members should be
+   * expected under their dotted tag on this page — see
+   * checkOnStageRelationTags's preferDottedEStreetTag. Factored out so
+   * colorizeOnStageRelationNames can use the exact same rule without
+   * re-running checkOnStageRelationTags.
+   * @param {Map<string, number>} tabMap
+   * @param {string[]}            relationNames - extractOnStageRelationNames(doc) result.
+   * @param {string}              [eventType]
+   * @returns {boolean}
+   */
+  function computePreferDottedEStreetTag(tabMap, relationNames, eventType) {
+    return tabMap.has('On Stage')
+      && (eventType === 'gig' || eventType === 'rehearsal')
+      && !relationNames.some(n => n.toLowerCase() === 'the e street band');
+  }
+
+  /**
+   * Checks that a DETAIL page's "On Stage" (gig/rehearsal/interview), "In
+   * Studio" (recording), or "On Audio" (nogig) tab relation names each have a
    * corresponding tag. When the matched tab has a `fixedTag` configured
    * (see RELATION_TAB_CONFIGS — `"onstage"` for "On Stage", `"studio"` for
    * "In Studio", none for "On Audio"), that tag is always expected,
-   * independent of any relation name. If Bruce Springsteen himself is listed there marked
-   * `"(Guest)"` (see `isRelationMarkedGuest`), `"guest"` is also expected.
-   * Every other relation name is checked via `checkSingleRelationName` —
-   * except a name containing `" & "` (e.g. `"Joe Grushecky & The
-   * Houserockers"`), which is first split into two independent names, each
-   * checked separately (`"Joe Grushecky"` -> `joegrushecky`, `"The
-   * Houserockers"` -> `houserockers` via the existing "The "-stripped
-   * rule); only when *both* halves fail to match does it fall back to the
-   * combined name with `" & "` removed and a leading `"The "` stripped,
-   * e.g. `"Hall & Oates"` -> `halloates`.
+   * independent of any relation name — EXCEPT on interview pages, where an
+   * "On Stage" tab is common but the "onstage" tag itself is never expected
+   * (confirmed against several live interview pages that have the tab but
+   * no "onstage" tag; unlike gig/rehearsal, an interview isn't itself an
+   * on-stage performance). If ANY relation listed there — not just Bruce
+   * Springsteen, any of them — is marked `"(Guest)"` (see
+   * `extractGuestMarkedRelationNames`), `"guest"` is also expected — this
+   * one DOES apply to interview pages too (confirmed against a live
+   * interview page that marks Bruce Springsteen "(Guest)" and carries the
+   * "guest" tag). Every other relation name is checked via
+   * `checkSingleRelationName` — except a name containing `" & "` (e.g.
+   * `"Joe Grushecky & The Houserockers"`), which is first split into two
+   * independent names, each checked separately (`"Joe Grushecky"` ->
+   * `joegrushecky`, `"The Houserockers"` -> `houserockers` via the existing
+   * "The "-stripped rule); only when *both* halves fail to match does it
+   * fall back to the combined name with `" & "` removed and a leading
+   * `"The "` stripped, e.g. `"Hall & Oates"` -> `halloates`.
    * Returns `[]` when the page has none of RELATION_TAB_CONFIGS's tabs.
+   * On a gig/rehearsal "On Stage" tab that doesn't explicitly list "The E
+   * Street Band" itself, ESTREETBAND_DOTTED_TAG_OVERRIDES's members are
+   * expected under their dotted tag rather than the usual plain one — see
+   * checkSingleRelationName's preferDottedTag parameter.
    * @param {Document}            doc
    * @param {Map<string, number>} tabMap
    * @param {Set<string>}         actualTags
+   * @param {string}              [eventType] - DETAIL page event type
+   *   (e.g. "gig", "interview"). Used to suppress the "On Stage" tab's
+   *   fixedTag expectation for interview pages, and to scope the dotted-tag
+   *   preference to gig/rehearsal pages only.
    * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null, tabLabel: string}[]}
    */
-  function checkOnStageRelationTags(doc, tabMap, actualTags) {
+  function checkOnStageRelationTags(doc, tabMap, actualTags, eventType) {
     const tabEntry = Object.entries(RELATION_TAB_CONFIGS).find(([label]) => tabMap.has(label));
     if (!tabEntry) return [];
     const [tabLabel, config] = tabEntry;
     const items = [];
-    if (config.fixedTag) {
+    const relationNames = extractOnStageRelationNames(doc);
+    const suppressFixedTag = tabLabel === 'On Stage' && eventType === 'interview';
+    const preferDottedEStreetTag = computePreferDottedEStreetTag(tabMap, relationNames, eventType);
+    if (config.fixedTag && !suppressFixedTag) {
       items.push({
         label: `Tab: ${tabLabel}`,
         candidateTag: config.fixedTag,
@@ -5061,35 +5781,76 @@
         tabLabel,
       });
     }
-    if (isRelationMarkedGuest(doc, 'Bruce Springsteen')) {
+    const guestNames = extractGuestMarkedRelationNames(doc);
+    if (guestNames.length > 0) {
       items.push({
-        label: 'Relation: Bruce Springsteen (Guest)',
+        label: guestNames.length === 1
+          ? `Relation: ${guestNames[0]} (Guest)`
+          : `Relations marked (Guest): ${guestNames.join(', ')}`,
         candidateTag: 'guest',
         matchedTag: isTagPresent('guest', actualTags) ? 'guest' : null,
         method: 'guest',
         tabLabel,
       });
     }
-    for (const name of extractOnStageRelationNames(doc)) {
-      const ampM = name.match(/^(.+?)\s*&\s*(.+)$/);
-      if (ampM) {
-        const partA = { ...checkSingleRelationName(ampM[1].trim(), actualTags), tabLabel };
-        const partB = { ...checkSingleRelationName(ampM[2].trim(), actualTags), tabLabel };
-        if (partA.matchedTag && partB.matchedTag) {
-          items.push(partA, partB);
-          continue;
-        }
-        const combinedTag = relationTagSlug(name.replace(/^the\s+/i, '').replace(/\s*&\s*/g, ''));
-        if (isTagPresent(combinedTag, actualTags)) {
-          items.push({ label: `Relation: ${name}`, candidateTag: combinedTag, matchedTag: combinedTag, method: 'ampersand-combined', tabLabel });
-          continue;
-        }
-        items.push(partA, partB);
-        continue;
+    for (const name of relationNames) {
+      for (const r of checkRelationNameTags(name, actualTags, preferDottedEStreetTag)) {
+        items.push({ ...r, tabLabel });
       }
-      items.push({ ...checkSingleRelationName(name, actualTags), tabLabel });
     }
     return items;
+  }
+
+  /**
+   * Colorizes every relation name link under a DETAIL page's "On Stage"/
+   * "In Studio"/"On Audio" tab (see extractRelations) green when its
+   * derived tag (checkRelationNameTags) is present in actualTags, or
+   * appends a ⚠️ warning span with a descriptive tooltip when it's
+   * missing. A name marked "(Guest)" (e.g. Bruce Springsteen) is also
+   * checked against the "guest" tag specifically, on top of its own name
+   * tag. No-op when the page has no relation-listing tab at all.
+   * @param {Document}    doc
+   * @param {Set<string>} actualTags
+   * @param {boolean}     preferDottedTag - See checkSingleRelationName /
+   *   computePreferDottedEStreetTag.
+   */
+  function colorizeOnStageRelationNames(doc, actualTags, preferDottedTag) {
+    for (const group of extractRelations(doc)) {
+      for (const item of group.items) {
+        colorizeRelationEntry(item, actualTags, preferDottedTag);
+        for (const m of item.members) colorizeRelationEntry(m, actualTags, preferDottedTag);
+      }
+    }
+  }
+
+  /**
+   * Colorizes a single extractRelations item/member's own <a> link — see
+   * colorizeOnStageRelationNames.
+   * @param {{name:string, extra:string|null, el:Element}} entry
+   * @param {Set<string>} actualTags
+   * @param {boolean}     preferDottedTag
+   */
+  function colorizeRelationEntry(entry, actualTags, preferDottedTag) {
+    if (!entry.el) return;
+    const results      = checkRelationNameTags(entry.name, actualTags, preferDottedTag);
+    const guestMarked  = !!entry.extra && /guest/i.test(entry.extra);
+    const guestMissing = guestMarked && !isTagPresent('guest', actualTags);
+    const allMatched   = results.every(r => r.matchedTag);
+    if (allMatched && !guestMissing) {
+      entry.el.classList.add('bb-relation-name-ok');
+      const tags = results.map(r => `"${r.matchedTag}"`).join(' and ');
+      entry.el.title = guestMarked
+        ? `Verified: matches tag ${tags} and marked "(Guest)" with "guest" tag present`
+        : `Verified: matches tag${results.length > 1 ? 's' : ''} ${tags}`;
+      return;
+    }
+    const reasons = results.filter(r => !r.matchedTag).map(r => `expected tag "${r.candidateTag}" not found`);
+    if (guestMissing) reasons.push('marked "(Guest)" but "guest" tag not found');
+    const warn = document.createElement('span');
+    warn.className = 'bb-relation-name-warn';
+    warn.textContent = ' ⚠️';
+    warn.title = reasons.join('; ');
+    entry.el.after(warn);
   }
 
   /**
@@ -5361,21 +6122,25 @@
   }
 
   /**
-   * For "gig"/"rehearsal" DETAIL pages that have an "On Stage" tab, fetches
-   * the companion "onstage:" page (same date-slug, type swapped to
-   * "onstage", "/noredirect/true" appended) and returns the tags found in
-   * its own .page-tags. BruceBase caps tags-per-page, so some tags for a
-   * gig/rehearsal event only exist on this separate page. Returns null when
-   * not applicable (wrong event type, no "On Stage" tab) or the fetch fails.
+   * For "gig"/"rehearsal"/"interview" DETAIL pages that have an "On Stage"
+   * tab, fetches the companion "onstage:" page (same date-slug, type
+   * swapped to "onstage", "/noredirect/true" appended) and returns the tags
+   * found in its own .page-tags. BruceBase caps tags-per-page, so some tags
+   * for an event with many combined tags only exist on this separate page
+   * — interview pages have the same "On Stage" tab as gig/rehearsal pages
+   * and can overflow onto a companion page the same way, even though most
+   * don't (no companion page is simply a 404, handled like any other
+   * fetch failure below). Returns null when not applicable (wrong event
+   * type, no "On Stage" tab) or the fetch fails.
    * @param {string}             path     - Current page's path, no leading slash, e.g. "gig:2025-10-26-stone-pony-asbury-park-nj".
    * @param {string}             eventType
    * @param {Map<string,number>} tabMap   - buildTabMap(document) result.
    * @returns {Promise<{url: string, tags: Set<string>}|null>}
    */
   async function fetchOnstageCompanionTags(path, eventType, tabMap) {
-    if (eventType !== 'gig' && eventType !== 'rehearsal') return null;
+    if (eventType !== 'gig' && eventType !== 'rehearsal' && eventType !== 'interview') return null;
     if (!tabMap.has('On Stage')) return null;
-    const onstagePath = path.replace(/^(gig|rehearsal):/, 'onstage:') + '/noredirect/true';
+    const onstagePath = path.replace(/^(gig|rehearsal|interview):/, 'onstage:') + '/noredirect/true';
     const url = `${location.protocol}//${location.host}/${onstagePath}`;
     try {
       const onstageDoc = await fetchPage(url);
@@ -6314,13 +7079,20 @@
 
   /**
    * Parses a DETAIL page's event-name title into its location components.
+   * Strips a trailing "(Early)"/"(Late)"/"(Afternoon)"/"(Evening)"
+   * disambiguation suffix (used for multiple same-day shows, e.g. "…,
+   * Asbury Park, NJ (Late)") first — otherwise it glues onto the state
+   * abbreviation as its own comma-part's tail ("NJ (Late)"), breaking
+   * parseLocationParts's exact 2-letter state-abbreviation match and
+   * leaving the state/country tags unchecked.
    * @param {string} pageTitle - e.g. "2026-04-18 Pollak Theatre, Monmouth University, West Long Branch, NJ".
    * @returns {ReturnType<typeof parseLocationParts>}
    */
   function parseEventNameLocation(pageTitle) {
     const m = pageTitle.trim().match(/^\d{4}-\d{2}-\d{2}\s+(.+)$/);
     if (!m) return null;
-    return parseLocationParts(m[1].split(',').map(s => s.trim()).filter(Boolean));
+    const withoutSuffix = m[1].replace(/\s*\((?:Early|Late|Afternoon|Evening)\)\s*$/i, '');
+    return parseLocationParts(withoutSuffix.split(',').map(s => s.trim()).filter(Boolean));
   }
 
   /**
@@ -6471,7 +7243,8 @@
   /**
    * Computes the set of tags expected on a DETAIL page, derived from the
    * event date/type and tab content (Recording, News/Memorabilia, setlist,
-   * Storyteller).
+   * Storyteller, Eyewitness). Also expects "underconstruction" when doc
+   * shows BruceBase's "Under Construction" banner (see hasUnderConstructionBanner).
    * @param {Document}            doc
    * @param {Map<string,number>}  tabMap
    * @param {string|null}         eventDate  - "YYYY-MM-DD" (no day-suffix letter).
@@ -6482,9 +7255,12 @@
    * @param {boolean}             [hasHelp] - Whether the YEAR page shows a
    *   "Help Us" call-to-action icon for this event (see hasHelpIcon /
    *   eventHasHelpIcon). When true, "help" is always expected as a tag.
+   * @param {boolean}             [hasFeatured] - Whether the YEAR page shows
+   *   a "Featured" icon for this event (see hasFeaturedIcon /
+   *   eventHasFeaturedIcon). When true, "featured" is always expected as a tag.
    * @returns {Set<string>}
    */
-  function computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix = null, hasHelp = false) {
+  function computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix = null, hasHelp = false, hasFeatured = false) {
     const expected = new Set();
 
     const dm = (eventDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -6503,6 +7279,8 @@
     }
     if (daySuffix) expected.add(daySuffix);
     if (hasHelp) expected.add('help');
+    if (hasFeatured) expected.add('featured');
+    if (hasUnderConstructionBanner(doc)) expected.add('underconstruction');
 
     if (eventType) expected.add(eventType.toLowerCase());
 
@@ -6550,6 +7328,10 @@
     const storytellerTab = getTabEl(doc, tabMap, 'Storyteller');
     if (storytellerTab && !SORRY_RE.test(storytellerTab.textContent.trim())) expected.add('storyteller');
 
+    // Eyewitness tab.
+    const eyewitnessTab = getTabEl(doc, tabMap, 'Eyewitness');
+    if (eyewitnessTab && !SORRY_RE.test(eyewitnessTab.textContent.trim())) expected.add('eyewitness');
+
     return expected;
   }
 
@@ -6580,7 +7362,8 @@
     // boilerplate "please get in touch" note for undocumented events, OR a
     // tab-specific note on the DETAIL page itself (e.g. "Complete lineup of
     // performers is not known" inside the "On Stage" tab).
-    const hasHelp   = hasHelpIcon(section) || hasHelpIcon(doc);
+    const hasHelp     = hasHelpIcon(section) || hasHelpIcon(doc);
+    const hasFeatured = hasFeaturedIcon(section) || hasFeaturedIcon(doc);
 
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
 
@@ -6591,7 +7374,7 @@
       : [];
     for (const t of onstageAdditionalTags) actualTags.add(t);
 
-    const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix, hasHelp);
+    const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix, hasHelp, hasFeatured);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
 
     // Setlist song → tag check: every song in the Setlist tab should have a
@@ -6611,7 +7394,7 @@
     // "On Stage"/"In Studio"/"On Audio" tab → relation tag check: the tab's
     // fixed tag (if any — "onstage"/"studio") plus every relation name
     // listed there should each have a corresponding tag.
-    const relationResults       = checkOnStageRelationTags(doc, tabMap, actualTags);
+    const relationResults       = checkOnStageRelationTags(doc, tabMap, actualTags, eventType);
     const matchedRelationsByTag = new Map(relationResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
     const unmatchedRelations    = relationResults.filter(r => !r.matchedTag);
 
@@ -6742,28 +7525,34 @@
 
   /**
    * Returns the set of lowercase tags expected for a venue page.
-   * Currently: "venue" (always) and the first letter of the venue name.
+   * Currently: "venue" (always), the first letter of the venue name, and
+   * "underconstruction" when the page shows BruceBase's "Under
+   * Construction" banner (see hasUnderConstructionBanner).
    * Location tags (venue name/city/state/country slugs) are checked
    * separately via checkVenuePageLocationTags — see annotateVenuePageTags
    * / addVenueTagsButton.
-   * @param {string} venueName  - Text from the venue page's #page-title.
+   * @param {string}   venueName  - Text from the venue page's #page-title.
+   * @param {Document} [doc=document] - Defaults to the live document; pass
+   *   a fetched venueDoc for the YEAR page's nested "Tags" button.
    * @returns {Set<string>}
    */
-  function computeExpectedVenueTags(venueName) {
+  function computeExpectedVenueTags(venueName, doc = document) {
     const expected = new Set(['venue']);
     const first = (venueName || '').trim()[0];
     if (first && /[a-z]/i.test(first)) expected.add(first.toLowerCase());
+    if (hasUnderConstructionBanner(doc)) expected.add('underconstruction');
     return expected;
   }
 
   /**
    * Returns true for venue-page tags whose presence can be verified:
-   * the "venue" tag and single lowercase letter tags (first-letter index).
+   * the "venue" tag, "underconstruction", and single lowercase letter
+   * tags (first-letter index).
    * @param {string} tag
    * @returns {boolean}
    */
   function isManagedVenueTag(tag) {
-    return tag === 'venue' || /^[a-z]$/.test(tag);
+    return tag === 'venue' || tag === 'underconstruction' || /^[a-z]$/.test(tag);
   }
 
   /**
@@ -6885,7 +7674,7 @@
     if (tagLinks.length === 0) return;
 
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
-    const expectedTags = computeExpectedVenueTags(venueName);
+    const expectedTags = computeExpectedVenueTags(venueName, venueDoc);
     const missingTags  = [...expectedTags].filter(t => !actualTags.has(t)).sort();
 
     // Venue-name → tag check: venue/city/state/country parts of the venue
@@ -6971,9 +7760,11 @@
 
   /**
    * Returns the set of lowercase tags expected on a SONG page: "song"
-   * (always), the first letter of the song name, and "lyricsheet" when the
-   * Gallery tab has an image whose filename contains "lyricsheet". Used by
-   * the YEAR page's nested "Song Tags" button (against a fetched `songDoc`)
+   * (always), the first letter of the song name, "lyricsheet" when the
+   * Gallery tab has an image whose filename contains "lyricsheet", and
+   * "underconstruction" when the page shows BruceBase's "Under
+   * Construction" banner (see hasUnderConstructionBanner). Used by the
+   * YEAR page's nested "Song Tags" button (against a fetched `songDoc`)
    * and, via computeExpectedSongTags, by the live SONG page's own annotation
    * (against the live `document`).
    * @param {Document}           songDoc
@@ -6993,19 +7784,22 @@
       expected.add('lyricsheet');
     }
 
+    if (hasUnderConstructionBanner(songDoc)) expected.add('underconstruction');
+
     return expected;
   }
 
   /**
    * Returns true for song-page tags whose presence can be verified: "song",
-   * "lyricsheet", and single lowercase letter tags (first-letter index).
-   * Used by the YEAR page's nested "Song Tags" button, and, via
-   * isManagedSongTag, by the live SONG page's own annotation.
+   * "lyricsheet", "underconstruction", and single lowercase letter tags
+   * (first-letter index). Used by the YEAR page's nested "Song Tags"
+   * button, and, via isManagedSongTag, by the live SONG page's own
+   * annotation.
    * @param {string} tag
    * @returns {boolean}
    */
   function isManagedYearSongTag(tag) {
-    return tag === 'song' || tag === 'lyricsheet' || /^[a-z]$/.test(tag);
+    return tag === 'song' || tag === 'lyricsheet' || tag === 'underconstruction' || /^[a-z]$/.test(tag);
   }
 
   /**
@@ -7225,6 +8019,7 @@
     const expected = new Set();
     if (tabLabels.has('Bands'))   expected.add('person');
     if (tabLabels.has('Members')) expected.add('band');
+    if (hasUnderConstructionBanner(relDoc)) expected.add('underconstruction');
     return expected;
   }
 
@@ -7264,7 +8059,9 @@
         a.style.fontWeight = 'bold';
         a.title = expectedNameTags.get(tag)?.message || (tag === 'person'
           ? 'Tag "person" verified: page has a "Bands" tab (this entry belongs to bands)'
-          : 'Tag "band" verified: page has a "Members" tab (this entry has members)');
+          : tag === 'band'
+          ? 'Tag "band" verified: page has a "Members" tab (this entry has members)'
+          : 'Tag "underconstruction" verified: page shows the "Under Construction" banner');
       }
       return { tag, html: a.outerHTML, missing: false, spurious, tooltip };
     });
@@ -7515,12 +8312,17 @@
    *   this icon directly inside a DETAIL page tab (e.g. "Complete lineup of performers
    *   is not known" in the "On Stage" tab), not just on the YEAR page. When either is
    *   true, "help" is always expected as a tag.
+   * @param {boolean}             [hasFeatured] - Whether the YEAR page shows a
+   *   "Featured" icon for this event (see eventHasFeaturedIcon). ORed with a check
+   *   of the live DETAIL page's own content (see hasFeaturedIcon). When either is
+   *   true, "featured" is always expected as a tag.
    * @returns {{additionalTags: string[], onstageUrl: string|null}} Tags found only on the onstage companion page, for addOnstageTagsGlyph.
    */
-  function annotateDetailPageTags(tabMap, eventDate, eventType, detailSections, rawDetailName, onstageResult = null, hasHelp = false) {
+  function annotateDetailPageTags(tabMap, eventDate, eventType, detailSections, rawDetailName, onstageResult = null, hasHelp = false, hasFeatured = false) {
     const tagsContainer = document.querySelector('.page-tags');
     if (!tagsContainer) return { additionalTags: [], onstageUrl: null };
     hasHelp = hasHelp || hasHelpIcon(document);
+    hasFeatured = hasFeatured || hasFeaturedIcon(document);
 
     const tagLinks     = [...tagsContainer.querySelectorAll('a[href]')];
     const actualTags   = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
@@ -7561,18 +8363,28 @@
     }
 
     // "On Stage"/"In Studio" tab → relation tag check: the tab's fixed tag
-    // ("onstage"/"studio") plus every relation name listed there should
-    // each have a corresponding tag. Computed here (before spurious/passing)
-    // because "onstage" is also a member of MANAGED_CONTENT_TAGS (used on
-    // actual /onstage: pages) but is never added to computeExpectedTags for
-    // gig/rehearsal pages — without this exclusion, the generic
-    // spurious-tag check below would incorrectly flag it orange even while
-    // this check marks it green.
-    const relationResults    = checkOnStageRelationTags(document, tabMap, actualTags);
+    // ("onstage"/"studio", suppressed on interview pages — see
+    // checkOnStageRelationTags) plus every relation name listed there
+    // should each have a corresponding tag. Computed here (before
+    // spurious/passing) because "onstage" is also a member of
+    // MANAGED_CONTENT_TAGS (used on actual /onstage: pages) but is never
+    // added to computeExpectedTags for these pages — without this
+    // exclusion, the generic spurious-tag check below would incorrectly
+    // flag it orange even while this check marks it green.
+    const relationResults    = checkOnStageRelationTags(document, tabMap, actualTags, eventType);
     const matchedRelationTagSet = new Set(relationResults.filter(r => r.matchedTag).map(r => r.matchedTag));
     const unmatchedRelations = relationResults.filter(r => !r.matchedTag);
 
-    const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType, extractEventDaySuffix(path), hasHelp);
+    // Colorize each relation name link under the "On Stage"/"In Studio"/
+    // "On Audio" tab itself (not just its tag in .page-tags) green when it
+    // passes, or flag it ⚠️ when it doesn't — mirrors the tag-side check
+    // above but applied directly to the tab's own name links.
+    colorizeOnStageRelationNames(
+      document, actualTags,
+      computePreferDottedEStreetTag(tabMap, extractOnStageRelationNames(document), eventType)
+    );
+
+    const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType, extractEventDaySuffix(path), hasHelp, hasFeatured);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
     const spuriousLinks = tagLinks.filter(a => {
       const tag = a.textContent.trim().toLowerCase();
@@ -7716,9 +8528,11 @@
       const tag = a.textContent.trim().toLowerCase();
       return isManagedVenueTag(tag) && expectedTags.has(tag);
     });
-    markPassingTagLinks(passingLinks, tag => tag === 'venue'
-      ? 'Tag "venue" verified: this is a venue page'
-      : `Tag "${tag}" verified: matches the first letter of venue name "${venueName}"`);
+    markPassingTagLinks(passingLinks, tag => {
+      if (tag === 'venue') return 'Tag "venue" verified: this is a venue page';
+      if (tag === 'underconstruction') return 'Tag "underconstruction" verified: page shows the "Under Construction" banner';
+      return `Tag "${tag}" verified: matches the first letter of venue name "${venueName}"`;
+    });
 
     // Venue-name → tag check: venue/city/state/country parts of the venue
     // page's own title should each have a corresponding tag.
@@ -7772,17 +8586,45 @@
   }
 
   /**
-   * Returns the set of lowercase tags expected on a retail page.
-   * Always expects "retail"; also expects the first-letter index tag.
-   * @param {string} retailName - Text from the retail page's #page-title.
-   * @returns {Set<string>}
+   * Parses every "Month DD, YYYY" occurrence from the retail page's
+   * "Commercially Released:" line in its metadata `<div class="code"><pre>
+   * <code>…</code></pre></div>` block. A single retail page can list more
+   * than one release date for different formats, each optionally followed
+   * by a "(Label)" annotation, e.g. `"Commercially Released: April 18,
+   * 2026 (Vinyl) / May 29, 2026 (CD)"`. Returns `[]` when no such line is
+   * found.
+   * @param {Document} [doc=document]
+   * @returns {{month: string, day: string, year: string, label: string|null, raw: string}[]}
    */
+  function parseRetailReleaseDates(doc = document) {
+    const codeEl = doc.querySelector('div.code pre code, pre code');
+    if (!codeEl) return [];
+    const line = codeEl.textContent.split('\n').find(l => /^Commercially Released:/i.test(l));
+    if (!line) return [];
+    const dateRe = /([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})(?:\s*\(([^)]+)\))?/g;
+    const dates = [];
+    let m;
+    while ((m = dateRe.exec(line)) !== null) {
+      const monthIdx = MONTH_NAMES.indexOf(m[1].toLowerCase());
+      if (monthIdx === -1) continue;
+      dates.push({
+        month: MONTH_NAMES[monthIdx],
+        day:   m[2].padStart(2, '0'),
+        year:  m[3],
+        label: m[4] ? m[4].trim() : null,
+        raw:   m[0].trim(),
+      });
+    }
+    return dates;
+  }
+
   /**
-   * Returns the set of lowercase tags expected on a retail page.
-   * Always expects "retail" + first-letter index tag.
-   * When a "Commercially Released: Month DD, YYYY" line is found in a
-   * <div class="code"><pre><code>…</code></pre></div> block, also expects
-   * the lowercase month name, the zero-padded day-of-month, and the year.
+   * Returns the set of lowercase tags expected on a retail page: "retail"
+   * + first-letter index tag, always; the lowercase month name, zero-
+   * padded day-of-month, and year of every "Commercially Released" date
+   * found by parseRetailReleaseDates (one page can list several, one per
+   * release format); and "underconstruction" when the page shows
+   * BruceBase's "Under Construction" banner (see hasUnderConstructionBanner).
    * @param {string}   retailName - Text from the retail page's #page-title.
    * @param {Document} [doc]      - Defaults to the live document.
    * @returns {Set<string>}
@@ -7792,33 +8634,28 @@
     const first = (retailName || '').trim()[0];
     if (first && /[a-z]/i.test(first)) expected.add(first.toLowerCase());
 
-    // Parse release date from the metadata code block, if present.
-    const codeEl = doc.querySelector('div.code pre code, pre code');
-    if (codeEl) {
-      for (const line of codeEl.textContent.split('\n')) {
-        const m = line.match(/^Commercially Released:\s*(\w+)\s+(\d{1,2}),\s*(\d{4})/i);
-        if (m) {
-          const monthIdx = MONTH_NAMES.indexOf(m[1].toLowerCase());
-          if (monthIdx !== -1) expected.add(MONTH_NAMES[monthIdx]);
-          expected.add(m[2].padStart(2, '0'));
-          expected.add(m[3]);
-          break;
-        }
-      }
+    for (const d of parseRetailReleaseDates(doc)) {
+      expected.add(d.month);
+      expected.add(d.day);
+      expected.add(d.year);
     }
+
+    if (hasUnderConstructionBanner(doc)) expected.add('underconstruction');
 
     return expected;
   }
 
   /**
    * Returns true for retail-page tags whose presence can be verified:
-   * the "retail" tag, single lowercase letter tags (first-letter index),
-   * month names, 4-digit years, and day-of-month numbers (1–31).
+   * the "retail" tag, "underconstruction", single lowercase letter tags
+   * (first-letter index), month names, 4-digit years, and day-of-month
+   * numbers (1–31).
    * @param {string} tag
    * @returns {boolean}
    */
   function isManagedRetailTag(tag) {
     if (tag === 'retail') return true;
+    if (tag === 'underconstruction') return true;
     if (/^[a-z]$/.test(tag)) return true;
     if (MONTH_NAMES.includes(tag)) return true;
     if (/^\d{4}$/.test(tag)) return true;
@@ -7838,6 +8675,7 @@
 
     const tagLinks      = [...tagsContainer.querySelectorAll('a[href]')];
     const actualTags    = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    const releaseDates  = parseRetailReleaseDates(document);
     const expectedTags  = computeExpectedRetailTags(retailName);
     const missingTags   = [...expectedTags].filter(t => !actualTags.has(t)).sort();
     const spuriousLinks = tagLinks.filter(a => {
@@ -7848,12 +8686,26 @@
       const tag = a.textContent.trim().toLowerCase();
       return isManagedRetailTag(tag) && expectedTags.has(tag);
     });
+
+    // Describes which "Commercially Released" date(s) a month/day/year tag
+    // matches, naming the specific date (with its "(Label)" if any) so a
+    // page listing several release dates gets an unambiguous tooltip.
+    const describeDateTag = (tag, verb) => {
+      const matches = releaseDates.filter(d => d.month === tag || d.day === tag || d.year === tag);
+      if (matches.length === 0) return null;
+      const kind   = MONTH_NAMES.includes(tag) ? 'Month' : /^\d{4}$/.test(tag) ? 'Year' : 'Day';
+      const plural = matches.length > 1 ? 's' : '';
+      const dates  = matches.map(d => d.raw).join(' and ');
+      return verb === 'verified'
+        ? `${kind} tag "${tag}" verified: matches "Commercially Released" date${plural} ${dates}`
+        : `${kind} tag "${tag}" expected: matches "Commercially Released" date${plural} ${dates} but not present`;
+    };
+
     markPassingTagLinks(passingLinks, tag => {
       if (tag === 'retail') return 'Tag "retail" verified: this is a retail page';
+      if (tag === 'underconstruction') return 'Tag "underconstruction" verified: page shows the "Under Construction" banner';
       if (/^[a-z]$/.test(tag)) return `Tag "${tag}" verified: matches the first letter of retail name "${retailName}"`;
-      if (MONTH_NAMES.includes(tag)) return `Month tag "${tag}" verified: matches the "Commercially Released" date`;
-      if (/^\d{4}$/.test(tag)) return `Year tag "${tag}" verified: matches the "Commercially Released" date`;
-      return `Day tag "${tag}" verified: matches the "Commercially Released" date`;
+      return describeDateTag(tag, 'verified') || `Tag "${tag}" verified: matches the "Commercially Released" date`;
     });
 
     if (missingTags.length === 0 && spuriousLinks.length === 0) return;
@@ -7880,7 +8732,9 @@
       const missingSpan = document.createElement('span');
       missingSpan.className = 'bb-tag-missing';
       missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
-      missingSpan.title = `Tag "${tag}" expected for this retail page but not present`;
+      missingSpan.title = tag === 'underconstruction'
+        ? 'Tag "underconstruction" expected: page shows the "Under Construction" banner but the tag is not present'
+        : (describeDateTag(tag, 'expected') || `Tag "${tag}" expected for this retail page but not present`);
       missingSpan.textContent = ` ⚠️${tag}`;
       span.appendChild(missingSpan);
     }
@@ -7944,6 +8798,8 @@
       ? 'Tag "song" verified: this is a song page'
       : tag === 'lyricsheet'
       ? 'Tag "lyricsheet" verified: Gallery tab has lyricsheet image(s)'
+      : tag === 'underconstruction'
+      ? 'Tag "underconstruction" verified: page shows the "Under Construction" banner'
       : `Tag "${tag}" verified: matches the first letter of song title "${songName}"`);
 
     // Exact-title-slug tag: a hard requirement, e.g. "BORN TO RUN" -> "borntorun".
@@ -8005,6 +8861,8 @@
    * Returns the set of lowercase tags expected on a relation page.
    * Presence of a "Bands" tab → expects "person".
    * Presence of a "Members" tab → expects "band".
+   * Also expects "underconstruction" when the page shows BruceBase's
+   * "Under Construction" banner (see hasUnderConstructionBanner).
    * Uses the live document's .yui-nav to detect tab labels.
    * @returns {Set<string>}
    */
@@ -8015,6 +8873,7 @@
     const expected = new Set();
     if (tabLabels.has('Bands'))   expected.add('person');
     if (tabLabels.has('Members')) expected.add('band');
+    if (hasUnderConstructionBanner(document)) expected.add('underconstruction');
     return expected;
   }
 
@@ -8024,7 +8883,7 @@
    * @returns {boolean}
    */
   function isManagedRelationTag(tag) {
-    return tag === 'person' || tag === 'band';
+    return tag === 'person' || tag === 'band' || tag === 'underconstruction';
   }
 
   /**
@@ -8255,7 +9114,9 @@
     });
     markPassingTagLinks(passingLinks, tag => tag === 'person'
       ? 'Tag "person" verified: page has a "Bands" tab (this entry belongs to bands)'
-      : 'Tag "band" verified: page has a "Members" tab (this entry has members)');
+      : tag === 'band'
+      ? 'Tag "band" verified: page has a "Members" tab (this entry has members)'
+      : 'Tag "underconstruction" verified: page shows the "Under Construction" banner');
 
     const passingNameLinks = tagLinks.filter(a =>
       expectedNameTags.has(a.textContent.trim().toLowerCase())
@@ -8302,6 +9163,27 @@
     }
   }
 
+  /**
+   * Flags a YEAR page's "Featured" icon with a ⚠️ warning glyph (and
+   * tooltip) when the linked DETAIL page (doc) doesn't have the "featured"
+   * tag. No-op when the tag is present — computeExpectedTags/
+   * MANAGED_CONTENT_TAGS already colorizes it green in .page-tags on the
+   * DETAIL page itself, and no icon-side annotation is needed there.
+   * @param {HTMLImageElement} icon - The "Featured" <img class="image"> on the YEAR page.
+   * @param {Document}         doc  - Fetched DETAIL page document.
+   */
+  function flagFeaturedIconIfTagMissing(icon, doc) {
+    const tagLinks   = [...(doc.querySelector('.page-tags')?.querySelectorAll('a[href]') ?? [])];
+    const actualTags = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+    if (actualTags.has('featured')) return;
+    const warn = document.createElement('span');
+    warn.className = 'bb-glyph bb-icon-sorry';
+    warn.textContent = '⚠️';
+    warn.dataset.msg = 'Featured icon on YEAR page but DETAIL page has no "featured" tag.';
+    warn.title = warn.dataset.msg;
+    icon.after(warn);
+  }
+
   function wireIconHandlers(eventLink, doc, onstageResult = null) {
     const section = eventLink.closest('.bb-section-processed');
     if (!section) return;
@@ -8318,6 +9200,14 @@
       }
       // Strip suffix added on a previous run so the lookup works after a ⟳ retry.
       const rawTitle = icon.title.replace(/ — click to expand$/, '');
+
+      // "Featured" isn't a tab-content icon (not in ICON_TITLE_MAP) — it's a
+      // gold-star call-out whose only expectation is the "featured" tag.
+      if (rawTitle === 'Featured') {
+        flagFeaturedIconIfTagMissing(icon, doc);
+        continue;
+      }
+
       const canonical = ICON_TITLE_MAP[rawTitle];
       if (!canonical) continue;
       // Retail requires async page fetches — wire it separately and skip the
@@ -8998,8 +9888,14 @@
       .bb-tag-ok { color: #2a2 !important; font-weight: bold; cursor: help; }
 
       /* RELATION page: a band/member name link under the "Bands"/"Members"
-         tab whose derived tag is verified present in .page-tags */
+         tab whose derived tag is verified present in .page-tags. Also used
+         on DETAIL pages for a relation name link under the "On Stage"/"In
+         Studio"/"On Audio" tab (see colorizeOnStageRelationNames). */
       .bb-relation-name-ok { color: #2a2 !important; font-weight: bold; cursor: help; }
+
+      /* DETAIL page: ⚠️ appended after a relation name link under the "On
+         Stage"/"In Studio"/"On Audio" tab whose derived tag is missing */
+      .bb-relation-name-warn { cursor: help; }
 
       /* Tag rendered from the "onstage:" companion page, not this page's own .page-tags */
       .bb-tag-onstage { color: steelblue !important; font-style: italic; cursor: help; }
@@ -9027,6 +9923,7 @@
       .bb-original-view .bb-tag-onstage,
       .bb-original-view .bb-icon-sorry,
       .bb-original-view .bb-relation-tab-warn,
+      .bb-original-view .bb-relation-name-warn,
       .bb-original-view .bb-setlist-tab-ann { display: none !important; }
       .bb-original-view .bb-tags-warn-box   { border: none !important; background: none !important; padding: 0 !important; }
       .bb-original-view .bb-setlist-tab-match,

@@ -31,6 +31,7 @@ should be noted:
 | SmartTable integration | [SMARTTABLE.md](SMARTTABLE.md) |
 | Shared utilities and CSS | [UTILITIES.md](UTILITIES.md) |
 | Event text filter bar | [FILTERING.md](FILTERING.md) |
+| Keyboard shortcuts engine | [KEYBOARD.md](KEYBOARD.md) |
 
 ---
 
@@ -68,6 +69,10 @@ location.pathname
   sortable/filterable tables are rendered on YEAR and LIST pages.
 - `brucebase.js` — optional adapter; if `typeof BrucebaseAdapter !== 'undefined'`,
   it extracts column definitions and rows for the YEAR page SmartTable.
+- `VZ_MBLibrary.user.js` — logging, settings (schema-driven), changelog UI, and
+  GM menu integration; instantiated as `Lib`. Falls back to a console-only
+  object if `typeof VZ_MBLibrary === 'undefined'`.
 
-Both are loaded via `@require file:///…` in the userscript header and are never
-bundled into this file. All SmartTable call-sites guard with `typeof SmartTable !== 'undefined'`.
+All three are loaded via `@require file:///…` in the userscript header and are
+never bundled into this file. All SmartTable call-sites guard with
+`typeof SmartTable !== 'undefined'`.

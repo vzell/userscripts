@@ -67,10 +67,15 @@ immediately after `#page-title`.
 
 | Page | Button order |
 |------|-------------|
-| HOME | ▶ Fetch All Year Pages \| ▶ Fetch All Year-List Pages \| ⚡ Mismatches \| 💾 Save \| 📂 Load |
-| YEAR | ▶ Start \| 💾 Save \| 📂 Load \| ⇄ Original Page \| ⚡ Mismatches \| Hide Relations \| [SmartTable] |
-| LIST | ⇄ Original Page \| ⚡ Mismatches \| 💾 Save \| 📂 Load |
+| HOME | ▶ Fetch All Year Pages \| ▶ Fetch All Year-List Pages \| ⚡ Mismatches \| 💾 Save \| 📂 Load \| ⌨️ Shortcuts |
+| YEAR | ▶ Start \| 💾 Save \| 📂 Load \| ⇄ Original Page \| ⚡ Mismatches \| Hide Relations \| ⌨️ Shortcuts \| [SmartTable] |
+| LIST | ⇄ Original Page \| ⚡ Mismatches \| 💾 Save \| 📂 Load \| ⌨️ Shortcuts |
 | DETAIL | 💾 Save \| 📂 Load (⇄ Original Page prepended after processing) |
+
+`⌨️ Shortcuts` (added in v2.97, extended to LIST/RECENT CHANGES in v2.98) is wired
+wherever the page renders `#bb-sticky-bar` — see "Keyboard shortcuts engine" below.
+RECENT CHANGES isn't in this table (not one of the four main page types) but also
+gets the button, since it builds its own `#bb-sticky-bar`/`#bb-btn-container`.
 
 ### Save / Load — no new `@grant` needed
 
@@ -95,5 +100,35 @@ YEAR page event anchors, DETAIL page "Info & Setlist" anchor, LIST page event li
 
 ### `@grant` declarations
 
-Only `GM_xmlhttpRequest` and `GM_addStyle`. Do not add new grants without explicit discussion.
+`GM_xmlhttpRequest`, `GM_addStyle`, `GM_info`, `GM_setValue`, `GM_getValue`, `GM_registerMenuCommand`
+(the last four added in v2.96 to wire in `VZ_MBLibrary` for settings/changelog/logging). Do not add
+further grants without explicit discussion.
+
+### VZ_MBLibrary wiring
+
+`@require`s `lib/VZ_MBLibrary.user.js` (from `musicbrainz-userscripts`), following the same pattern
+as `MB_PageEnhancer`. Instantiated as `Lib` with a `bbp_`-prefixed `configSchema` and a `remoteConfig`
+pointing at `BruceBaseParser_CHANGELOG.json` on GitHub raw (auto-registers the "⚙️ Userscript Settings
+Manager" and "📜 ChangeLog" Tampermonkey menu commands). `log()/logWarn()/logErr()` delegate to
+`Lib.debug/warn/error`; `log()` output is gated on `bbp_enable_debug_logging` (default off), while
+`logWarn()`/`logErr()` remain always-visible.
+
+### Keyboard shortcuts engine
+
+Ported from ShowAllEntityData's Emacs-style `ctrlMFunctionMap` prefix-key system (`sa_` settings
+renamed to `bbp_`); see the "KEYBOARD SHORTCUTS SECTION" banner comment in `BruceBaseParser.user.js`.
+Two dispatch paths share one `ctrlMFunctionMap`: the prefix key (`bbp_keyboard_shortcut_prefix`,
+default `Ctrl+M`) followed by a single character always works; the direct `Ctrl+<letter>` combo only
+fires when `bbp_enable_direct_ctrl_char_shortcuts` is on (default off, to avoid clashing with
+browser/OS shortcuts). `initKeyboardShortcuts()` is called once from the top-level boot flow
+(guarded by `document._bbKeyboardShortcutsInitialized`); `addShortcutsHelpButton(container)` is
+called per-page wherever the `⌨️ Shortcuts` button should appear — currently `runHomePage()`,
+`runYearPage()`, `runListPage()`, and `runRecentChangesPage()`, i.e. every page that builds its own
+`#bb-btn-container` next to a `#bb-sticky-bar`.
+`showShortcutsHelp()` (bound to `?`/`/` and the button) is a plain custom overlay, not a port of
+SAED's `createInfoDialog`/quick-filter (not needed for the single shortcut wired up so far). The
+first (and so far only) action, `bbp_shortcut_toggle_sticky_bar` (default `Ctrl+B`), toggles
+`#bb-sticky-bar` — `toggleStickyBar()` is deliberately page-agnostic (just checks for the element's
+presence), so it works on any current or future page mode that renders one, without needing an
+allowlist of page-type flags.
 

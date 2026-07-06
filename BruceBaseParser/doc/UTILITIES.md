@@ -8,7 +8,7 @@
 | `fmtElapsed(ms)` | Returns fixed-width `MM:SS` string (zero-padded minutes and seconds) |
 | `delay(ms)` | `Promise`-based sleep via `setTimeout` |
 | `esc(str)` | HTML-escapes `& < > "` |
-| `log/logWarn/logErr(...a)` | `console.log/warn/error('[BruceBase]', ...a)` |
+| `log/logWarn/logErr(...a)` | Delegate to `Lib.debug/warn/error` (VZ_MBLibrary); `log()` is gated on the `bbp_enable_debug_logging` setting, `logWarn`/`logErr` are always visible; args are joined via `fmtArgs`/`fmtLogArg` |
 
 ---
 

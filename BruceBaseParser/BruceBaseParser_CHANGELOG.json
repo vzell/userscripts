@@ -1,5 +1,171 @@
 [
     {
+        "version": "2.98",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Widened the v2.97 sticky-bar toggle shortcut ('Ctrl+M, then B' / bbp_shortcut_toggle_sticky_bar, default Ctrl+B) from a HOME/YEAR-only allowlist to a page-agnostic check: toggleStickyBar() now simply toggles whatever #bb-sticky-bar it finds, so it works on LIST and RECENT CHANGES pages (which also render one) without any further code changes, and will keep working automatically for any future page mode that adopts #bb-sticky-bar. Also added the '⌨️ Shortcuts' help button to runListPage()'s and runRecentChangesPage()'s #bb-btn-container, matching the HOME/YEAR wiring from v2.97."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.97",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added an Emacs-style keyboard shortcut engine, ported from ShowAllEntityData's ctrlMFunctionMap prefix-key system (sa_ settings renamed to bbp_). New KEYBOARD SHORTCUTS config section: bbp_enable_keyboard_shortcuts (master toggle, default on), bbp_enable_keyboard_shortcut_tooltip (floating hint while in prefix mode, default on), bbp_keyboard_shortcut_prefix (default Ctrl+M), bbp_enable_direct_ctrl_char_shortcuts (default off — direct Ctrl+<letter> combos are suppressed everywhere until enabled, to avoid clashing with the browser/OS), and bbp_shortcut_toggle_sticky_bar (default Ctrl+B). Two dispatch paths share one ctrlMFunctionMap: the prefix key (Ctrl+M) followed by a single character always works; the direct Ctrl+<letter> combo only fires when direct shortcuts are enabled. Wired up the first action: toggling #bb-sticky-bar between displayed/hidden on the HOME and YEAR pages, available both via 'Ctrl+M, then B' (prefix mode) and via the configurable bbp_shortcut_toggle_sticky_bar direct shortcut. Also added: a '?'/'/' triggered '🎹 Keyboard Shortcuts' help dialog, and a new '⌨️ Shortcuts' button in #bb-btn-container on the HOME and YEAR pages that opens it. Dropped from the ShowAllEntityData original as not applicable to BruceBaseParser: the numbered action-button selection (1-9/a-z) in prefix mode (no 'Show all'-style buttons here), the unused isSpecialDialogOpen() guard (dead code in the source too), and createInfoDialog/quick-filter — the help dialog is a plain custom overlay instead."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.96",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "🔧 Refactor",
+                "items": [
+                    "Wired in the shared VZ_MBLibrary (@require file:///V:/home/vzell/git/musicbrainz-userscripts/lib/VZ_MBLibrary.user.js), following the pattern already used by MB_PageEnhancer. Added the new grants GM_info, GM_setValue, GM_getValue and GM_registerMenuCommand. The library is instantiated as Lib with a configSchema (namespaced under the bbp_ prefix, currently a single GENERIC SETTINGS section with bbp_enable_debug_logging), and a remoteConfig pointing at BruceBaseParser_CHANGELOG.json on GitHub raw so the library auto-registers '⚙️ Userscript Settings Manager' and '📜 ChangeLog' Tampermonkey menu commands. log()/logWarn()/logErr() now delegate to Lib.debug/warn/error instead of console.log/warn/error directly — log() output is gated on the new bbp_enable_debug_logging setting (default off), while logWarn()/logErr() remain always-visible, matching prior behaviour. A new fmtArgs()/fmtLogArg() helper joins the variadic log arguments into a single string (Error instances render as their .message; plain objects are JSON-stringified) since Lib's logging methods take a single trailing data value rather than console.log's variadic list."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.95",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "checkOnStageRelationTags's \"guest\" tag check only ever looked for Bruce Springsteen specifically marked \"(Guest)\" under the \"On Stage\"/\"In Studio\"/\"On Audio\" tab, so a page where a DIFFERENT relation was marked \"(Guest)\" (a sit-in musician, etc.) never expected the \"guest\" tag at all. Replaced isRelationMarkedGuest(doc, name) with extractGuestMarkedRelationNames(doc), which returns every guest-marked name (not just one specific person being checked for) — when any exist, \"guest\" is expected exactly once (not once per name, avoiding duplicate ⚠️guest spans in .page-tags when several people are marked \"(Guest)\" on the same page), with a label listing all of them. colorizeOnStageRelationNames's per-name-link warning (added in v2.92) was already name-agnostic, so every individually-flagged guest-marked name link was already covered — only the aggregate tag-check/tag-highlight side was Bruce-specific."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.94",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Added \"featured\" tag support, mirroring the existing \"help\" icon pattern: new hasFeaturedIcon(container)/eventHasFeaturedIcon(eventLinkEl, nextAnchorEl, content) detect BruceBase's gold-star \"Featured\" icon (<img title=\"Featured\">), and computeExpectedTags now expects the \"featured\" tag whenever it's found (either on the YEAR page's per-event block or directly on the DETAIL page itself). Added \"featured\" to MANAGED_CONTENT_TAGS/SPURIOUS_TAG_REASONS/PASSING_TAG_REASONS so it gets the same green-when-present/red-⚠️-when-missing treatment in .page-tags as every other managed tag, on both the live DETAIL page and the YEAR page's nested \"Tags\" button.",
+                    "On YEAR pages specifically, a Featured icon now also gets its own ⚠️ warning glyph (new flagFeaturedIconIfTagMissing, reusing the established .bb-glyph.bb-icon-sorry class/tooltip convention) directly next to the icon itself when the linked DETAIL page's \"featured\" tag is missing — wired into wireIconHandlers's per-icon loop (title \"Featured\" isn't in ICON_TITLE_MAP, so it was previously just silently skipped there). No icon-side glyph is added when the tag is present, since the DETAIL page's own .page-tags already shows it green in that case."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.93",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Added an entry to RELATION_TAG_ALIAS_OVERRIDES (near the top of the userscript, alongside SONG_TAG_ALIAS_OVERRIDES/VENUE_TAG_ALIAS_OVERRIDES, for easy end-user editing) for relation names whose real BruceBase tag bears no resemblance to the name itself: gig:1993-06-24-brendan-byrne-arena-east-rutherford-nj lists \"The 1992–93 World Tour Band\" on its \"On Stage\" tab, but the page's actual tag for it is \"otherband\" — none of the existing exact/the-stripped/suffix-stripped/nickname-stripped/dotted rules could ever have produced that. Verified the lookup key's en dash (\"1992–93\", U+2013) matches the live page's exact byte sequence.",
+                    "Added an Eyewitness tab check to computeExpectedTags, mirroring the existing Storyteller tab check exactly: the \"eyewitness\" tag is expected whenever the DETAIL page has a non-empty \"Eyewitness\" tab (not a \"Sorry, no ... available\" placeholder). Added \"eyewitness\" to MANAGED_CONTENT_TAGS and its SPURIOUS_TAG_REASONS/PASSING_TAG_REASONS entries alongside \"storyteller\"."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.92",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "On DETAIL pages, each relation name link under the \"On Stage\"/\"In Studio\"/\"On Audio\" tab (e.g. \"Clarence Clemons\", \"The E Street Band\") is now itself colorized green (reusing RELATION pages' .bb-relation-name-ok class) when its derived tag passes checkOnStageRelationTags's rules, or gets a ⚠️ warning span with a descriptive tooltip when it doesn't — not just the tag link in .page-tags as before. A name marked \"(Guest)\" (e.g. Bruce Springsteen) is checked against both its own name tag and the \"guest\" tag, reporting either or both reasons if either is missing.",
+                    "Refactored checkOnStageRelationTags's inline \"&\"-splitting logic into a reusable checkRelationNameTags(name, actualTags, preferDottedTag) — used by both the existing tag-side check and the new name-coloring pass — and factored preferDottedEStreetTag's computation into computePreferDottedEStreetTag(tabMap, relationNames, eventType) so both checks apply the exact same E-Street-dotted-tag rule. extractRelations now also captures each item/member's own <a> element (el) alongside its href/name/extra strings, letting callers act on the live DOM directly instead of only the extracted text."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.91",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "On DETAIL pages whose title has an \"(Early)\"/\"(Late)\"/\"(Afternoon)\"/\"(Evening)\" disambiguation suffix (e.g. gig:1971-01-08-upstage-asbury-park-nj-late's \"1971-01-08 Upstage (The), Asbury Park, NJ (Late)\"), parseEventNameLocation's state/country tags were never checked: splitting the title on commas left the suffix glued onto the last part (\"NJ (Late)\"), which parseLocationParts's exact 2-letter state-abbreviation regex (/^([A-Z]{2})$/) doesn't match, so it fell through to treating the whole \"NJ (Late)\" string as a bogus country name instead of recognizing the \"NJ\" state — silently skipping the \"newjersey(nj)\"/\"usa\" tag checks (they were present on the page but never got the green verified highlight). parseEventNameLocation now strips that trailing suffix before splitting into parts."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.90",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "The DETAIL page \"⇄ Original Page\" button (#bb-global-toggle) was only ever created deep inside runDetailProcessing's setlist happy path (insertDetailToggle, called right after renderDetailSetlist), so it silently never appeared whenever that path wasn't reached — confirmed on all 3 reported pages: interview:2016-09-06-stone-hill-studio-colts-neck-nj (interview pages have no \"Setlist\" tab at all — getSetlistContainer's #wiki-tab-0-1 assumption resolves to the \"Performances\" tab instead, which parseDetailSetlist naturally finds no songs in) and gig:1971-01-08-upstage-asbury-park-nj-late / gig:1974-02-24-main-point-bryn-mawr-pa-early (both have a real Setlist tab, but it just says \"No set details known.\" — a genuinely undocumented setlist for these early/obscure shows). insertDetailToggle now runs unconditionally right after runDetailProcessing() completes (previously called only from inside it), and no longer bails out entirely when there's no setlist container — it now always creates the button (matching Save/Load's already-unconditional creation), only skipping the processed/original div-wrapping specific to the setlist itself. Every other DETAIL page annotation (tags, icons, title warnings) still toggles correctly via the existing body.bb-original-view CSS class regardless of whether a setlist exists."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.89",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Added ESTREETBAND_DOTTED_TAG_OVERRIDES: 11 E Street Band members (Charles Giordano, Clarence Clemons, Danny Federici, Garry Tallent, Jake Clemons, Max Weinberg, Nils Lofgren, Patti Scialfa, Roy Bittan, Soozie Tyrell, Steven Van Zandt) whose \"On Stage\" tab tag on a gig/rehearsal page is expected in dotted \"first.last\" form (e.g. \"charles.giordano\") instead of the usual concatenated slug (\"charlesgiordano\") — but only when the tab does NOT explicitly list \"The E Street Band\" itself. Confirmed against two live pages: gig:1993-06-24-brendan-byrne-arena-east-rutherford-nj (band not mentioned — the \"1992-93 World Tour Band\" played instead; clarence.clemons/max.weinberg/soozie.tyrell/steven.vanzandt are indeed dotted there) and rehearsal:2026-03-19-youth-temple-ocean-grove-nj (band explicitly listed; the same people's tags are all plain). checkSingleRelationName now takes a preferDottedTag flag (computed once per checkOnStageRelationTags call as preferDottedEStreetTag) that only affects which form is *reported* as the expected tag when neither is present — both forms are always tried for matching regardless, so an exception like gig1993's non-dotted \"Roy Bittan\"/\"Patti Scialfa\" still matches correctly. The old unconditional 'jake clemons' -> 'jake.clemons' entry in RELATION_TAG_ALIAS_OVERRIDES (now empty) was folded into this same table, since it's really the same dotted-vs-plain exception, not an arbitrary typo override."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.88",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "interview:… DETAIL pages (e.g. interview:2016-09-06-stone-hill-studio-colts-neck-nj) now get the same \"On Stage\" tab treatment as gig/rehearsal pages. checkOnStageRelationTags's per-relation-name check and \"guest\" check (Bruce Springsteen marked \"(Guest)\") were already tab-driven, not event-type-gated, so they already worked for interview pages — confirmed live: interview:2023-10-28-pollak-theatre-west-long-branch-nj marks Bruce \"(Guest)\" and correctly carries the \"guest\" tag. fetchOnstageCompanionTags's companion \"onstage:\" page fetch (for events whose combined tags overflow onto a separate page) is now also attempted for interview pages, not just gig/rehearsal.",
+                    "One nuance found by comparing several live interview pages: unlike gig/rehearsal, an interview's \"On Stage\" tab never expects the fixed \"onstage\" tag itself (checked 4 different interview pages that all have the tab but none has the tag) — extending that specific rule blindly would have produced a false \"missing: onstage\" warning on every interview page. checkOnStageRelationTags now takes an eventType parameter and suppresses just that one fixedTag expectation when eventType is \"interview\", leaving every other check (including \"guest\") unaffected."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.87",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "RETAIL pages' \"Commercially Released:\" line can list more than one release date, one per format (e.g. \"April 18, 2026 (Vinyl) / May 29, 2026 (CD)\" on retail:live-from-asbury-park) — computeExpectedRetailTags previously only parsed the first date and stopped, silently never checking the rest (confirmed: that page's real tags are missing \"may\"/\"29\" entirely). New parseRetailReleaseDates(doc) extracts every date (with its optional \"(Label)\") via a global regex instead of matching-and-breaking on the first line hit, and annotateRetailPageTags now gives each month/day/year tag's tooltip the specific date(s) (and label) it verifies or is missing, e.g. \"Day tag \\\"29\\\" expected: matches \\\"Commercially Released\\\" date May 29, 2026 (CD) but not present\" — unambiguous even when two dates share a tag (e.g. both in 2026)."
+                ]
+            },
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Added a generic hasUnderConstructionBanner(doc) check (matches BruceBase's `<p><span style=\"color: red\"><sup><em>!! Under Construction !! Come back soon.</em></sup></span></p>` banner by its `<sup><em>` text, not its exact style attribute) and wired the \"underconstruction\" tag into every page type's own tag-consistency check: RETAIL (computeExpectedRetailTags/isManagedRetailTag), VENUE (computeExpectedVenueTags — now also takes an optional doc param for the YEAR page's nested \"Tags\" button — /isManagedVenueTag), SONG (computeExpectedYearSongTags/isManagedYearSongTag), RELATION (both computeExpectedRelationTags and the YEAR-page computeExpectedYearRelationTags/isManagedRelationTag), and DETAIL (added to MANAGED_CONTENT_TAGS/SPURIOUS_TAG_REASONS/PASSING_TAG_REASONS and computeExpectedTags, mirroring the existing \"help\" tag's pattern). Confirmed against the live retail:nebraska-82 and retail:live-from-asbury-park pages, both of which show the banner and already carry the tag."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "2.86",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page song-number links (`<a class=\"bb-song-num\">`, e.g. \"5.\" before \"When You Dance\") had no tooltip when rendered by the flat-view setlist renderer (renderSetlistElement, used for <p>/<blockquote>-based setlists) — only the list-view (<ol>/<li>) renderer set one. Both renderers' bb-song-num click handlers are wired in the same place (the `a.bb-song-num` click-listener loop after renderSetlistElement builds its HTML), so added `numLink.title = \"${songName} — click to load song page tabs\"` there too, matching the wording already used by the list-view renderer and by fetchAndToggleSongTabRow's own loading/loaded/failed title updates."
+                ]
+            }
+        ]
+    },
+    {
         "version": "2.85",
         "date": "2026-07-03",
         "sections": [
