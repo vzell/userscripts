@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.02
+// @version      3.03
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -151,6 +151,7 @@
    */
   const SONG_TAG_ALIAS_OVERRIDES = {
     // 'incident on 57th street': 'incident57',
+    'does this bus stop at 82nd street?': 'dtbsa82s',
     'rosalita (come out tonight)': 'rosalita',
     'tenth avenue freeze-out': '10th',
     'wreck on the highway': 'wroth',
@@ -209,6 +210,7 @@
    */
   const VENUE_TAG_ALIAS_OVERRIDES = {
     // 'spotify hq': null,
+      'bruce springsteen center for american music':'bscfam',
   };
 
   /**

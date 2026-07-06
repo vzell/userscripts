@@ -1,5 +1,17 @@
 [
     {
+        "version": "3.03",
+        "date": "2026-07-06",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Add song and venue tag overrides: 'does this bus stop at 82nd street?': 'dtbsa82s' and 'bruce springsteen center for american music':'bscfam'"
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.02",
         "date": "2026-07-06",
         "sections": [
