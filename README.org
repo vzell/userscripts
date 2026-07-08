@@ -3590,7 +3590,6 @@ if there is additionally a one character like "a", "b", "c" etc. appended to the
 second, third etc.event on the same day(month, when "00")), that character should also be present as tag value
 
 
-
 ** DONE help icon
 *** initial
 
@@ -4106,6 +4105,67 @@ only if it has sub pages
 like "http://brucebase.wikidot.com/venue:leonard-gym-washington-dc"
 
 
+
+** DONE remove newlines in the yellow warning box box around the tags on EVENT DETAIL pages
+*** initial
+
+Remove the newlines (at least they visually visible/rendered) in the yellow warning box box around the tags on EVENT
+DETAIL pages between '<div class="bb-tags-warn-box"' and '<div class="page-tags">'
+
+See also the raw HTML code @debug/tag-warning-box.html and uploaded screenshot
+
+*** bug
+
+OK, it worked, now the golden warnig box sourround the actual tags without internally showing artificial newlines.
+
+But there are still newlines between '<div class="list-pages-box">'
+and the start of the actual golden warnig box '<div class="bb-tags-warn-box"'
+
+Please remove them on the processed final page
+
+** DONE plan: add support for "nobruce" pages
+
+add support for event type "nobruce" EVENT DETAIL pages e.g http://brucebase.wikidot.com/nobruce:1986-01-27-shrine-auditorium-los-angeles-ca
+
+** DONE add support for "On Set" tab on EVENT DETAIL pages
+
+Currently on EVENT DETAIL pages like e.g. http://brucebase.wikidot.com/recording:2012-01-13-mattison-avenue-asbury-park-nj
+which have a "On Set" tab as the first one, relations under the tab are correctly verified but their tag values are not "green" colorized
+
+Please also support "On Set" tabs
+
+** DONE Jörgen Johansson
+
+On the EVENT DETAIL page http://brucebase.wikidot.com/gig:2012-01-14-paramount-theatre-asbury-park-nj (plus the tags from the additional "/noredirect/true" page)
+there is a relation name "Jörgen Johansson" from which the tag value "jrgenjohansson" is deduced. It should actually be "jorgenjohansson" before being compared to the actual tags present.
+
+The same problem exists for other relation names which have diacritics in their name. These diacritics should always
+converted to their ascii euqivalents before deducing a tag value and comparing it.
+
+** DONE still tooltips and NO underline hyperlink anymore
+*** initial
+
+On EVENT DETAIL pages like e.g. http://brucebase.wikidot.com/gig:2012-01-14-paramount-theatre-asbury-park-nj http://brucebase.wikidot.com/gig:2012-01-14-paramount-theatre-asbury-park-nj
+when switching to the "Original Page" view '<button id="bb-global-toggle"', the before "green" colored relation names
+still carry their "Verified...." tooltip but there is NO clickable underline hyperlink anymore
+
+*** bug
+
+OK, the hyperlinks are fixed, but the tooltips are still there on the "Original Page". They shoudn't, the idea of the
+"Original Page" view is, that the original page contetn before processing by the user script should be displayed. Like
+e.g what we do on the "Setlist" tab, where the tooltip on a song name is alos not shown anymore.
+
+** retail tag "green" when "Recording" tab has images which points to "disco" images
+
+http://brucebase.wikidot.com/recording:2012-01-13-mattison-avenue-asbury-park-nj
+
+#+begin_example
+<img src="http://brucebase.wdfiles.com/local--files/files:artwork-disco/disco_wreckingball.jpg" title="Wrecking Ball" height="75" alt="disco_wreckingball.jpg" class="image">
+#+end_example
+
+** Willie Nile tags are NOT processed, why
+
+http://brucebase.wikidot.com/relation:willie-nile
 
 
 * Problems
