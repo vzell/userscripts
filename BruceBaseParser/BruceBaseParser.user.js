@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.07
+// @version      3.09
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -1903,6 +1903,40 @@
   }
 
   /**
+   * Selector for annotated elements that (a) stay in the live DOM in both
+   * "Original Page" toggle states — unlike .bb-tag-missing/.bb-tag-spurious/
+   * .bb-tag-onstage/etc., which are separate elements hidden outright via
+   * .bb-original-view's `display:none` rules — and (b) carry a native
+   * `title` tooltip set directly on them by this script. CSS can reset
+   * their color/cursor (see addStyles' .bb-original-view rules) but can't
+   * touch an HTML attribute, so toggleAnnotationTitles handles those.
+   */
+  const ORIGINAL_VIEW_TITLE_SELECTOR = '.bb-tag-ok, .bb-relation-name-ok, .bb-setlist-tab-match';
+
+  /**
+   * Moves the native `title` tooltip off every ORIGINAL_VIEW_TITLE_SELECTOR
+   * element into a `data-bb-orig-title` attribute when entering "Original
+   * Page" view (so no annotation tooltip survives — matching the DETAIL
+   * page's setlist tab, which shows a pristine, listener-free clone with no
+   * titles at all) and restores it when leaving. Safe to call every click;
+   * a no-op for elements with nothing to move/restore.
+   * @param {boolean} showingOriginal
+   */
+  function toggleAnnotationTitles(showingOriginal) {
+    for (const el of document.querySelectorAll(ORIGINAL_VIEW_TITLE_SELECTOR)) {
+      if (showingOriginal) {
+        if (el.hasAttribute('title')) {
+          el.dataset.bbOrigTitle = el.getAttribute('title');
+          el.removeAttribute('title');
+        }
+      } else if (el.dataset.bbOrigTitle !== undefined) {
+        el.setAttribute('title', el.dataset.bbOrigTitle);
+        delete el.dataset.bbOrigTitle;
+      }
+    }
+  }
+
+  /**
    * Wires up the "⇄ Original Page" button for VENUE/RETAIL/SONG/RELATION
    * pages using a pure CSS toggle (body.bb-original-view — see addStyles),
    * instead of the innerHTML clone-and-swap that setupGlobalToggle uses.
@@ -1923,6 +1957,7 @@
       showingOriginal = !showingOriginal;
       btn.textContent = showingOriginal ? '⇄ Processed Page' : '⇄ Original Page';
       document.body.classList.toggle('bb-original-view', showingOriginal);
+      toggleAnnotationTitles(showingOriginal);
     });
   }
 
@@ -3278,6 +3313,7 @@
       // Hide all script-added annotation artefacts outside the setlist tab when
       // showing original, restore them when switching back to processed view.
       document.body.classList.toggle('bb-original-view', showingOriginal);
+      toggleAnnotationTitles(showingOriginal);
     });
 
     // Prepend to existing #bb-btn-container created in runDetailPage.
@@ -10125,9 +10161,19 @@
       .bb-original-view .bb-relation-name-warn,
       .bb-original-view .bb-setlist-tab-ann { display: none !important; }
       .bb-original-view .bb-tags-warn-box   { border: none !important; background: none !important; padding: 0 !important; }
-      .bb-original-view .bb-setlist-tab-match,
+      /* .bb-setlist-tab-match sits on an <em> nested inside the tab's own
+         <a href="javascript:;">, so 'inherit' correctly picks up that
+         parent's already-plain color/cursor. .bb-tag-ok/.bb-relation-name-ok
+         sit directly on the real <a href> elements themselves, where
+         'inherit' pulls from a non-link ancestor (<li>/<ul>) instead of the
+         special "this is a link" cursor/color the browser/site would
+         otherwise apply — 'revert' rolls the property back past our (and
+         the site's) author rules to the browser's native link styling
+         (blue, underlined, pointer cursor), restoring the exact "clickable
+         hyperlink" look these had before we ever touched them. */
+      .bb-original-view .bb-setlist-tab-match { color: inherit !important; font-weight: inherit !important; cursor: inherit !important; }
       .bb-original-view .bb-tag-ok,
-      .bb-original-view .bb-relation-name-ok { color: inherit !important; font-weight: inherit !important; cursor: inherit !important; }
+      .bb-original-view .bb-relation-name-ok { color: revert !important; font-weight: revert !important; cursor: revert !important; }
       /* Original view: collapse the letter-grouped lines back into
          BruceBase's original single flowing line (display:contents makes
          the wrapper divs transparent to layout, keeping only their tag

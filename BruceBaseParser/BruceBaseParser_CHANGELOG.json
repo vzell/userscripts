@@ -1,5 +1,29 @@
 [
     {
+        "version": "3.09",
+        "date": "2026-07-08",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed verified tags/relation names/setlist-tab-label still showing their annotation tooltip ('Verified: ...', etc.) while '⇄ Original Page' view is active — CSS (v3.08) fixed the hyperlink cursor/color, but the native `title` attribute is set directly by this script and isn't something CSS can hide, so it kept showing on hover even though the intent of Original Page view is to look exactly like BruceBase's own unprocessed page (as the DETAIL page's Setlist tab already does, via a pristine listener-free clone with no titles at all). Added toggleAnnotationTitles(), called from both toggle click handlers (setupAnnotationOnlyToggle for VENUE/RETAIL/SONG/RELATION, insertDetailToggle for DETAIL), which moves `title` to a `data-bb-orig-title` attribute on entering Original Page view (for .bb-tag-ok/.bb-relation-name-ok/.bb-setlist-tab-match — the only annotated elements that stay in the live DOM in both toggle states rather than being hidden outright) and restores it on the way back. Verified with a headless-browser round trip on gig:2012-01-14-paramount-theatre-asbury-park-nj."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.08",
+        "date": "2026-07-08",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed verified relation names (.bb-relation-name-ok) and verified tags (.bb-tag-ok) losing their hyperlink cursor/color when toggling to '⇄ Original Page' view on DETAIL pages — confirmed with a headless-browser check (gig:2012-01-14-paramount-theatre-asbury-park-nj): the .bb-original-view reset rule used `color/cursor: inherit`, which for these elements (the <a href> itself, not a descendant) pulls from a non-link ancestor (<li>/<ul>) instead of the browser's special link styling, silently swapping the hand cursor for a plain arrow and the link blue for plain text color — while the title tooltip (set directly on the element, unaffected by CSS) stayed visible, making it look unclickable even though the href was always intact. Switched those two rules to `revert` (rolls the property back past all author styles to the browser's native link styling: blue, underlined, pointer cursor) while leaving .bb-setlist-tab-match on `inherit`, which was already correct there (verified: it sits on an <em> nested inside its own already-plain-colored tab <a>, not on the link itself)."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.07",
         "date": "2026-07-08",
         "sections": [
