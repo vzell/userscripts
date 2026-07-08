@@ -1,5 +1,17 @@
 [
     {
+        "version": "3.11",
+        "date": "2026-07-09",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Add song and venue tag overrides: '634-5789 (soulsville, u.s.a.)':'6345789'"
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.10",
         "date": "2026-07-09",
         "sections": [

@@ -151,6 +151,7 @@
    */
   const SONG_TAG_ALIAS_OVERRIDES = {
     // 'incident on 57th street': 'incident57',
+    '634-5789 (soulsville, u.s.a.)':'6345789',
     'does this bus stop at 82nd street?': 'dtbsa82s',
     'rosalita (come out tonight)': 'rosalita',
     'tenth avenue freeze-out': '10th',
