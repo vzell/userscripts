@@ -39,7 +39,7 @@ should be noted:
 
 | Constant | Value |
 |---|---|
-| `KNOWN_EVENT_TYPES` | `gig`, `interview`, `nogig`, `offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck` |
+| `KNOWN_EVENT_TYPES` | `gig`, `interview`, `nobruce`, `nogig`, `offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck` |
 | `EVENT_URL_RE` | `/\/([a-z]+):\d{4}-\d{2}-\d{2}/` |
 | `LIST_LINK_RE` | `/\/((?:\d{4}\|1949-64))#([a-zA-Z0-9]+)$/` |
 | `INFO_SETLIST_HREF_RE` | `/^\/[\d][\w-]*#([a-zA-Z0-9]+)$/` |

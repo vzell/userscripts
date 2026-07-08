@@ -14,9 +14,9 @@
 | RELATION | `/relation:…` | `relation:` prefix |
 | RECENT CHANGES | `/system:recent-changes` | exact match |
 
-Known event types: `gig`, `interview`, `nogig`, `offstage`, `onstage`,
-`recording`, `rehearsal`, `soundcheck`. Any URL type outside this set receives
-a ❓ glyph (via `addUnknownGlyph`) and is not fetched.
+Known event types: `gig`, `interview`, `nobruce`, `nogig`, `offstage`,
+`onstage`, `recording`, `rehearsal`, `soundcheck`. Any URL type outside this
+set receives a ❓ glyph (via `addUnknownGlyph`) and is not fetched.
 
 The special slug `1949-64` covers all events from 1949 to 1964 on a single page.
 `yearPageSlug(year)` maps any year in 1949–1964 to `'1949-64'`; all other years

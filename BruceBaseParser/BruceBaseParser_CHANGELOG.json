@@ -1,5 +1,17 @@
 [
     {
+        "version": "3.10",
+        "date": "2026-07-09",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added support for the 'nobruce' DETAIL page event type (events Bruce Springsteen did not personally attend, e.g. an awards ceremony he won in absentia — confirmed against nobruce:1986-01-27-shrine-auditorium-los-angeles-ca). Previously the script did nothing at all on these pages: Tampermonkey's own @include pragma didn't match the URL, and even if it did, DETAIL_TYPE_RE gated the internal DETAIL-page dispatch and would have skipped it too. Also added it to KNOWN_EVENT_TYPES (previously the YEAR page showed these events with a '❓ Unknown event type' glyph and skipped the entire name/tag/venue comparison pipeline for them, via processOneYearEvent's isKnown early-return) and MANAGED_CONTENT_TAGS (so the 'nobruce' tag itself gets verified/colorized green like the other event-type tags). Added a 'No Bruce' venue-info prefix on the YEAR page, matching the existing 'nogig' -> 'No gig' precedent. RELATION_TAB_CONFIGS/checkOnStageRelationTags/extractRelations need no changes and remain inapplicable, since 'nobruce' pages structurally have no On Stage/In Studio/On Audio/On Set relation-participant tab (nobody performed)."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.09",
         "date": "2026-07-08",
         "sections": [

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.09
+// @version      3.10
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -13,7 +13,7 @@
 // @require      file:///V:/home/vzell/git/springsteen-site-parser/adapters/brucebase.js
 // @require      file:///V:/home/vzell/git/musicbrainz-userscripts/lib/VZ_MBLibrary.user.js
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/(\d{4}(-list)?|1949-64(-list)?|start)?$/
-// @include      /^https?:\/\/brucebase\.wikidot\.com\/(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/
+// @include      /^https?:\/\/brucebase\.wikidot\.com\/(gig|nogig|nobruce|recording|interview|offstage|onstage|rehearsal|soundcheck):/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/venue:/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/retail:/
 // @include      /^https?:\/\/brucebase\.wikidot\.com\/song:/
@@ -45,14 +45,14 @@
   const CACHE_KEY_CHANGELOG  = SCRIPT_BASE_NAME.toLowerCase() + '-remote-changelog';
 
   const KNOWN_EVENT_TYPES = new Set([
-    'gig', 'interview', 'nogig', 'offstage', 'onstage', 'recording', 'rehearsal', 'soundcheck'
+    'gig', 'interview', 'nobruce', 'nogig', 'offstage', 'onstage', 'recording', 'rehearsal', 'soundcheck'
   ]);
 
   const EVENT_URL_RE  = /\/([a-z]+):\d{4}-\d{2}-\d{2}/;
   const LIST_LINK_RE  = /\/((?:\d{4}|1949-64))#([a-zA-Z0-9]+)$/;
 
   let _savedOriginalHtml = null;   // pre-processing snapshot for YEAR page Save handler
-  const DETAIL_TYPE_RE = /^(gig|nogig|recording|interview|offstage|onstage|rehearsal|soundcheck):/;
+  const DETAIL_TYPE_RE = /^(gig|nogig|nobruce|recording|interview|offstage|onstage|rehearsal|soundcheck):/;
   // Matches "Info & Setlist" back-links on detail pages: /YEAR#ANCHOR or /1949-64#ANCHOR
   const INFO_SETLIST_HREF_RE = /^\/[\d][\w-]*#([a-zA-Z0-9]+)$/;
 
@@ -93,7 +93,7 @@
    * Tags not in this set (venue names, song abbreviations, etc.) are left unchecked.
    */
   const MANAGED_CONTENT_TAGS = new Set([
-    'gig', 'interview', 'nogig', 'offstage', 'onstage', 'recording', 'rehearsal', 'soundcheck',
+    'gig', 'interview', 'nobruce', 'nogig', 'offstage', 'onstage', 'recording', 'rehearsal', 'soundcheck',
     'bootleg', 'livedl', 'news', 'memorabilia', 'ticket',
     'setlist', 'handwritten', 'printed', 'storyteller', 'eyewitness', 'help', 'underconstruction',
     'featured',
@@ -3705,6 +3705,7 @@
             const anchorEl        = element.closest('p') || element.parentNode;
             const venuePrefix = eventType === 'recording' ? 'Recording session'
                                             : eventType === 'nogig'     ? 'No gig'
+                                            : eventType === 'nobruce'   ? 'No Bruce'
                                             : '';
             renderVenueInfo(lastScheduledDiv || anchorEl, venueHref, venueName, match, detailVenuePart, venuePrefix, venueDetailExtra);
             _venueTabDoc  = venueDoc;

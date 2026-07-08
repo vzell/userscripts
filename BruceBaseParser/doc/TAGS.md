@@ -42,10 +42,10 @@ which each get their own separate check independent of
 | `relationMethodLabel(method, tabLabel)` | Function (not a lookup constant) returning the human-readable reason for the relation tag check's tooltips, parameterized by which tab (`"On Stage"`/`"In Studio"`/`"On Audio"`/`"On Set"`) produced the match |
 | `ALIAS_SUBSTRING_TAGS` | `{award: ['award'], grammy: ['grammy'], private: ['private', 'closed']}` — generic, event-type-independent tags verified against the event alias (see "Alias-substring tag check" below) rather than any per-event-type rule; each tag maps to one or more alias substrings that verify it (not necessarily equal to the tag itself) |
 
-`MANAGED_CONTENT_TAGS` covers: event types (`gig`, `interview`, `nogig`,
-`offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck`) plus `bootleg`,
-`livedl`, `news`, `memorabilia`, `ticket`, `setlist`, `handwritten`, `printed`,
-`storyteller`, `help`.
+`MANAGED_CONTENT_TAGS` covers: event types (`gig`, `interview`, `nobruce`,
+`nogig`, `offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck`) plus
+`bootleg`, `livedl`, `news`, `memorabilia`, `ticket`, `setlist`, `handwritten`,
+`printed`, `storyteller`, `help`.
 
 ---
 
