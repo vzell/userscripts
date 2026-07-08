@@ -2941,7 +2941,7 @@ render the relations also inside a "blockquote" container
 
 on e.g. http://brucebase.wikidot.com/2026#300126 there should be a little more space between relation block and show
 
-** TODO compare song title - adjust for ", The" in http://brucebase.wikidot.com/relation:the-e-street-band
+** TODO compare relation title for groups - adjust for ", The" in http://brucebase.wikidot.com/relation:the-e-street-band
 
 E Street Band, The
 
@@ -3591,7 +3591,6 @@ second, third etc.event on the same day(month, when "00")), that character shoul
 
 
 
-
 ** DONE help icon
 *** initial
 
@@ -3859,7 +3858,6 @@ where "The E Street Band" is explicitly mentioned under the "On Stage" tab, the 
 |                  | ernest.carter    |
 |                  | vini.lopez       |
 
-
 ** DONE featured tag
 
 when the following icon
@@ -3901,7 +3899,6 @@ Why, please fix
 On e.g. http://brucebase.wikidot.com/gig:1971-01-08-upstage-asbury-park-nj-late
 
 the tags "usa" and "newjersey(nj)" are not colored "green" although they match 'Country: USA' and 'State: NJ'
-
 
 ** DONE colorize the relation names in "green"
 
@@ -4098,7 +4095,7 @@ if they only differ by a trailing (Early)/(Late)/(Afternoon)/(Evening)/etc.
 and flag it with a "green" warning glyph instead of the curretn '<span class="bb-glyph"> ⚠️</span>' and don't report it as a general mismatch in the
 '<span class="bb-event-title-warn"' tooltip neither count it in the '<button id="bb-mismatch-toggle"'
 
-** "university" tag when University is in the event detail
+** TODO "university" tag when University is in the event detail
 
 add "university" tag when "University" string
 
