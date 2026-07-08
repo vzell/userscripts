@@ -1,5 +1,29 @@
 [
     {
+        "version": "3.07",
+        "date": "2026-07-08",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Added the 'On Set' tab (recording pages' video-session variant of 'In Studio' — e.g. recording:2012-01-13-mattison-avenue-asbury-park-nj) to RELATION_TAB_CONFIGS (fixedTag: null, like 'On Audio' — confirmed no 'onset'-style fixed tag exists on live pages). Relation names under this tab were already colorized correctly (extractRelations reads tab index 0 regardless of its label), but checkOnStageRelationTags — which drives the green 'verified' colorization on the actual .page-tags tag links — only recognized 'On Stage'/'In Studio'/'On Audio' and returned [] for 'On Set', so those tags never got marked green even though they matched."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.06",
+        "date": "2026-07-08",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed relation-name tag derivation dropping accented characters instead of transliterating them, e.g. 'Jörgen Johansson' slugified to 'jrgenjohansson' (the 'ö' silently deleted by the punctuation-stripping regex) instead of 'jorgenjohansson' — causing a false 'missing tag' warning on gig:2012-01-14-paramount-theatre-asbury-park-nj even though the correct 'jorgenjohansson' tag is present (merged in from the /onstage:.../noredirect/true companion page). relationTagSlug() and normalizeRelationTagName() now run stripDiacritics() first, same as songTagSlug() already did; also applied to toLocationTagSlug() (venue/city/state names) for consistency, since the same silent-character-drop bug applied there too."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.05",
         "date": "2026-07-08",
         "sections": [

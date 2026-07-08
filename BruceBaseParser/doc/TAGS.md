@@ -38,8 +38,8 @@ which each get their own separate check independent of
 | `COUNTRY_EXTRA_TAGS` | `{countryName: ['extraTag', …]}` — extra continent/region tags expected alongside a bare country's own slug (e.g. `England` → `unitedkingdom`, `europe`); not exhaustive, user-extendable |
 | `VENUE_TAG_ALIAS_OVERRIDES` | `{venueOrDetailNameLowercase: 'expectedTag' \| null}` — user-editable manual overrides for the location tag check; `null` means "no tag expected for this name at all" (empty by default) |
 | `RELATION_TAG_ALIAS_OVERRIDES` | `{relationNameLowercase: 'expectedTag'}` — user-editable manual overrides for the "On Stage"/"In Studio" tab relation tag check, for the rare case where none of the exact/"The "-stripped/suffix-stripped/nickname-stripped derivations match BruceBase's real tag (e.g. a typo like `jake.clemons`) |
-| `RELATION_TAB_CONFIGS` | `{'On Stage': {fixedTag: 'onstage'}, 'In Studio': {fixedTag: 'studio'}, 'On Audio': {fixedTag: null}}` — which relation-listing tab (gig/rehearsal, recording, nogig) maps to which always-expected fixed tag (`null` = no fixed tag, only the per-relation-name checks apply), for `checkOnStageRelationTags` |
-| `relationMethodLabel(method, tabLabel)` | Function (not a lookup constant) returning the human-readable reason for the relation tag check's tooltips, parameterized by which tab (`"On Stage"`/`"In Studio"`/`"On Audio"`) produced the match |
+| `RELATION_TAB_CONFIGS` | `{'On Stage': {fixedTag: 'onstage'}, 'In Studio': {fixedTag: 'studio'}, 'On Audio': {fixedTag: null}, 'On Set': {fixedTag: null}}` — which relation-listing tab (gig/rehearsal, recording audio session, nogig, recording video session) maps to which always-expected fixed tag (`null` = no fixed tag, only the per-relation-name checks apply), for `checkOnStageRelationTags` |
+| `relationMethodLabel(method, tabLabel)` | Function (not a lookup constant) returning the human-readable reason for the relation tag check's tooltips, parameterized by which tab (`"On Stage"`/`"In Studio"`/`"On Audio"`/`"On Set"`) produced the match |
 | `ALIAS_SUBSTRING_TAGS` | `{award: ['award'], grammy: ['grammy'], private: ['private', 'closed']}` — generic, event-type-independent tags verified against the event alias (see "Alias-substring tag check" below) rather than any per-event-type rule; each tag maps to one or more alias substrings that verify it (not necessarily equal to the tag itself) |
 
 `MANAGED_CONTENT_TAGS` covers: event types (`gig`, `interview`, `nogig`,
@@ -461,22 +461,23 @@ slug/override/remainder-slug that was expected).
 
 ---
 
-## "On Stage"/"In Studio"/"On Audio" tab relation tag check (`checkOnStageRelationTags`)
+## "On Stage"/"In Studio"/"On Audio"/"On Set" tab relation tag check (`checkOnStageRelationTags`)
 
 Every relation name listed under a DETAIL page's "On Stage" tab (gig/
-rehearsal), "In Studio" tab (recording), or "On Audio" tab (nogig) should
-have a corresponding tag, checked on both `annotateDetailPageTags` (live
-DETAIL page) and `addTagsButton` (YEAR page's nested "Tags" button, using
-the fetched `doc`). `checkOnStageRelationTags(doc, tabMap, actualTags)`
-looks up which of `RELATION_TAB_CONFIGS`'s tab labels (`"On Stage"` → fixed
-tag `"onstage"`, `"In Studio"` → fixed tag `"studio"`, `"On Audio"` → no
-fixed tag) is present in `tabMap` (from `buildTabMap`) and returns `[]`
+rehearsal), "In Studio" tab (recording, audio session), "On Audio" tab
+(nogig), or "On Set" tab (recording, video session) should have a
+corresponding tag, checked on both `annotateDetailPageTags` (live DETAIL
+page) and `addTagsButton` (YEAR page's nested "Tags" button, using the
+fetched `doc`). `checkOnStageRelationTags(doc, tabMap, actualTags)` looks up
+which of `RELATION_TAB_CONFIGS`'s tab labels (`"On Stage"` → fixed tag
+`"onstage"`, `"In Studio"` → fixed tag `"studio"`, `"On Audio"`/`"On Set"` →
+no fixed tag) is present in `tabMap` (from `buildTabMap`) and returns `[]`
 immediately when none is; otherwise (a page has at most one of these tabs —
 it's always tab index 0, see `extractRelations`):
 
 1. **Fixed tag** (optional): when the matched tab's configured `fixedTag` is
-   set (`"onstage"` or `"studio"` — `"On Audio"` has none), it's always
-   expected, independent of any relation — first item in the result,
+   set (`"onstage"` or `"studio"` — `"On Audio"`/`"On Set"` have none), it's
+   always expected, independent of any relation — first item in the result,
    `method: 'fixed'`. Skipped entirely for tabs with `fixedTag: null`.
 2. **Guest tag**: if Bruce Springsteen himself is listed under the tab
    marked `"(Guest)"` (`isRelationMarkedGuest(doc, 'Bruce Springsteen')` —
@@ -531,8 +532,9 @@ fail; no code changes needed elsewhere. This per-name logic lives in
    listed as missing).
 
 Result shape: `{ label, candidateTag, matchedTag, method: 'fixed'|'guest'|'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'override'|'ampersand-combined'|null, tabLabel }[]`,
-mirroring the setlist-song/location checks (`tabLabel` — `"On Stage"` or
-`"In Studio"` — carries which tab produced the match, for the tooltip text).
+mirroring the setlist-song/location checks (`tabLabel` — `"On Stage"`,
+`"In Studio"`, `"On Audio"`, or `"On Set"` — carries which tab produced the
+match, for the tooltip text).
 A matched tag is colored green via `markPassingTagLinks` with a tooltip
 built from `relationMethodLabel(method, tabLabel)` (e.g. *"matches a
 relation listed under the 'On Stage' tab (lowercase, whitespace/punctuation

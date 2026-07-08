@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.05
+// @version      3.07
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -274,12 +274,16 @@
    * name listed there (e.g. "onstage" for gig/rehearsal's "On Stage" tab,
    * "studio" for recording's "In Studio" tab). `fixedTag: null` means the
    * tab only drives the per-relation-name checks, with no such fixed tag
-   * (e.g. nogig's "On Audio" tab).
+   * (e.g. nogig's "On Audio" tab, or a video recording session's "On Set"
+   * tab — confirmed against recording:2012-01-13-mattison-avenue-asbury-park-nj,
+   * whose "On Set" tab lists Bruce Springsteen/Willie Nile/John Eddie, each
+   * with their own name tag present, and no "onset"-style fixed tag).
    */
   const RELATION_TAB_CONFIGS = {
     'On Stage': { fixedTag: 'onstage' },
     'In Studio': { fixedTag: 'studio' },
     'On Audio': { fixedTag: null },
+    'On Set': { fixedTag: null },
   };
 
   /**
@@ -5646,13 +5650,14 @@
   }
 
   /**
-   * Lowercase, punctuation/whitespace-stripped slug for a relation name,
-   * e.g. "Steven Van Zandt" -> "stevenvanzandt".
+   * Lowercase, punctuation/whitespace-stripped, accent-stripped slug for a
+   * relation name, e.g. "Steven Van Zandt" -> "stevenvanzandt",
+   * "Jörgen Johansson" -> "jorgenjohansson".
    * @param {string} name
    * @returns {string}
    */
   function relationTagSlug(name) {
-    return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return stripDiacritics(name).toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
   /**
@@ -5762,10 +5767,11 @@
 
   /**
    * Checks that a DETAIL page's "On Stage" (gig/rehearsal/interview), "In
-   * Studio" (recording), or "On Audio" (nogig) tab relation names each have a
-   * corresponding tag. When the matched tab has a `fixedTag` configured
-   * (see RELATION_TAB_CONFIGS — `"onstage"` for "On Stage", `"studio"` for
-   * "In Studio", none for "On Audio"), that tag is always expected,
+   * Studio" (recording, audio session), "On Set" (recording, video session),
+   * or "On Audio" (nogig) tab relation names each have a corresponding tag.
+   * When the matched tab has a `fixedTag` configured (see
+   * RELATION_TAB_CONFIGS — `"onstage"` for "On Stage", `"studio"` for
+   * "In Studio", none for "On Audio"/"On Set"), that tag is always expected,
    * independent of any relation name — EXCEPT on interview pages, where an
    * "On Stage" tab is common but the "onstage" tag itself is never expected
    * (confirmed against several live interview pages that have the tab but
@@ -5836,8 +5842,8 @@
 
   /**
    * Colorizes every relation name link under a DETAIL page's "On Stage"/
-   * "In Studio"/"On Audio" tab (see extractRelations) green when its
-   * derived tag (checkRelationNameTags) is present in actualTags, or
+   * "In Studio"/"On Audio"/"On Set" tab (see extractRelations) green when
+   * its derived tag (checkRelationNameTags) is present in actualTags, or
    * appends a ⚠️ warning span with a descriptive tooltip when it's
    * missing. A name marked "(Guest)" (e.g. Bruce Springsteen) is also
    * checked against the "guest" tag specifically, on top of its own name
@@ -7097,8 +7103,9 @@
 
   /**
    * Slugifies a venue/city/state name into BruceBase's tag convention: drop a
-   * leading/trailing "The"/"Le"/"De" article, lowercase, delete every
-   * non-alphanumeric character (no acronym — unlike computeSongTagAlias).
+   * leading/trailing "The"/"Le"/"De" article, lowercase, strip accents,
+   * delete every non-alphanumeric character (no acronym — unlike
+   * computeSongTagAlias).
    * @param {string} str
    * @returns {string} e.g. "West Long Branch" -> "westlongbranch", "Adelphi (The)" -> "adelphi".
    */
@@ -7106,7 +7113,7 @@
     const stripped = str.trim()
       .replace(/^(the|le|de)\s+/i, '')
       .replace(/\s*\((?:the|le|de)\)\s*$/i, '');
-    return stripped.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return stripDiacritics(stripped).toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
   /**
@@ -9073,13 +9080,14 @@
   }
 
   /**
-   * Normalizes a person/band name into its expected tag form: lowercase
-   * with all whitespace and "." removed, e.g. "Dr. Zoom" -> "drzoom".
+   * Normalizes a person/band name into its expected tag form: lowercase,
+   * accent-stripped, with all whitespace and "." removed, e.g. "Dr. Zoom"
+   * -> "drzoom", "Jörgen Johansson" -> "jorgenjohansson".
    * @param {string} name
    * @returns {string}
    */
   function normalizeRelationTagName(name) {
-    return name.toLowerCase().replace(/[.\s]/g, '');
+    return stripDiacritics(name).toLowerCase().replace(/[.\s]/g, '');
   }
 
   /**
