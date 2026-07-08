@@ -1,5 +1,29 @@
 [
     {
+        "version": "3.05",
+        "date": "2026-07-08",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed a residual blank gap now rendering *above* the gold tags-warning box (between it and whatever content precedes it, e.g. a relations list) on DETAIL/VENUE/RETAIL/SONG/RELATION pages — a side effect of v3.04's fix, which moved BruceBase's `.page-tags{clear:both}` clearance from inside the box to just above it, still sized to the floated #side-bar navigation column. Since #main-content is offset via margin-left (not float), nothing actually needs .page-tags to clear the sidebar — BruceBase's own #footer, which follows right after in the DOM and carries the same clear:both, already does that job. Dropped the clear:both from the wrapper entirely (kept clear:none on the moved .page-tags child) across all five wrapper call sites, so the box now renders immediately after the preceding content with no gap at all."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.04",
+        "date": "2026-07-08",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed a large blank gap rendering inside the gold tags-warning box on DETAIL/VENUE/RETAIL/SONG/RELATION pages: BruceBase's own `.page-tags{clear:both}` rule clears the floated #side-bar navigation column, and that clearance used to be invisible page background — but once .page-tags becomes a child of our new bordered/background `.bb-tags-warn-box` wrapper, the clearance rendered *inside* the border instead, as a tall empty area above the tag lines. Moved `clear:both` to the wrapper itself (so the clearance stays outside the border, as before) and set `clear:none` on the moved .page-tags child, across all five wrapper call sites (annotateDetailPageTags, annotateVenuePageTags, annotateRetailPageTags, annotateSongPageTags, annotateRelationPageTags)."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.03",
         "date": "2026-07-06",
         "sections": [

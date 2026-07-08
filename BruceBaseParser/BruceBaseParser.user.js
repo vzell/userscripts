@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.03
+// @version      3.05
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -8540,9 +8540,19 @@
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
+    // BruceBase's own `.page-tags{clear:both}` rule clears the floated
+    // #side-bar navigation column (needed on the *unwrapped* page so the
+    // global #footer, which also clears it, doesn't visually collide with
+    // it). #main-content is offset via margin-left, not float, so nothing
+    // actually needs .page-tags itself to clear — #footer (which follows
+    // right after in the DOM and carries the same clear:both) still does
+    // that job on its own. Cancel the clear entirely here so this wrapper
+    // renders immediately after the preceding content instead of leaving a
+    // gap (either inside the border, or above it) sized to the sidebar.
     wrapper.style.cssText = 'border:3px solid gold; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
     tagsContainer.parentNode.insertBefore(wrapper, tagsContainer);
     wrapper.appendChild(tagsContainer);
+    tagsContainer.style.clear = 'none';
 
     // Flag spurious tags with an orange ⚠️ icon next to the tag link.
     for (const a of spuriousLinks) {
@@ -8647,9 +8657,19 @@
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
+    // BruceBase's own `.page-tags{clear:both}` rule clears the floated
+    // #side-bar navigation column (needed on the *unwrapped* page so the
+    // global #footer, which also clears it, doesn't visually collide with
+    // it). #main-content is offset via margin-left, not float, so nothing
+    // actually needs .page-tags itself to clear — #footer (which follows
+    // right after in the DOM and carries the same clear:both) still does
+    // that job on its own. Cancel the clear entirely here so this wrapper
+    // renders immediately after the preceding content instead of leaving a
+    // gap (either inside the border, or above it) sized to the sidebar.
     wrapper.style.cssText = 'border:3px solid gold; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
     tagsContainer.parentNode.insertBefore(wrapper, tagsContainer);
     wrapper.appendChild(tagsContainer);
+    tagsContainer.style.clear = 'none';
 
     for (const a of spuriousLinks) {
       const tag      = a.textContent.trim().toLowerCase();
@@ -8811,9 +8831,19 @@
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
+    // BruceBase's own `.page-tags{clear:both}` rule clears the floated
+    // #side-bar navigation column (needed on the *unwrapped* page so the
+    // global #footer, which also clears it, doesn't visually collide with
+    // it). #main-content is offset via margin-left, not float, so nothing
+    // actually needs .page-tags itself to clear — #footer (which follows
+    // right after in the DOM and carries the same clear:both) still does
+    // that job on its own. Cancel the clear entirely here so this wrapper
+    // renders immediately after the preceding content instead of leaving a
+    // gap (either inside the border, or above it) sized to the sidebar.
     wrapper.style.cssText = 'border:3px solid gold; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
     tagsContainer.parentNode.insertBefore(wrapper, tagsContainer);
     wrapper.appendChild(tagsContainer);
+    tagsContainer.style.clear = 'none';
 
     for (const a of spuriousLinks) {
       const tag      = a.textContent.trim().toLowerCase();
@@ -8919,9 +8949,19 @@
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
+    // BruceBase's own `.page-tags{clear:both}` rule clears the floated
+    // #side-bar navigation column (needed on the *unwrapped* page so the
+    // global #footer, which also clears it, doesn't visually collide with
+    // it). #main-content is offset via margin-left, not float, so nothing
+    // actually needs .page-tags itself to clear — #footer (which follows
+    // right after in the DOM and carries the same clear:both) still does
+    // that job on its own. Cancel the clear entirely here so this wrapper
+    // renders immediately after the preceding content instead of leaving a
+    // gap (either inside the border, or above it) sized to the sidebar.
     wrapper.style.cssText = 'border:3px solid gold; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
     tagsContainer.parentNode.insertBefore(wrapper, tagsContainer);
     wrapper.appendChild(tagsContainer);
+    tagsContainer.style.clear = 'none';
 
     for (const a of spuriousLinks) {
       const tag      = a.textContent.trim().toLowerCase();
@@ -9236,9 +9276,19 @@
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
+    // BruceBase's own `.page-tags{clear:both}` rule clears the floated
+    // #side-bar navigation column (needed on the *unwrapped* page so the
+    // global #footer, which also clears it, doesn't visually collide with
+    // it). #main-content is offset via margin-left, not float, so nothing
+    // actually needs .page-tags itself to clear — #footer (which follows
+    // right after in the DOM and carries the same clear:both) still does
+    // that job on its own. Cancel the clear entirely here so this wrapper
+    // renders immediately after the preceding content instead of leaving a
+    // gap (either inside the border, or above it) sized to the sidebar.
     wrapper.style.cssText = 'border:3px solid gold; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
     tagsContainer.parentNode.insertBefore(wrapper, tagsContainer);
     wrapper.appendChild(tagsContainer);
+    tagsContainer.style.clear = 'none';
 
     for (const a of spuriousLinks) {
       const tag      = a.textContent.trim().toLowerCase();
