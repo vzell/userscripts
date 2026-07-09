@@ -50,7 +50,7 @@ which each get their own separate check independent of
 | `RELATION_TAG_ALIAS_OVERRIDES` | `{relationNameLowercase: 'expectedTag'}` — user-editable manual overrides for the "On Stage"/"In Studio" tab relation tag check, for the rare case where none of the exact/"The "-stripped/suffix-stripped/nickname-stripped derivations match BruceBase's real tag (e.g. a typo like `jake.clemons`) |
 | `RELATION_TAB_CONFIGS` | `{'On Stage': {fixedTag: 'onstage'}, 'In Studio': {fixedTag: 'studio'}, 'On Audio': {fixedTag: null}, 'On Set': {fixedTag: null}}` — which relation-listing tab (gig/rehearsal, recording audio session, nogig, recording video session) maps to which always-expected fixed tag (`null` = no fixed tag, only the per-relation-name checks apply), for `checkOnStageRelationTags` |
 | `relationMethodLabel(method, tabLabel)` | Function (not a lookup constant) returning the human-readable reason for the relation tag check's tooltips, parameterized by which tab (`"On Stage"`/`"In Studio"`/`"On Audio"`/`"On Set"`) produced the match |
-| `ALIAS_SUBSTRING_TAGS` | `{award: ['award'], grammy: ['grammy'], private: ['private', 'closed']}` — generic, event-type-independent tags verified against the event alias (see "Alias-substring tag check" below) rather than any per-event-type rule; each tag maps to one or more alias substrings that verify it (not necessarily equal to the tag itself) |
+| `FUZZY_SUBSTRING_TAGS` | `{award: ['award'], grammy: ['grammy'], private: ['private', 'closed'], benefit: ['benefit'], anniversary: ['anniversary'], interview: ['interview'], funeral: ['funeral']}` — generic, event-type-independent tags verified against the event alias and/or page notes text (see "Fuzzy substring tag check" below) rather than any per-event-type rule; each tag maps to one or more substrings that verify it (not necessarily equal to the tag itself) |
 
 `MANAGED_CONTENT_TAGS` covers: event types (`gig`, `interview`, `nobruce`,
 `nogig`, `offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck`) plus
@@ -362,6 +362,34 @@ Sibling override tables for other page types (`RELATION_TAG_ALIAS_OVERRIDES`,
 `RETAIL_TAG_ALIAS_OVERRIDES`) are not implemented yet. `VENUE_TAG_ALIAS_OVERRIDES`
 *is* implemented, but for the location tag check below, not for song tags.
 
+**Opt-in song-name glyph** (`bbp_enable_setlist_tag_warnings`, default off):
+
+| Setting | Type | Default | Effect |
+|---|---|---|---|
+| `bbp_enable_setlist_tag_warnings` | checkbox | `false` | Shows a ⚠️ warning icon/tooltip (`makeSetlistSongTagWarningGlyph`) directly next to an unmatched setlist song's own name, in addition to the `.bb-tag-missing` entry already appended to `.page-tags` |
+
+Independent of the `.page-tags`-side annotation above, this setting places
+the same ⚠️/tooltip right on the song name itself:
+- **DETAIL page** (`annotateDetailPageTags`): builds a one-time
+  `textContent → <a href="/song:...">` lookup over
+  `getSetlistContainer(document)` (only when the setting is on), then for
+  each `unmatchedSongs` entry looks up its anchor and appends the glyph via
+  `.after(...)`. Runs against the live Setlist tab regardless of which YUI
+  tab is currently selected (hidden tabs stay in the DOM).
+- **YEAR page** (`processOneYearEvent` → `renderYearSetlist` →
+  `renderSetlistElement`): needs no such lookup — `renderSetlistElement`
+  already tags every relevant per-song element with a `data-detail-song`
+  attribute (`.bb-song-match` as `<a>` or `<span>`, `.bb-song-detail-only`,
+  `.bb-song-char-diff`; `.bb-song-year-only` has no `data-detail-song` and is
+  correctly skipped, since it has no corresponding DETAIL-page song to
+  check). `processOneYearEvent` computes `unmatchedSongNames` (a
+  `Set<string>` of lowercased unmatched song names, via
+  `checkSetlistSongTags(detailSections, actualTags)` against the same
+  fetched `doc` already used for everything else on the event) only when the
+  setting is on, and threads it through `renderYearSetlist`/
+  `renderSetlistElement`, which does one `querySelectorAll('[data-detail-song]')`
+  pass per section right after rebuilding its `innerHTML`.
+
 ---
 
 ## Event-name / venue-name location tag check
@@ -618,50 +646,76 @@ on the companion page, since both facts concern the same "On Stage" tab/page
 
 ---
 
-## Alias-substring tag check (`checkAliasSubstringTags`)
+## Fuzzy substring tag check (`checkAliasSubstringTags`, `checkNotesSubstringTags`)
 
 Unlike every other check in this file, this one is **not** tied to any
-specific event type or tab — it applies wherever a DETAIL page has an event
-alias at all (see `extractEventAlias`: the `<p><strong>…</strong></p>`
-header immediately followed by `<hr>` as the first two children of
-`#wiki-tab-0-0`, e.g. `"68th Annual Grammy Awards Ceremony"` on a `nogig`
-page's "On Audio" tab, or `"Streets Of Minneapolis Recording Session"` on a
-`recording` page's "In Studio" tab).
+specific event type or tab — it applies wherever a page has an event alias
+and/or a free-text notes preamble at all, checked against **two**
+independent sources:
 
-`ALIAS_SUBSTRING_TAGS` (currently `{award: ['award'], grammy: ['grammy'],
-private: ['private', 'closed']}`) maps generic tags to the alias
-substring(s) that verify them — a substring list need not equal the tag
-itself, e.g. "private" is verified by either "private" *or* "closed" (both
-imply a non-public event). `checkAliasSubstringTags(alias, actualTags)`:
+- **Event alias** (see `extractEventAlias`: the `<p><strong>…</strong></p>`
+  header immediately followed by `<hr>` as the first two children of
+  `#wiki-tab-0-0`, e.g. `"68th Annual Grammy Awards Ceremony"` on a `nogig`
+  page's "On Audio" tab, `"Streets Of Minneapolis Recording Session"` on a
+  `recording` page's "In Studio" tab, or `"Democracy Now! 30th Anniversary
+  Celebration"` on a `gig` page's "On Stage" tab, immediately followed by the
+  relation `<ul>`s of who performed).
+- **Page notes** (see `extractPageNotesText`, a plain-text wrapper around
+  `extractPageNotes` — the free-text preamble inside `#page-content` before
+  the first `.yui-navset`, e.g. a notes paragraph mentioning "...the
+  twenty-sixth annual Light Of Day Benefit.").
 
-1. Returns `[]` immediately when there's no alias (`extractEventAlias`
-   returned `null`).
-2. Otherwise, for each `tag -> substrings` entry in `ALIAS_SUBSTRING_TAGS`,
-   checks whether the tag is **present** (`isTagPresent(tag, actualTags)`)
+`FUZZY_SUBSTRING_TAGS` (currently `{award: ['award'], grammy: ['grammy'],
+private: ['private', 'closed'], benefit: ['benefit'], anniversary:
+['anniversary'], interview: ['interview'], funeral: ['funeral']}`) maps
+generic tags to the substring(s) that verify them — a substring list need
+not equal the tag itself, e.g. "private" is verified by either "private" *or*
+"closed" (both imply a non-public event). `checkAliasSubstringTags(alias,
+actualTags)` and `checkNotesSubstringTags(notesText, actualTags)` share the
+same structure, just sourced differently:
+
+1. Return `[]` immediately when there's no source text (`extractEventAlias`
+   returned `null`, or `extractPageNotesText` returned `''`).
+2. Otherwise, for each `tag -> substrings` entry in `FUZZY_SUBSTRING_TAGS`,
+   check whether the tag is **present** (`isTagPresent(tag, actualTags)`)
    **and** at least one of its `substrings` occurs case-insensitively in the
-   alias (`alias.toLowerCase().includes(substring)`) — e.g. tag `"grammy"`
-   matches alias `"68th Annual Grammy Awards Ceremony"`, tag `"award"`
-   matches too (it's a substring of `"Awards"`), and tag `"private"` matches
-   alias `"Closed Rehearsal"` on a `rehearsal` page's "On Stage" tab (via its
-   `"closed"` substring, not the tag's own name).
+   source text — e.g. tag `"grammy"` matches alias `"68th Annual Grammy
+   Awards Ceremony"`, tag `"award"` matches too (it's a substring of
+   `"Awards"`), tag `"private"` matches alias `"Closed Rehearsal"` on a
+   `rehearsal` page's "On Stage" tab (via its `"closed"` substring, not the
+   tag's own name), and tag `"benefit"` matches a notes paragraph mentioning
+   "...Light Of Day Benefit.".
 3. Only matching tags are returned, as `{ tag, label }` (`label` names
-   *which* substring matched); there is no "missing" counterpart — a tag not
-   in this map, or present but not matching any of its substrings, is simply
-   left to whatever other check (or none) already governs it. This check
-   only ever *upgrades* an already-present tag to "verified" (green); it
-   never requires a tag to exist.
+   *which* source and substring matched); there is no "missing" counterpart —
+   a tag not in this map, or present but not matching any of its substrings
+   in either source, is simply left to whatever other check (or none) already
+   governs it. Neither function ever *requires* a tag to exist — both only
+   ever *upgrade* an already-present tag to "verified" (green).
 
-Wired into `annotateDetailPageTags` (DETAIL page, via `extractEventAlias(document)`)
-and `addTagsButton` (YEAR page's nested "Tags" button, via `extractEventAlias(doc)`
-— `doc` is the fetched per-event DETAIL page, the same one `processOneYearEvent`
-already calls `extractEventAlias` on for the `.bb-event-alias` span rendered
-next to the event name). A matched tag is colored green via
-`markPassingTagLinks`/inline title-setting with tooltip *`Tag "private"
-verified: matches event alias "Closed Rehearsal" (contains "closed",
-case-insensitive)`*. Because it never contributes a "missing" entry, it also
-never affects `annotateDetailPageTags`'s warn-box early-return check or
-`addTagsButton`'s "N missing" count — it only participates in the
-`passing`/green-coloring branch of the existing-tag loop in both places.
+Wired into `annotateDetailPageTags`, `annotateVenuePageTags`,
+`annotateSongPageTags`, and `annotateRelationPageTags` (via
+`extractEventAlias(document)`/`extractPageNotesText(document)` on the live
+page) — **not** `annotateRetailPageTags`. Also wired into `addTagsButton`
+(YEAR page's nested "Tags" button, alias-check only, via
+`extractEventAlias(doc)` — `doc` is the fetched per-event DETAIL page, the
+same one `processOneYearEvent` already calls `extractEventAlias` on for the
+`.bb-event-alias` span rendered next to the event name). A matched tag is
+colored green via `markPassingTagLinks`/inline title-setting with tooltip
+*`Tag "private" verified: matches event alias "Closed Rehearsal" (contains
+"closed", case-insensitive)`* or *`Tag "benefit" verified: matches page notes
+(contains "benefit", case-insensitive)`*. Because neither check ever
+contributes a "missing" entry, they also never affect any annotator's
+warn-box early-return check or `addTagsButton`'s "N missing" count — they
+only participate in the `passing`/green-coloring branch of the existing-tag
+loop in each place.
+
+In practice, `extractEventAlias`'s strict shape requirement (a lone
+`<p><strong>…</strong></p>` immediately followed by `<hr>` as the first two
+children of `#wiki-tab-0-0`) has so far only ever matched on DETAIL pages —
+VENUE/SONG/RELATION `#wiki-tab-0-0` content follows different shapes (e.g. a
+rehearsal caption or an "Appeared N times..." summary), so the alias-check is
+wired into all four for correctness/future-proofing but is a no-op there
+today; the notes-check has no such shape restriction and applies equally.
 
 ---
 

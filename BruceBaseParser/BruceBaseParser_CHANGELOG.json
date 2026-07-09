@@ -1,5 +1,29 @@
 [
     {
+        "version": "3.14",
+        "date": "2026-07-09",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Add opt-in setting 'Flag Untagged Setlist Songs' (bbp_enable_setlist_tag_warnings, default off) that shows a ⚠️ warning icon/tooltip next to setlist songs lacking a corresponding tag on the event's DETAIL page, both in the DETAIL page's own Setlist tab and inline in the YEAR page's per-event setlist."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.13",
+        "date": "2026-07-09",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Add 'benefit', 'anniversary', 'interview', and 'funeral' as fuzzy substring-verified tags (renamed ALIAS_SUBSTRING_TAGS to FUZZY_SUBSTRING_TAGS), now checked against both the event alias and a new page free-text notes extraction (checkNotesSubstringTags/extractPageNotesText), wired into DETAIL, VENUE, SONG, and RELATION page tag annotators."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.12",
         "date": "2026-07-09",
         "sections": [

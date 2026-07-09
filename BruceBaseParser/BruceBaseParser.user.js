@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.12
+// @version      3.14
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -288,24 +288,31 @@
   };
 
   /**
-   * Generic tags whose presence is verified against the event alias (the
-   * `<strong>` header before a DETAIL page's relation list — see
-   * extractEventAlias / makeAliasSpan's ".bb-event-alias") rather than any
-   * per-event-type rule. Not tied to any specific event type or tab: a tag
-   * is "verified" (rendered green) whenever it's both present on the page
-   * AND at least one of its configured substrings occurs case-insensitively
-   * in the alias, e.g. tag "grammy" (substring "grammy") matches alias
-   * "68th Annual Grammy Awards Ceremony", or tag "private" (substrings
-   * "private"/"closed") matches alias "Closed Rehearsal". A substring list
-   * need not equal the tag itself — "private" is verified by either of two
-   * different words that both imply a non-public event. Absence is not
-   * flagged as missing — this only upgrades an already-present tag to
-   * "verified", it never requires the tag to exist.
+   * Generic tags whose presence is verified by fuzzy case-insensitive
+   * substring match against either the event alias (the `<strong>` header
+   * before a DETAIL page's relation list — see extractEventAlias /
+   * makeAliasSpan's ".bb-event-alias") or the page's free-text notes
+   * preamble (see extractPageNotesText) — not any per-event-type rule and
+   * not tied to any specific event type or tab. A tag is "verified"
+   * (rendered green) whenever it's both present on the page AND at least
+   * one of its configured substrings occurs case-insensitively in either
+   * source, e.g. tag "grammy" (substring "grammy") matches alias "68th
+   * Annual Grammy Awards Ceremony", tag "private" (substrings
+   * "private"/"closed") matches alias "Closed Rehearsal", or tag "benefit"
+   * matches a notes paragraph mentioning "...Light Of Day Benefit.". A
+   * substring list need not equal the tag itself — "private" is verified by
+   * either of two different words that both imply a non-public event.
+   * Absence is not flagged as missing — this only upgrades an
+   * already-present tag to "verified", it never requires the tag to exist.
    */
-  const ALIAS_SUBSTRING_TAGS = {
+  const FUZZY_SUBSTRING_TAGS = {
     award: ['award'],
     grammy: ['grammy'],
     private: ['private', 'closed'],
+    benefit: ['benefit'],
+    anniversary: ['anniversary'],
+    interview: ['interview'],
+    funeral: ['funeral'],
   };
 
   /**
@@ -456,6 +463,21 @@
           type: "keyboard_shortcut",
           default: "Ctrl+B",
           description: "Toggle sticky bar display on any page with a sticky bar (default: Ctrl+B)"
+      },
+
+      // ============================================================
+      // SETLIST SECTION
+      // ============================================================
+      divider_setlist: {
+          type: 'divider',
+          label: '🎵 SETLIST'
+      },
+
+      bbp_enable_setlist_tag_warnings: {
+          label: 'Flag Untagged Setlist Songs',
+          type: 'checkbox',
+          default: false,
+          description: 'Show a ⚠️ warning icon next to setlist songs (DETAIL page Setlist tab, and YEAR page inline setlist) that have no corresponding tag on the event\'s DETAIL page.'
       },
   };
 
@@ -3767,7 +3789,18 @@
               sec.detailLabel = i < detailSections.length ? detailSections[i].label : null;
             }
           });
-          renderYearSetlist(yearSections, diffItems);
+
+          // Setlist songs with no corresponding DETAIL-page tag, flagged
+          // inline next to the song name (opt-in, mirrors the DETAIL page's
+          // own Setlist-tab annotation in annotateDetailPageTags).
+          let unmatchedSongNames = null;
+          if (Lib.settings.bbp_enable_setlist_tag_warnings) {
+            const tagLinks   = [...(doc.querySelector('.page-tags')?.querySelectorAll('a[href]') ?? [])];
+            const actualTags = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+            const unmatched  = checkSetlistSongTags(detailSections, actualTags).filter(r => !r.matchedTag);
+            unmatchedSongNames = new Set(unmatched.map(r => r.song.toLowerCase()));
+          }
+          renderYearSetlist(yearSections, diffItems, unmatchedSongNames);
         }
       }
 
@@ -3798,7 +3831,7 @@
 
   // ── Setlist rendering — YEAR page ─────────────────────────────────────────
 
-  function renderYearSetlist(yearSections, diffItems) {
+  function renderYearSetlist(yearSections, diffItems, unmatchedSongNames = null) {
     // posMap[yearSongFlatIdx] = sectionIdx
     const posMap = [];
     yearSections.forEach((sec, sIdx) => sec.songs.forEach(() => posMap.push(sIdx)));
@@ -3818,7 +3851,7 @@
       }
     }
 
-    yearSections.forEach((sec, sIdx) => renderSetlistElement(sec.sourceEl, sec.label, sectionItems[sIdx], sec.detailLabel));
+    yearSections.forEach((sec, sIdx) => renderSetlistElement(sec.sourceEl, sec.label, sectionItems[sIdx], sec.detailLabel, unmatchedSongNames));
   }
 
   // detailLabel: the corresponding detail section label (original case), or null if
@@ -3834,7 +3867,7 @@
     ).join('');
   }
 
-  function renderSetlistElement(el, label, items, detailLabel) {
+  function renderSetlistElement(el, label, items, detailLabel, unmatchedSongNames = null) {
     let html    = '';
     let isFirst = true;
     let songNum = 0;
@@ -3924,6 +3957,20 @@
     // inside the element before we overwrite innerHTML.
     const supHtml = [...el.querySelectorAll('sup')].map(s => s.outerHTML).join('');
     el.innerHTML = supHtml ? html + '<br>' + supHtml : html;
+
+    // Flag setlist songs with no corresponding DETAIL-page tag (opt-in via
+    // bbp_enable_setlist_tag_warnings). [data-detail-song] covers every
+    // relevant variant (.bb-song-match as <a> or <span>, .bb-song-detail-only,
+    // .bb-song-char-diff); .bb-song-year-only has no data-detail-song and is
+    // correctly excluded — it has no corresponding DETAIL-page song to check.
+    if (unmatchedSongNames && unmatchedSongNames.size > 0) {
+      el.querySelectorAll('[data-detail-song]').forEach(node => {
+        const detailSong = node.dataset.detailSong;
+        if (detailSong && unmatchedSongNames.has(detailSong.toLowerCase())) {
+          node.after(makeSetlistSongTagWarningGlyph(`No tag found for setlist song "${detailSong}" on this event's DETAIL page.`));
+        }
+      });
+    }
 
     // Wire song-number click handlers so clicking loads the song tab row.
     const numSection = el.closest('.bb-section-processed');
@@ -5544,14 +5591,14 @@
   }
 
   /**
-   * Checks ALIAS_SUBSTRING_TAGS against the event alias (see
+   * Checks FUZZY_SUBSTRING_TAGS against the event alias (see
    * extractEventAlias). A tag is "verified" only when it's both present on
    * the page AND at least one of its configured substrings occurs
    * case-insensitively in `alias` — e.g. tag "grammy" verified by alias
    * "68th Annual Grammy Awards Ceremony" (substring "grammy"), or tag
    * "private" verified by alias "Closed Rehearsal" (substring "closed").
    * Tags that don't match are simply omitted (never reported as missing —
-   * see ALIAS_SUBSTRING_TAGS doc).
+   * see FUZZY_SUBSTRING_TAGS doc).
    * @param {string|null} alias
    * @param {Set<string>} actualTags
    * @returns {{tag: string, label: string}[]}
@@ -5560,11 +5607,35 @@
     if (!alias) return [];
     const aliasLower = alias.toLowerCase();
     const results = [];
-    for (const [tag, substrings] of Object.entries(ALIAS_SUBSTRING_TAGS)) {
+    for (const [tag, substrings] of Object.entries(FUZZY_SUBSTRING_TAGS)) {
       if (!isTagPresent(tag, actualTags)) continue;
       const matched = substrings.find(s => aliasLower.includes(s));
       if (matched) {
         results.push({ tag, label: `matches event alias "${alias}" (contains "${matched}", case-insensitive)` });
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Checks FUZZY_SUBSTRING_TAGS against a page's free-text notes preamble
+   * (see extractPageNotesText). Same "verified, never missing" semantics as
+   * checkAliasSubstringTags, just sourced from the notes text instead of the
+   * event alias — e.g. tag "benefit" verified by a notes paragraph
+   * mentioning "...the twenty-sixth annual Light Of Day Benefit."
+   * @param {string} notesText
+   * @param {Set<string>} actualTags
+   * @returns {{tag: string, label: string}[]}
+   */
+  function checkNotesSubstringTags(notesText, actualTags) {
+    if (!notesText) return [];
+    const notesLower = notesText.toLowerCase();
+    const results = [];
+    for (const [tag, substrings] of Object.entries(FUZZY_SUBSTRING_TAGS)) {
+      if (!isTagPresent(tag, actualTags)) continue;
+      const matched = substrings.find(s => notesLower.includes(s));
+      if (matched) {
+        results.push({ tag, label: `matches page notes (contains "${matched}", case-insensitive)` });
       }
     }
     return results;
@@ -7536,7 +7607,7 @@
     const matchedRelationsByTag = new Map(relationResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
     const unmatchedRelations    = relationResults.filter(r => !r.matchedTag);
 
-    // Alias-substring tag check: generic tags (ALIAS_SUBSTRING_TAGS) that are
+    // Alias-substring tag check: generic tags (FUZZY_SUBSTRING_TAGS) that are
     // present AND a case-insensitive substring of the event alias (e.g.
     // "grammy" matched by "68th Annual Grammy Awards Ceremony") are verified.
     const eventAlias           = extractEventAlias(doc);
@@ -7713,6 +7784,20 @@
     if (!wrapper.textContent.trim()) return null;
     return wrapper.innerHTML
       .replace(/href="\//g, `href="${location.protocol}//${location.host}/`);
+  }
+
+  /**
+   * Plain-text version of extractPageNotes, for fuzzy substring matching
+   * (see checkNotesSubstringTags) rather than display.
+   * @param {Document} doc
+   * @returns {string} '' when there's no notes preamble.
+   */
+  function extractPageNotesText(doc) {
+    const html = extractPageNotes(doc);
+    if (!html) return '';
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || '';
   }
 
   /**
@@ -8567,12 +8652,19 @@
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label} — ${relationMethodLabel(r.method, r.tabLabel)}`);
     }
 
-    // Alias-substring tag check: generic tags (ALIAS_SUBSTRING_TAGS) that are
+    // Fuzzy substring tag check: generic tags (FUZZY_SUBSTRING_TAGS) that are
     // present AND a case-insensitive substring of the event alias (e.g.
-    // "grammy" matched by "68th Annual Grammy Awards Ceremony") are verified.
-    // Never contributes to missingTags — absence is not flagged.
+    // "grammy" matched by "68th Annual Grammy Awards Ceremony") or the
+    // page's free-text notes (e.g. "benefit" matched by a notes paragraph
+    // mentioning "...Light Of Day Benefit.") are verified. Never
+    // contributes to missingTags — absence is not flagged.
     const aliasResults = checkAliasSubstringTags(extractEventAlias(document), actualTags);
     for (const r of aliasResults) {
+      const a = tagToAnchor.get(r.tag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
+    }
+    const notesResults = checkNotesSubstringTags(extractPageNotesText(document), actualTags);
+    for (const r of notesResults) {
       const a = tagToAnchor.get(r.tag);
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
     }
@@ -8639,14 +8731,26 @@
 
     // Append one missing-tag span per setlist song with no corresponding tag,
     // showing the derived-alias candidate so it's clear what to look for/add.
+    // Optionally (bbp_enable_setlist_tag_warnings) also flag the song's own
+    // link in the live "Setlist" tab with the same ⚠️/tooltip.
+    const setlistAnchorByName = Lib.settings.bbp_enable_setlist_tag_warnings
+      ? new Map([...(getSetlistContainer(document)?.querySelectorAll('a[href^="/song:"]') ?? [])]
+          .map(a => [a.textContent.trim().toLowerCase(), a]))
+      : null;
     for (const r of unmatchedSongs) {
       const candidate = computeSongTagAlias(r.song) || songTagSlug(r.song);
+      const msg = `No tag found for setlist song "${r.song}" (tried exact match and derived alias "${candidate}")`;
       const missingSpan = document.createElement('span');
       missingSpan.className = 'bb-tag-missing';
       missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
-      missingSpan.title = `No tag found for setlist song "${r.song}" (tried exact match and derived alias "${candidate}")`;
+      missingSpan.title = msg;
       missingSpan.textContent = ` ⚠️${candidate}`;
       span.appendChild(missingSpan);
+
+      if (setlistAnchorByName) {
+        const a = setlistAnchorByName.get(r.song.toLowerCase());
+        if (a) a.after(makeSetlistSongTagWarningGlyph(msg));
+      }
     }
 
     // Append one missing-tag span per unmatched event-name location part
@@ -8711,6 +8815,21 @@
     for (const r of matchedLocations) {
       const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.matchedTag);
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches venue ${r.label}`);
+    }
+
+    // Fuzzy substring tag check: generic tags (FUZZY_SUBSTRING_TAGS) that are
+    // present AND a case-insensitive substring of the event alias or the
+    // page's free-text notes are verified. Never contributes to
+    // missingTags — absence is not flagged.
+    const aliasResults = checkAliasSubstringTags(extractEventAlias(document), actualTags);
+    for (const r of aliasResults) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.tag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
+    }
+    const notesResults = checkNotesSubstringTags(extractPageNotesText(document), actualTags);
+    for (const r of notesResults) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.tag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
     }
 
     if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedLocations.length === 0) {
@@ -9043,6 +9162,21 @@
     if (aliasCheck && aliasCheck.matchedTag) {
       const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === aliasCheck.matchedTag);
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" recognized: matches the derived first-letter-per-word alias of song title "${songName}"`);
+    }
+
+    // Fuzzy substring tag check: generic tags (FUZZY_SUBSTRING_TAGS) that are
+    // present AND a case-insensitive substring of the event alias or the
+    // page's free-text notes are verified. Never contributes to
+    // missingTags — absence is not flagged.
+    const aliasResults = checkAliasSubstringTags(extractEventAlias(document), actualTags);
+    for (const r of aliasResults) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.tag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
+    }
+    const notesResults = checkNotesSubstringTags(extractPageNotesText(document), actualTags);
+    for (const r of notesResults) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.tag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
     }
 
     if (missingTags.length === 0 && spuriousLinks.length === 0 && exactCheck.matchedTag) {
@@ -9393,6 +9527,21 @@
       }
     }
 
+    // Fuzzy substring tag check: generic tags (FUZZY_SUBSTRING_TAGS) that are
+    // present AND a case-insensitive substring of the event alias or the
+    // page's free-text notes are verified. Never contributes to
+    // missingTags — absence is not flagged.
+    const aliasResults = checkAliasSubstringTags(extractEventAlias(document), actualTags);
+    for (const r of aliasResults) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.tag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
+    }
+    const notesResults = checkNotesSubstringTags(extractPageNotesText(document), actualTags);
+    for (const r of notesResults) {
+      const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.tag);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
+    }
+
     if (missingTags.length === 0 && spuriousLinks.length === 0) {
       const okWrapper = document.createElement('div');
       okWrapper.className = 'bb-tags-box';
@@ -9472,6 +9621,23 @@
     warn.dataset.msg = 'Featured icon on YEAR page but DETAIL page has no "featured" tag.';
     warn.title = warn.dataset.msg;
     icon.after(warn);
+  }
+
+  /**
+   * Builds a ⚠️ warning glyph span for a setlist song lacking a tag, matching
+   * the style of flagFeaturedIconIfTagMissing's icon. Gated behind
+   * bbp_enable_setlist_tag_warnings (default off) at both call sites (DETAIL
+   * page's Setlist tab, YEAR page's inline setlist).
+   * @param {string} msg
+   * @returns {HTMLSpanElement}
+   */
+  function makeSetlistSongTagWarningGlyph(msg) {
+    const warn = document.createElement('span');
+    warn.className = 'bb-glyph bb-icon-sorry';
+    warn.textContent = ' ⚠️';
+    warn.dataset.msg = msg;
+    warn.title = msg;
+    return warn;
   }
 
   function wireIconHandlers(eventLink, doc, onstageResult = null, venueDetailExtra = null) {
