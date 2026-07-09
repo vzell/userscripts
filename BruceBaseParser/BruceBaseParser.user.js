@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.15
+// @version      3.17
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -3352,9 +3352,16 @@
     const em = [...document.querySelectorAll('li em')]
       .find(el => /^\s*setlist\s*$/i.test(el.textContent));
     if (!em) return;
-    const hasSetlistMismatch = hasSetlist && !!document.querySelector(
-      '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff, .bb-section-label-warn'
+    const hasSongIssue  = hasSetlist && !!document.querySelector(
+      '.bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff'
     );
+    const hasLabelIssue = hasSetlist && !!document.querySelector('.bb-section-label-warn');
+    // [data-year-label] marks a genuine two-sided label mismatch (set by
+    // flagDetailSectionHeaders only for that case) — distinct from a section
+    // missing entirely from one side, which hasLabelIssue alone also covers
+    // (bundled into the generic "differences" message below).
+    const hasLabelMismatch = hasSetlist && !!document.querySelector('.bb-section-label-warn[data-year-label]');
+    const hasSetlistMismatch = hasSongIssue || hasLabelIssue;
     if (!nameMatch || hasSetlistMismatch) {
       const warnSpan = document.createElement('span');
       warnSpan.className = 'bb-setlist-tab-ann';
@@ -3362,6 +3369,7 @@
       const warnParts = [];
       if (!nameMatch) warnParts.push('Event name mismatch between YEAR and DETAIL page');
       if (hasSetlistMismatch) warnParts.push('Setlist has differences between YEAR and DETAIL page');
+      if (hasLabelMismatch) warnParts.push('Section label mismatch between YEAR and DETAIL page');
       const msg = warnParts.join('; ');
       warnSpan.dataset.msg = msg;
       warnSpan.title = msg;
@@ -4158,13 +4166,15 @@
           log(`  DETAIL "Info & Setlist" refs: ${detailAnchorRef ? `"#${detailAnchorRef}"` : 'no fragment'}`);
 
           if (detailAnchorRef) {
-            const detailIssues = [];
-            const detailPassed = [];
+            // One row per check ({label, value, ok}) — rendered as a
+            // .bb-tip-table by showAnchorCheckTooltip, so "Info & Setlist"'s
+            // and "YEAR page"'s values line up regardless of which checks ran.
+            const anchorChecks = [];
 
             if (detailAnchorRef === yearAnchorName) {
-              detailPassed.push(`Anchor "#${detailAnchorRef}" matches YEAR page anchor "#${yearAnchorName}" ✅`);
+              anchorChecks.push({ label: 'Anchor', value: `#${detailAnchorRef} matches YEAR page anchor #${yearAnchorName}`, ok: true });
             } else {
-              detailIssues.push(`Anchor mismatch: "Info & Setlist" refs "#${detailAnchorRef}" but YEAR page anchor for this event is "#${yearAnchorName}"`);
+              anchorChecks.push({ label: 'Anchor', value: `Info & Setlist refs #${detailAnchorRef}, YEAR page anchor is #${yearAnchorName}`, ok: false });
             }
 
             const eventDateForDetail = yearNameUpper.match(/^(\d{4}-\d{2}-\d{2})/);
@@ -4172,9 +4182,9 @@
               const theoretical = dateToAnchor(eventDateForDetail[1]);
               if (theoretical) {
                 if (detailAnchorRef.startsWith(theoretical)) {
-                  detailPassed.push(`Date-derived anchor "#${theoretical}" (from ${eventDateForDetail[1]}) ✅`);
+                  anchorChecks.push({ label: 'Date-derived anchor', value: `#${theoretical} (from ${eventDateForDetail[1]})`, ok: true });
                 } else {
-                  detailIssues.push(`Date-derived anchor: expected "#${theoretical}" (from ${eventDateForDetail[1]}) but "Info & Setlist" refs "#${detailAnchorRef}"`);
+                  anchorChecks.push({ label: 'Date-derived anchor', value: `expected #${theoretical} (from ${eventDateForDetail[1]}), Info & Setlist refs #${detailAnchorRef}`, ok: false });
                 }
               }
               const hrefPathM = href.match(/^\/([^#]+)#/);
@@ -4182,19 +4192,20 @@
                 const hrefYear = hrefPathM[1];
                 const dateYear = eventDateForDetail[1].slice(0, 4);
                 if (yearMatchesHrefSlug(dateYear, hrefYear)) {
-                  detailPassed.push(`Href year "${hrefYear}" matches event date year "${dateYear}" ✅`);
+                  anchorChecks.push({ label: 'Href year', value: `${hrefYear} matches event date year ${dateYear}`, ok: true });
                 } else {
-                  detailIssues.push(`Year mismatch: event date year "${dateYear}" ≠ href year "${hrefYear}"`);
+                  anchorChecks.push({ label: 'Href year', value: `event date year ${dateYear} ≠ href year ${hrefYear}`, ok: false });
                 }
               }
             }
 
-            if (detailIssues.length > 0) {
-              logWarn(`  Anchor/year issue(s): ${detailIssues.join('; ')}`);
-              addAnchorWarnDetail(infoLink, yearAnchorName, detailAnchorRef, detailIssues);
+            const anchorAllOk = anchorChecks.every(c => c.ok);
+            if (!anchorAllOk) {
+              logWarn(`  Anchor/year issue(s): ${anchorChecks.filter(c => !c.ok).map(c => `${c.label}: ${c.value}`).join('; ')}`);
+              addAnchorWarnDetail(infoLink, anchorChecks);
             } else {
               log(`  Anchor MATCH ✅`);
-              addAnchorMatchDetail(infoLink, `Anchor checks passed:\n${detailPassed.join('\n')}`);
+              addAnchorMatchDetail(infoLink, anchorChecks);
             }
           }
         } else {
@@ -4642,13 +4653,20 @@
 
         if (msg) {
           const warn = document.createElement('span');
-          warn.className = 'bb-para-warn';
+          // bb-section-label-warn (also used on the YEAR page's own
+          // renderSetlistElement) lets annotateSetlistTab detect label
+          // issues on this live DETAIL page for its "Setlist" tab ⚠️.
+          warn.className = 'bb-para-warn bb-section-label-warn';
           warn.textContent = ' ⚠️';
           warn.dataset.msg = msg;
           el.appendChild(warn);
           if (yearSec && yearSec.label !== detailLabel) {
-            // Real mismatch: rich aligned tooltip, matching the char-diff
-            // highlighting above.
+            // Real mismatch: data-year-label/data-detail-label mark this as
+            // a genuine two-sided mismatch (vs. "missing entirely" below) —
+            // annotateSetlistTab keys off their presence — and drive the
+            // rich aligned tooltip, matching the char-diff highlighting above.
+            warn.dataset.yearLabel   = yearSec.label;
+            warn.dataset.detailLabel = detailLabel;
             warn.addEventListener('mouseenter', e => showLabelMismatchTooltip(e, yearSec.label, detailLabel));
             warn.addEventListener('mouseleave', hideTooltip);
           } else {
@@ -4704,7 +4722,9 @@
         : `Section "show" exists on YEAR page but DETAIL page has no corresponding section label`;
 
       const warn = document.createElement('span');
-      warn.className = 'bb-para-warn';
+      // bb-section-label-warn: see the matching comment in Case A above —
+      // lets annotateSetlistTab detect this as a label issue too.
+      warn.className = 'bb-para-warn bb-section-label-warn';
       warn.textContent = ' ⚠️';
       warn.dataset.msg = msg;
       warn.title = msg;
@@ -6316,6 +6336,9 @@
     strong.appendChild(em);
     container.appendChild(strong);
 
+    // Plain-text summary for dataset.msg (read by collectSectionWarnings and
+    // rewireLoadedPage's post-cache-load fallback) — the live hover tooltip
+    // itself uses showVenueTooltip's .bb-tip-table instead (see below).
     let msg, glyphClass, glyphChar;
     if (match) {
       msg = `Venue match ✅\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
@@ -6335,7 +6358,7 @@
     glyph.textContent = glyphChar;
     glyph.style.cursor = 'help';
     glyph.dataset.msg = msg;
-    glyph.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    glyph.addEventListener('mouseenter', e => showVenueTooltip(e, venueName, detailVenuePart, match, extra));
     glyph.addEventListener('mouseleave', hideTooltip);
     container.appendChild(glyph);
   }
@@ -6961,7 +6984,7 @@
       warn.className  = 'bb-glyph bb-icon-sorry';
       warn.textContent = '⚠️';
       warn.dataset.msg = 'Retail icon on YEAR page but no retail reference found in the Recording tab.';
-      warn.title = warn.dataset.msg;
+      warn.title = 'Retail icon on YEAR page but no retail reference found in the Recording tab of DETAIL page.';
       icon.after(warn);
       icon.style.opacity = '0.45';
       return;
@@ -9858,27 +9881,28 @@
 
   // Appends a warning span immediately after the "Info & Setlist" link on the
   // DETAIL page when anchor, DateToAnchor, or year consistency checks fail.
-  function addAnchorWarnDetail(linkEl, yearAnchorName, detailAnchorRef, issues = []) {
+  // @param {Array<{label: string, value: string, ok: boolean}>} checks
+  function addAnchorWarnDetail(linkEl, checks) {
     const span = document.createElement('span');
     span.className = 'bb-anchor-warn';
     span.textContent = ' ⚠️';
-    const msg = issues.length > 0
-      ? issues.join('\n')
-      : `Anchor mismatch: "Info & Setlist" links to "#${detailAnchorRef}" but actual YEAR page anchor for this event is "#${yearAnchorName}"`;
-    span.dataset.msg = msg;
-    span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    // Plain-text summary for dataset.msg (read by collectSectionWarnings) —
+    // the live hover tooltip uses showAnchorCheckTooltip's .bb-tip-table.
+    span.dataset.msg = checks.map(c => `${c.label}: ${c.value}${c.ok ? ' ✅' : ' ⚠️'}`).join('\n');
+    span.addEventListener('mouseenter', e => showAnchorCheckTooltip(e, checks, false));
     span.addEventListener('mouseleave', hideTooltip);
     linkEl.after(span);
   }
 
   // Appends a ✅ glyph immediately after the "Info & Setlist" link on the
   // DETAIL page when all anchor, DateToAnchor, and year checks pass.
-  function addAnchorMatchDetail(linkEl, msg) {
+  // @param {Array<{label: string, value: string, ok: boolean}>} checks
+  function addAnchorMatchDetail(linkEl, checks) {
     const span = document.createElement('span');
     span.className = 'bb-anchor-match';
     span.textContent = ' ✅';
-    span.dataset.msg = msg;
-    span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    span.dataset.msg = 'Anchor checks passed:\n' + checks.map(c => `${c.label}: ${c.value} ✅`).join('\n');
+    span.addEventListener('mouseenter', e => showAnchorCheckTooltip(e, checks, true));
     span.addEventListener('mouseleave', hideTooltip);
     linkEl.after(span);
   }
@@ -9896,6 +9920,9 @@
    *   bb-venue-info instead of bb-venue-warn.
    */
   function addVenueGlyphDetail(linkEl, venueName, match, detailVenuePart, extra = null) {
+    // Plain-text summary for dataset.msg (read by collectSectionWarnings and
+    // rewireLoadedPage's post-cache-load fallback) — the live hover tooltip
+    // itself uses showVenueTooltip's .bb-tip-table instead (see below).
     let msg, spanClass, spanChar;
     if (match) {
       msg = `Venue match ✅\nVENUE page: "${venueName}"\nDETAIL event: "${detailVenuePart}"`;
@@ -9915,7 +9942,7 @@
     span.textContent = spanChar;
     span.dataset.msg = msg;
     span.style.cursor = 'help';
-    span.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    span.addEventListener('mouseenter', e => showVenueTooltip(e, venueName, detailVenuePart, match, extra));
     span.addEventListener('mouseleave', hideTooltip);
     linkEl.after(span);
   }
@@ -10048,6 +10075,64 @@
         <tr><th>Result:</th><td>${match
           ? '<span class="bb-ok">Match ✅</span>'
           : '<span class="bb-fail">Mismatch ❌</span>'}</td></tr>
+      </table>`;
+    positionTooltip(tip, evt);
+    tip.style.display = 'block';
+  }
+
+  /**
+   * Rich tooltip for the Venue check (match / mismatch / extra-text), same
+   * .bb-tip-table convention as showYearTooltip/showListTooltip — a proper
+   * table aligns "VENUE page:"/"DETAIL event:" via the <th> column (no manual
+   * space-padding needed) and values render in the tooltip's default
+   * near-white color (no quote marks or red wrapper needed to make them
+   * legible against .bb-fail).
+   * @param {Event}       evt
+   * @param {string}      venueName        VENUE page's own name.
+   * @param {string}      detailVenuePart  DETAIL page's venue text.
+   * @param {boolean}     match
+   * @param {string|null} extra            Non-null: informational venue-detail extra (see findVenueDetailExtra).
+   */
+  function showVenueTooltip(evt, venueName, detailVenuePart, match, extra) {
+    const tip = document.getElementById('bb-tooltip');
+    if (!tip) return;
+    const resultHtml = match
+      ? '<span class="bb-ok">Match ✅</span>'
+      : extra
+        ? `<span style="color:green;">Extra text "${esc(extra)}" on DETAIL page (informational, not a mismatch)</span>`
+        : '<span class="bb-fail">Mismatch ⚠️</span>';
+    tip.innerHTML = `
+      <table class="bb-tip-table">
+        <tr><th>VENUE page:</th><td>${esc(venueName)}</td></tr>
+        <tr><th>DETAIL event:</th><td>${esc(detailVenuePart)}</td></tr>
+        <tr><th>Result:</th><td>${resultHtml}</td></tr>
+      </table>`;
+    positionTooltip(tip, evt);
+    tip.style.display = 'block';
+  }
+
+  /**
+   * Rich tooltip for the "Info & Setlist" anchor/date/year checks, same
+   * .bb-tip-table convention as showVenueTooltip/showYearTooltip — one row
+   * per check (failed checks' value in red), plus an overall Result row.
+   * @param {Event} evt
+   * @param {Array<{label: string, value: string, ok: boolean}>} checks
+   * @param {boolean} allOk
+   */
+  function showAnchorCheckTooltip(evt, checks, allOk) {
+    const tip = document.getElementById('bb-tooltip');
+    if (!tip) return;
+    const rows = checks.map(c => {
+      const valueHtml = c.ok ? esc(c.value) : `<span class="bb-fail">${esc(c.value)}</span>`;
+      return `<tr><th>${esc(c.label)}:</th><td>${valueHtml} ${c.ok ? '✅' : '⚠️'}</td></tr>`;
+    }).join('');
+    const resultHtml = allOk
+      ? '<span class="bb-ok">Match ✅</span>'
+      : '<span class="bb-fail">Mismatch ⚠️</span>';
+    tip.innerHTML = `
+      <table class="bb-tip-table">
+        ${rows}
+        <tr><th>Result:</th><td>${resultHtml}</td></tr>
       </table>`;
     positionTooltip(tip, evt);
     tip.style.display = 'block';

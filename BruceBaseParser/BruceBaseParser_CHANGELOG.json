@@ -1,5 +1,30 @@
 [
     {
+        "version": "3.17",
+        "date": "2026-07-09",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Venue mismatch/match/extra-text tooltips (YEAR page's renderVenueInfo and DETAIL page's addVenueGlyphDetail) and the 'Info & Setlist' anchor/date/href checks (addAnchorMatchDetail/addAnchorWarnDetail) now render as a .bb-tip-table (same convention as showYearTooltip/showSongTooltip) via new showVenueTooltip/showAnchorCheckTooltip functions, instead of a plain multi-line message — this reliably aligns the compared values (a manual space-padding attempt didn't work, since #bb-tooltip collapses repeated spaces) and lets values render in the tooltip's normal near-white color instead of entirely in warning-red.",
+                    "Clarified the 'Retail icon' warning's hover tooltip text to say 'in the Recording tab of DETAIL page' instead of just 'in the Recording tab'."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.16",
+        "date": "2026-07-09",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "The DETAIL page's 'Setlist' tab warning (annotateSetlistTab) now correctly detects section label issues too — flagDetailSectionHeaders' warning spans were missing the .bb-section-label-warn class the tab check relies on — and adds a distinct 'Section label mismatch between YEAR and DETAIL page' message when a genuine two-sided label mismatch is present, separate from the generic 'Setlist has differences' message."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.15",
         "date": "2026-07-09",
         "sections": [

@@ -199,9 +199,26 @@ The "Setlist" tab label (`<em>` in the wikidot nav) gets a tooltip in both state
   YEAR and DETAIL page." Also stored in `title` so `rewireLoadedPage` can
   re-derive the message after a cache reload without recomputing state.
 - **Mismatch** (`.bb-setlist-tab-ann`, ⚠️ span): existing `data-msg` (built from
-  which of "name mismatch" / "setlist differences" applied) is now wired to
-  `showErrorTooltip` on hover — previously the message was stored but never
-  shown.
+  which of "name mismatch" / "setlist differences" / "section label mismatch"
+  applied) is now wired to `showErrorTooltip` on hover — previously the
+  message was stored but never shown.
+
+`annotateSetlistTab` checks three independent conditions and joins whichever
+apply into one `; `-separated message: `!nameMatch` ("Event name mismatch..."),
+any song-level diff class (`.bb-song-year-only`/`.bb-song-detail-only`/
+`.bb-song-char-diff`, "Setlist has differences..."), and any
+`.bb-section-label-warn` present at all ("Setlist has differences..." too —
+this also covers a section missing entirely from one side, not just a true
+mismatch). A fourth, more specific message ("Section label mismatch between
+YEAR and DETAIL page") is added only when `.bb-section-label-warn[data-year-label]`
+is present — i.e. only for a genuine two-sided label mismatch (see "Section
+label mismatch — char-diff + rich tooltip" above), not the "missing entirely"
+variants. `flagDetailSectionHeaders` adds the `bb-section-label-warn` class
+(alongside its existing `bb-para-warn`) to every warning span it creates —
+both Case A (existing headers) and Case B (synthetic headers) — specifically
+so this live-DOM check on the DETAIL page's own document can find them; this
+class was previously only ever added on the YEAR page's `renderSetlistElement`
+side, so `annotateSetlistTab` never actually detected label issues before.
 
 ---
 

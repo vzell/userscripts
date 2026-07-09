@@ -107,13 +107,24 @@ both on the same element, since both firing at once produces a duplicate
   attribute and survives the `innerHTML` save/load round-trip on its own.
 - **Genuinely rich content** (a `<table>`, per-character diff, or a message
   that is unavoidably multi-line/multi-item and benefits from color-coding):
-  wire `mouseenter`/`showErrorTooltip(evt, msg)` (or the dedicated
-  `showYearTooltip`/`showListTooltip`/`showSongTooltip`) and do **not** set
-  `.title` on the same element. Examples: `addVenueGlyphDetail` /
-  `renderVenueInfo` (3-line venue match/mismatch), `addAnchorMatchDetail` /
-  `addAnchorWarnYear` / `addAnchorWarnDetail` (issue lists joined with `\n`,
-  length varies 0–2+), `showSongTooltip`'s year-only/detail-only/char-diff/match
-  cases (colored table).
+  wire `mouseenter`/`showErrorTooltip(evt, msg)` (or a dedicated
+  `.bb-tip-table`-based function — `showYearTooltip`/`showListTooltip`/
+  `showSongTooltip`/`showVenueTooltip`/`showAnchorCheckTooltip`/
+  `showLabelMismatchTooltip`) and do **not** set `.title` on the same
+  element. A `<table class="bb-tip-table">` (one `<tr><th>label:</th>
+  <td>value</td></tr>` row per fact, plus a `Result:` row) is preferred over
+  a plain multi-line string wherever there's a natural "label: value" shape —
+  it aligns every row's values in one column via the `<th>` column width,
+  and values render in the tooltip's default near-white without needing
+  quote marks, whereas plain-text messages piped through `showErrorTooltip`
+  render entirely in `.bb-fail` red (or whichever wrapper class) with no
+  per-value distinction and no reliable way to align across lines (`#bb-tooltip`
+  is `white-space: nowrap`, which collapses manual space-padding). Examples:
+  `addVenueGlyphDetail`/`renderVenueInfo` → `showVenueTooltip` ("VENUE page:"/
+  "DETAIL event:"/"Result:" rows), `addAnchorMatchDetail`/`addAnchorWarnDetail`
+  → `showAnchorCheckTooltip` (one row per anchor/date/href check, 0–3 rows,
+  failed values in `.bb-fail` red), `showSongTooltip`'s year-only/
+  detail-only/char-diff/match cases (colored table).
 - `rewireLoadedPage`'s generic re-wiring selector is `[data-msg]:not([title])`
   — elements that keep `dataset.msg` *only* for aggregation
   (`collectPageWarnings`/`collectSectionWarnings`) but are otherwise
