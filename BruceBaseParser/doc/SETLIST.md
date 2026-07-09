@@ -121,8 +121,8 @@ Set on each `yearSection` before rendering:
 | `.bb-song-char-diff` | Similar but slightly different | Char-level red/green |
 | `.bb-char-match` | Matching char within char-diff | Green |
 | `.bb-char-diff` | Differing char | Red bold |
-| `.bb-para-warn` | Song in `<p>` format (old page) or section label issue | ⚠️ cursor:help |
-| `.bb-section-label` | Non-show, non-recording section label prefix | Spans inserted by `renderSetlistElement` |
+| `.bb-para-warn` | Song in `<p>` format (old page) or section label issue | ⚠️ cursor:help; native `title` tooltip, except the label-mismatch case below |
+| `.bb-section-label` | Non-show, non-recording section label prefix | Spans inserted by `renderSetlistElement`; char-diff highlighted for a real label mismatch (see below) |
 | `.bb-section-label-warn` | Section label with mismatch warning | Combined with `.bb-para-warn` |
 | `.bb-anchor-warn` | Anchor/date/year mismatch | ⚠️ cursor:help |
 | `.bb-sep` | Song separator rendered as ` / ` | `.bb-sep` class; used by list-view builder to split songs |
@@ -137,6 +137,39 @@ mismatch ones. For `.bb-song-match`, `showSongTooltip` renders a
 repeated in three places that must stay in sync: `renderSetlistElement` (flat
 view), `buildListDiv` (list view rebuild), and `rewireLoadedPage` (after a
 Save/Load cache round-trip).
+
+**Section label mismatch — char-diff + rich tooltip**: of the three
+`.bb-section-label-warn` message variants (section missing entirely from one
+side, or a real capitalization/text mismatch), only the real mismatch case
+("Section label mismatch: YEAR page has ..., DETAIL page has ...") gets this
+treatment — the "missing entirely" variants keep a plain native `title`
+tooltip and plain label text, since there's no second string to diff against.
+
+Unlike song names, a label mismatch is typically *only* a case difference
+(e.g. `"with Willie Nile"` vs `"With Willie Nile"`), so it needs its own
+`buildLabelCharDiffHtml(a, b)` (`:5398-5427`) rather than reusing
+`buildCharDiffHtml` — that function upper-cases both sides before comparing
+(appropriate for song-name matching, which is case-insensitive), which would
+make every character of a case-only label mismatch wrongly show as matching.
+`buildLabelCharDiffHtml` compares case-sensitively and renders `a`'s original
+characters: matching characters render as **plain, unstyled text** (the
+label is the same wording, not a different value), only the actually
+differing characters get `.bb-char-diff` (bold red, light-red background) —
+no `.bb-char-match` green highlighting.
+
+For a real mismatch: `renderSetlistElement` runs
+`buildLabelCharDiffHtml(label, detailLabel)` for the `.bb-section-label` text
+(instead of plain `esc(label)`), and adds `data-year-label`/`data-detail-label`
+to the `.bb-section-label-warn` icon (dropping its native `title`) so
+`showLabelMismatchTooltip(evt, yearLabel, detailLabel)` (`:10242-10251`) can
+render a `.bb-tip-table` with YEAR/DETAIL rows aligned below each other, each
+row diff-highlighted against the other (same `.bb-tip-table` shape
+`showSongTooltip` uses for song matches). On the DETAIL page's own live
+Setlist tab, `flagDetailSectionHeaders` mirrors this symmetrically: it
+replaces the live `<strong>` label's `innerHTML` with
+`buildLabelCharDiffHtml(detailLabel, yearSec.label)` (each side always
+renders *its own* text, with the other side's differing characters
+highlighted) and gives its `⚠️` the same `showLabelMismatchTooltip`.
 
 ### On the DETAIL page
 

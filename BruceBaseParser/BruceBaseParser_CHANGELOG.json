@@ -1,5 +1,17 @@
 [
     {
+        "version": "3.15",
+        "date": "2026-07-09",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Section label mismatches (e.g. 'with Willie Nile' vs 'With Willie Nile') now use a case-sensitive character LCS diff that highlights only the mismatched characters (bold red on light-red background) while leaving matching text unstyled, and the warning icon's tooltip is now a rich tooltip showing the YEAR/DETAIL label variants aligned as rows instead of a plain native title, on both the YEAR page's inline setlist and the DETAIL page's own Setlist tab."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.14",
         "date": "2026-07-09",
         "sections": [

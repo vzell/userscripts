@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.14
+// @version      3.15
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -3873,11 +3873,6 @@
     let songNum = 0;
 
     const labelLc = label.toLowerCase();
-    if (labelLc === 'soundcheck') {
-      html += '<span class="bb-section-label">Soundcheck: </span>';
-    } else if (labelLc !== 'show' && labelLc !== 'recording') {
-      html += `<span class="bb-section-label">${esc(label)}: </span>`;
-    }
 
     // Section-label mismatch warning (YEAR page mode only, when detailLabel is set).
     // Rules:
@@ -3885,8 +3880,9 @@
     //  - 'show' vs 'show' (the implicit default) — no flag regardless of case.
     //  - All other labels use case-sensitive comparison so capitalisation differences
     //    (e.g. 'with Willie Nile' vs 'With Willie Nile') are caught.
+    let labelWarnMsg = null;
+    let labelDiffTarget = null; // detailLabel, only set for a real char-diffable mismatch
     if (detailLabel !== undefined && labelLc !== 'recording') {
-      let labelWarnMsg = null;
       if (detailLabel === null) {
         labelWarnMsg = `Section "${label}" exists on YEAR page but DETAIL page has no corresponding section`;
       } else if (detailLabel === false) {
@@ -3899,11 +3895,30 @@
       } else if (!(labelLc === 'show' && detailLabel.toLowerCase() === 'show')) {
         if (label !== detailLabel) {
           labelWarnMsg = `Section label mismatch: YEAR page has "${label}", DETAIL page has "${detailLabel}"`;
+          labelDiffTarget = detailLabel;
         }
       }
-      if (labelWarnMsg) {
-        html += `<span class="bb-section-label-warn bb-para-warn" data-msg="${esc(labelWarnMsg)}" title="${esc(labelWarnMsg)}">⚠️</span> `;
-      }
+    }
+
+    if (labelLc === 'soundcheck') {
+      html += '<span class="bb-section-label">Soundcheck: </span>';
+    } else if (labelLc !== 'show' && labelLc !== 'recording') {
+      // A real mismatch (labelDiffTarget set) gets case-sensitive char-diff
+      // highlighting (buildLabelCharDiffHtml) — only the differing
+      // characters are colorized, the rest renders as plain original text.
+      const labelInner = labelDiffTarget ? buildLabelCharDiffHtml(label, labelDiffTarget) : esc(label);
+      html += `<span class="bb-section-label">${labelInner}: </span>`;
+    }
+
+    if (labelWarnMsg) {
+      // data-year-label/data-detail-label (real mismatch only) drive the rich
+      // aligned tooltip below; the "missing entirely" variants have neither
+      // and keep a plain native title instead.
+      const labelAttrs = labelDiffTarget
+        ? ` data-year-label="${esc(label)}" data-detail-label="${esc(labelDiffTarget)}"`
+        : '';
+      const titleAttr = labelDiffTarget ? '' : ` title="${esc(labelWarnMsg)}"`;
+      html += `<span class="bb-section-label-warn bb-para-warn" data-msg="${esc(labelWarnMsg)}"${labelAttrs}${titleAttr}>⚠️</span> `;
     }
 
     for (const item of items) {
@@ -3986,9 +4001,19 @@
       });
     }
 
-    // (.bb-para-warn carries its own native title tooltip — no listener needed.)
+    // (.bb-para-warn carries its own native title tooltip — no listener needed,
+    // except the real section-label-mismatch case below, which gets the rich
+    // aligned tooltip instead; the "missing entirely" variants keep native title.)
     el.querySelectorAll('.bb-song-match, .bb-song-year-only, .bb-song-detail-only, .bb-song-char-diff').forEach(span => {
       span.addEventListener('mouseenter', e => showSongTooltip(e, span));
+      span.addEventListener('mouseleave', hideTooltip);
+    });
+
+    // Section-label mismatch warning: rich aligned tooltip instead of native
+    // title, matching the char-diff highlighting given to the label text
+    // itself above. [data-year-label] is only present for a real mismatch.
+    el.querySelectorAll('.bb-section-label-warn[data-year-label]').forEach(span => {
+      span.addEventListener('mouseenter', e => showLabelMismatchTooltip(e, span.dataset.yearLabel, span.dataset.detailLabel));
       span.addEventListener('mouseleave', hideTooltip);
     });
   }
@@ -4608,6 +4633,11 @@
         } else if (yearSec.label !== detailLabel) {
           // Case-sensitive — catches capitalisation differences (e.g. 'with' vs 'With')
           msg = `Section label mismatch: YEAR page has "${yearSec.label}", DETAIL page has "${detailLabel}"`;
+          // Highlight the DETAIL page's own label text with a case-sensitive
+          // char-diff (symmetric to renderSetlistElement) — only the
+          // differing characters are colorized, diffed against the YEAR
+          // page's label; matching characters stay plain original text.
+          strong.innerHTML = buildLabelCharDiffHtml(detailLabel, yearSec.label);
         }
 
         if (msg) {
@@ -4615,8 +4645,15 @@
           warn.className = 'bb-para-warn';
           warn.textContent = ' ⚠️';
           warn.dataset.msg = msg;
-          warn.title = msg;
           el.appendChild(warn);
+          if (yearSec && yearSec.label !== detailLabel) {
+            // Real mismatch: rich aligned tooltip, matching the char-diff
+            // highlighting above.
+            warn.addEventListener('mouseenter', e => showLabelMismatchTooltip(e, yearSec.label, detailLabel));
+            warn.addEventListener('mouseleave', hideTooltip);
+          } else {
+            warn.title = msg; // "missing entirely" variants keep the native tooltip
+          }
         }
       });
       return;
@@ -5338,6 +5375,50 @@
 
     return chars.map(c => {
       if (c.match) return `<span class="bb-char-match">${esc(c.ch)}</span>`;
+      if (c.ch === ' ') return `<span class="bb-char-diff bb-char-diff-space">&nbsp;</span>`;
+      return `<span class="bb-char-diff">${esc(c.ch)}</span>`;
+    }).join('');
+  }
+
+  /**
+   * Case-sensitive character-level LCS diff for section labels — unlike
+   * buildCharDiffHtml (which upper-cases both sides, since song names are
+   * matched/displayed case-insensitively), a label mismatch is typically
+   * *only* a case difference (e.g. "with Willie Nile" vs "With Willie
+   * Nile"), so the comparison must be case-sensitive or every character
+   * would wrongly show as matching. Renders `a`'s own original-case
+   * characters; matched characters render as plain text (the label is the
+   * same wording, not a different value, so no green highlighting), only
+   * the actually-differing characters get `.bb-char-diff` (bold red,
+   * light-red background).
+   * @param {string} a - Text to render (e.g. this page's own label).
+   * @param {string} b - Text to diff against (e.g. the other page's label).
+   * @returns {string} HTML
+   */
+  function buildLabelCharDiffHtml(a, b) {
+    const m = a.length, n = b.length;
+
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+
+    let i = m, j = n;
+    const chars = [];
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
+        chars.unshift({ ch: a[i-1], match: true });
+        i--; j--;
+      } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+        j--;
+      } else {
+        chars.unshift({ ch: a[i-1], match: false });
+        i--;
+      }
+    }
+
+    return chars.map(c => {
+      if (c.match) return esc(c.ch);
       if (c.ch === ' ') return `<span class="bb-char-diff bb-char-diff-space">&nbsp;</span>`;
       return `<span class="bb-char-diff">${esc(c.ch)}</span>`;
     }).join('');
@@ -10145,6 +10226,26 @@
     const tip = document.getElementById('bb-tooltip');
     if (!tip) return;
     tip.innerHTML = `<span class="bb-fail">${esc(msg).replace(/\n/g, '<br>')}</span>`;
+    positionTooltip(tip, evt);
+    tip.style.display = 'block';
+  }
+
+  /**
+   * Rich tooltip for a section-label mismatch: YEAR/DETAIL variants shown as
+   * aligned rows (same .bb-tip-table shape as showSongTooltip's match/
+   * char-diff rows), each row diff-highlighting its own text against the
+   * other side via buildLabelCharDiffHtml.
+   * @param {Event}  evt
+   * @param {string} yearLabel
+   * @param {string} detailLabel
+   */
+  function showLabelMismatchTooltip(evt, yearLabel, detailLabel) {
+    const tip = document.getElementById('bb-tooltip');
+    if (!tip) return;
+    tip.innerHTML = `<table class="bb-tip-table">
+      <tr><th>YEAR page:</th><td>${buildLabelCharDiffHtml(yearLabel, detailLabel)}</td></tr>
+      <tr><th>DETAIL page:</th><td>${buildLabelCharDiffHtml(detailLabel, yearLabel)}</td></tr>
+    </table>`;
     positionTooltip(tip, evt);
     tip.style.display = 'block';
   }
