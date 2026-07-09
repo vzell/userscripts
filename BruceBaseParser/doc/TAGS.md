@@ -274,12 +274,15 @@ companion page only exists when the DETAIL page itself has an "On Stage" tab.
   page's own `.page-tags`.
 
 `makeOnstageTagsGlyphSpan(additionalTags, onstageUrl)` builds (but doesn't
-insert) a `🏷️` `.bb-glyph` span with a rich tooltip listing the additional
-tags — the tooltip content is a variable-length, `\n`-joined list (the
-"genuinely rich" bucket per the native-title-vs-rich-tooltip convention in
-[UTILITIES.md](UTILITIES.md)), so it's wired via `mouseenter` →
-`showErrorTooltip`, not a native `title`. Two call sites insert it
-differently:
+insert) a `🏷️` `.bb-glyph` span wired via `mouseenter` → `showOnstageTagsTooltip`
+(the "genuinely rich" bucket per the native-title-vs-rich-tooltip convention
+in [UTILITIES.md](UTILITIES.md)), not a native `title`. `showOnstageTagsTooltip`
+groups `additionalTags` by lowercase first character (digit/symbol-led tags
+under `"#"`, same convention as `groupTagsIntoLines`) and renders each group
+with the same `.bb-tag-group-label` styling used in `.page-tags` itself —
+matching how the tags actually look once merged into the page, rather than a
+plain comma-joined list. All text renders in the tooltip's normal near-white
+color (no `.bb-fail` red wrapper). Two call sites insert it differently:
 
 - **DETAIL page** (`runDetailPage`): calls `fetchOnstageCompanionTags` right
   after `buildTabMap`, before `annotateDetailPageTags` (which needs the
@@ -637,12 +640,6 @@ stylesheet, it would otherwise win, showing a verified companion-page tag as
 steelblue instead of green. A `.bb-tag-onstage.bb-tag-ok` combined-selector
 rule (higher specificity, `0,0,2,0` vs. `0,0,1,0`) forces green whenever
 both classes are present, regardless of declaration order.
-
-`onStageRelationRulesExplanation()` returns a one-line summary of these same
-three rules; it's appended to `makeOnstageTagsGlyphSpan`'s tooltip (see
-"Onstage companion page tags" above) after the list of additional tags found
-on the companion page, since both facts concern the same "On Stage" tab/page
-— visible from a single hover on the 🏷️ glyph on both DETAIL and YEAR pages.
 
 ---
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.17
+// @version      3.18
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -6103,19 +6103,6 @@
   }
 
   /**
-   * One-line explanation of the "On Stage" relation-tag rules, for appending
-   * to the companion "On Stage" page glyph tooltip (see
-   * makeOnstageTagsGlyphSpan) so both facts are visible together.
-   * @returns {string}
-   */
-  function onStageRelationRulesExplanation() {
-    return 'Every relation listed under the "On Stage" tab must also have a tag: '
-      + '"onstage" is always expected; a relation name matches when its lowercase, '
-      + 'whitespace/punctuation-stripped form (e.g. "Steven Van Zandt" -> stevenvanzandt) '
-      + '— or the same after stripping a leading "The " (e.g. "The E Street Band" -> estreetband) — equals a tag.';
-  }
-
-  /**
    * Returns an HTML string for the flat one-line relation view of a single group.
    * Top-level entries use "•" (bb-rel-main); band members use "◦" (bb-rel-member).
    * Extra annotations (e.g. "(Guest)") are rendered as .bb-rel-extra spans.
@@ -10003,21 +9990,19 @@
   /**
    * Builds (but does not insert) a 🏷️ glyph span noting that additional tags
    * were found on the "onstage:" companion page (see
-   * fetchOnstageCompanionTags), with a rich tooltip listing them plus the
-   * "On Stage" relation-tag rules (see checkOnStageRelationTags /
-   * onStageRelationRulesExplanation), since both facts concern the same
-   * "On Stage" tab/page. Callers insert it wherever appropriate (e.g.
-   * `h1.appendChild(...)` on DETAIL pages, `glyphSpan.after(...)` right
-   * after the existing match/mismatch glyph on YEAR pages).
+   * fetchOnstageCompanionTags), with a rich tooltip (showOnstageTagsTooltip)
+   * grouping them by first letter the same way .page-tags itself does
+   * (groupTagsIntoLines / .bb-tag-group-label). Callers insert it wherever
+   * appropriate (e.g. `h1.appendChild(...)` on DETAIL pages,
+   * `glyphSpan.after(...)` right after the existing match/mismatch glyph on
+   * YEAR pages).
    * @param {string[]} additionalTags - Extra tags found on the onstage page, not already on this page.
    * @param {string}   onstageUrl
    * @returns {HTMLElement}
    */
   function makeOnstageTagsGlyphSpan(additionalTags, onstageUrl) {
     const glyphSpan = makeGlyphSpan('🏷️');
-    const count = additionalTags.length;
-    const msg = `${count} additional tag${count === 1 ? '' : 's'} found on the companion "On Stage" page (${onstageUrl}):\n${[...additionalTags].sort().join(', ')}\n\n${onStageRelationRulesExplanation()}`;
-    glyphSpan.addEventListener('mouseenter', e => showErrorTooltip(e, msg));
+    glyphSpan.addEventListener('mouseenter', e => showOnstageTagsTooltip(e, additionalTags, onstageUrl));
     glyphSpan.addEventListener('mouseleave', hideTooltip);
     return glyphSpan;
   }
@@ -10139,6 +10124,40 @@
   }
 
   /**
+   * Rich tooltip for the 🏷️ "additional tags found on the onstage companion
+   * page" glyph (makeOnstageTagsGlyphSpan) — groups the tags by lowercase
+   * first character (digit/symbol-led tags under "#"), same convention as
+   * groupTagsIntoLines, and renders each group with the same
+   * .bb-tag-group-label styling used in .page-tags itself, instead of a
+   * plain comma-joined list wrapped entirely in .bb-fail red. Values inherit
+   * the tooltip's normal near-white color.
+   * @param {Event}    evt
+   * @param {string[]} additionalTags
+   * @param {string}   onstageUrl
+   */
+  function showOnstageTagsTooltip(evt, additionalTags, onstageUrl) {
+    const tip = document.getElementById('bb-tooltip');
+    if (!tip) return;
+    const count = additionalTags.length;
+    const buckets = new Map();
+    for (const tag of [...additionalTags].sort()) {
+      const first = tag.charAt(0).toLowerCase();
+      const key = (first >= 'a' && first <= 'z') ? first : '#';
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(tag);
+    }
+    const groupsHtml = [...buckets.entries()]
+      .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+      .map(([key, tags]) => `<div class="bb-tag-group-line"><span class="bb-tag-group-label">${key.toUpperCase()}</span>${tags.map(esc).join(', ')}</div>`)
+      .join('');
+    tip.innerHTML = `
+      <div>${count} additional tag${count === 1 ? '' : 's'} found on the companion "On Stage" page (${esc(onstageUrl)}):</div>
+      ${groupsHtml}`;
+    positionTooltip(tip, evt);
+    tip.style.display = 'block';
+  }
+
+  /**
    * Returns all warning messages found within a single .bb-section-processed div,
    * in DOM order, deduplicated. Covers anchor, venue, para, icon-sorry, and
    * synthetic setlist-diff messages.
@@ -10199,7 +10218,7 @@
     const n = msgs.length;
     const listItems = msgs.map(m => `<li>${esc(m).replace(/\n/g, '<br>')}</li>`).join('');
     const tipHtml =
-      `<div style="max-width:460px">` +
+      `<div style="max-width:900px">` +
       `<strong>⚠️ ${n} issue${n > 1 ? 's' : ''} found for this event:</strong>` +
       `<ol style="margin:6px 0 0;padding-left:18px;white-space:normal;">${listItems}</ol>` +
       `</div>`;
@@ -10256,7 +10275,7 @@
       .map(m => `<li>${esc(m).replace(/\n/g, '<br>')}</li>`)
       .join('');
     const tipHtml =
-      `<div style="max-width:460px">` +
+      `<div style="max-width:900px">` +
       `<strong>⚠️ ${n} issue${n > 1 ? 's' : ''} found on this page:</strong>` +
       `<ol style="margin:6px 0 0;padding-left:18px;white-space:normal;">${listItems}</ol>` +
       `</div>`;

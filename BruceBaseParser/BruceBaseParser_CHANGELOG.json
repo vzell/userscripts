@@ -1,5 +1,18 @@
 [
     {
+        "version": "3.18",
+        "date": "2026-07-10",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "The 🏷️ 'additional tags found on the onstage companion page' tooltip (makeOnstageTagsGlyphSpan) now groups the tags by first letter with the same .bb-tag-group-label styling used in .page-tags itself (via a new showOnstageTagsTooltip), instead of a plain comma-joined list entirely in warning-red; also dropped the now-redundant 'On Stage' relation-tag rules explanation from the tooltip (removed the now-unused onStageRelationRulesExplanation).",
+                    "Widened both the DETAIL page's 'N issues found on this page' tooltip (bb-page-title-warn, annotatePageTitleWithWarnings) and the YEAR page's 'N issues found for this event' tooltip (bb-event-title-warn) to 900px max-width to reduce line-wrapping for longer messages."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.17",
         "date": "2026-07-09",
         "sections": [
