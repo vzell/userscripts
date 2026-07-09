@@ -4202,15 +4202,52 @@ although the "Setlist" tab has just the well known "No set details known." and "
 Setlist may be inaccurate.
 Setlist incomplete and may be inaccurate.
 
-** rich HTML tooltip for section label mismatch + LCS-based diff highlightning of label mismatch
+** DONE rich HTML tooltip for section label mismatch + LCS-based diff highlightning of label mismatch
+*** initial
 
-rich HTML tooltip for section label mismatch + LCS-based diff highlightning of label mismatch
+add a rich HTML tooltip for section label mismatch + LCS-based diff highlightning of label mismatch on event entries on YEAR pages e.g. http://brucebase.wikidot.com/2026#170126
 
+currently:
 #+begin_example
 <span class="bb-section-label-warn bb-para-warn" data-msg="Section label mismatch: YEAR page has &quot;with Willie Nile&quot;, DETAIL page has &quot;With Willie Nile&quot;" title="Section label mismatch: YEAR page has &quot;with Willie Nile&quot;, DETAIL page has &quot;With Willie Nile&quot;">⚠️</span>
 #+end_example
 
-LCS-based diff
+and on the "Setlist" tab of EVENT DETAIL page e.g. http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n
+
+currently:
+#+begin_example
+<span class="bb-section-label-warn bb-para-warn" data-msg="Section label mismatch: YEAR page has &quot;with Willie Nile&quot;, DETAIL page has &quot;With Willie Nile&quot;" title="Section label mismatch: YEAR page has &quot;with Willie Nile&quot;, DETAIL page has &quot;With Willie Nile&quot;">⚠️</span>
+#+end_example
+
+So the "w" in "with ..." should get the same colorization (foreground and backgound) like we already do for song name mismatches 
+
+*** bug
+
+This is actually NOT what I want. The implementation now leads to
+
+YEAR:
+#+begin_example
+<span class="bb-section-label"><span class="bb-char-match">W</span><span class="bb-char-match">I</span><span class="bb-char-match">T</span><span class="bb-char-match">H</span><span class="bb-char-match"> </span><span class="bb-char-match">W</span><span class="bb-char-match">I</span><span class="bb-char-match">L</span><span class="bb-char-match">L</span><span class="bb-char-match">I</span><span class="bb-char-match">E</span><span class="bb-char-match"> </span><span class="bb-char-match">N</span><span class="bb-char-match">I</span><span class="bb-char-match">L</span><span class="bb-char-match">E</span>: </span>
+<span class="bb-section-label-warn bb-para-warn" data-msg="Section label mismatch: YEAR page has &quot;with Willie Nile&quot;, DETAIL page has &quot;With Willie Nile&quot;">⚠️</span>
+#+end_example
+
+DETAIL:
+#+begin_example
+<p><strong><span class="bb-char-match">W</span><span class="bb-char-match">I</span><span class="bb-char-match">T</span><span class="bb-char-match">H</span><span class="bb-char-match"> </span><span class="bb-char-match">W</span><span class="bb-char-match">I</span><span class="bb-char-match">L</span><span class="bb-char-match">L</span><span class="bb-char-match">I</span><span class="bb-char-match">E</span><span class="bb-char-match"> </span><span class="bb-char-match">N</span><span class="bb-char-match">I</span><span class="bb-char-match">L</span><span class="bb-char-match">E</span></strong><span class="bb-para-warn" data-msg="Section label mismatch: YEAR page has &quot;with Willie Nile&quot;, DETAIL page has &quot;With Willie Nile&quot;"> ⚠️</span></p>
+#+end_example
+
+Right now the whole label is UPPERCASED and colorized in "green" which it shouldn't. It should be the original text and only the differences (chars) should be colorized in "bold red" (foreground) with a light red background.
+The rich tooltip should show the YEAR and DETAIL page variants aligned below each other
+
+*** tooltip on "Setlist" tab
+
+The tooltip on the DETAIL page http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n "Setlist" tab currently reads
+
+#+begin_example
+<em>Setlist<span class="bb-setlist-tab-ann" data-msg="Setlist has differences between YEAR and DETAIL page" title="Setlist has differences between YEAR and DETAIL page" style="cursor: help;"> ⚠️</span></em>
+#+end_example
+
+it should also additionally mention if there are label mismatches (if labels are present) between YEAR and DETAIL page
 
 ** TODO light blue background stretches up to the end instead of just the song name
 
@@ -4220,16 +4257,95 @@ light blue background stretches up to the end instead of just the song name
 <li class="bb-song-detail-only" data-detail-song="INSTRUMENTAL" value="3"><a href="/song:unknown" target="_blank" rel="noopener noreferrer">INSTRUMENTAL</a><span class="bb-glyph bb-icon-sorry" data-msg="No tag found for setlist song &quot;INSTRUMENTAL&quot; (tried exact match and derived alias &quot;i&quot;)" title="No tag found for setlist song &quot;INSTRUMENTAL&quot; (tried exact match and derived alias &quot;i&quot;)"> ⚠️</span></li>
 #+end_example
 
-** retail
+** DONE align tooltip on ":" to better compare the venue names
+*** initial
+
+1.)
+
+align tooltip on ":" to better compare the venue names
+
+YEAR:
+#+begin_example
+<span class="bb-glyph bb-venue-warn" data-msg="Venue mismatch ⚠️
+VENUE page: &quot;Bruce Springsteen Center For American Music West, Long Branch, NJ&quot;
+DETAIL event: &quot;Bruce Springsteen Center For American Music, Monmouth University, West Long Branch, NJ&quot;" style="cursor: help;"> ⚠️</span>
+#+end_example
+
+DETAIL:
+#+begin_example
+<span class="bb-venue-warn" data-msg="Venue mismatch ⚠️
+VENUE page: &quot;Bruce Springsteen Center For American Music West, Long Branch, NJ&quot;
+DETAIL event: &quot;Bruce Springsteen Center For American Music, Monmouth University, West Long Branch, NJ&quot;" style="cursor: help;"> ⚠️</span>
+#+end_example
+
+2.)
+
+change the tooltip text from
 
 #+begin_example
 <span class="bb-glyph bb-icon-sorry" data-msg="Retail icon on YEAR page but no retail reference found in the Recording tab." title="Retail icon on YEAR page but no retail reference found in the Recording tab.">⚠️</span>
 #+end_example
 
-==>
+to
 
 #+begin_example
 <span class="bb-glyph bb-icon-sorry" data-msg="Retail icon on YEAR page but no retail reference found in the Recording tab." title="Retail icon on YEAR page but no retail reference found in the Recording tab of DETAIL page.">⚠️</span>
+#+end_example
+
+*** bug
+
+The alignment is still buggy.
+
+Take for example the following DETAIL page http://brucebase.wikidot.com/recording:1984-01-12-hit-factory-new-york-city-ny
+and the raw HTML of the '<div id="main-content">' section @debug/tooltip.html
+Check specifically the tooltip sections of
+
+#+begin_example
+- '<div id="page-title">' "bb-glyph"
+- each song name tooltip
+#+end_example
+
+which is what I want.
+
+I want the alignment and colorization of the following two tooltips in
+
+#+begin_example
+<p><a href="/1984#120184">Info &amp; Setlist</a><span class="bb-anchor-match" data-msg="Anchor checks passed:
+Anchor &quot;#120184&quot; matches YEAR page anchor &quot;#120184&quot; ✅
+Date-derived anchor &quot;#120184&quot; (from 1984-01-12) ✅
+Href year &quot;1984&quot; matches event date year &quot;1984&quot; ✅"> ✅</span> | <a href="/venue:hit-factory-new-york-city-ny" target="_blank" rel="noopener noreferrer">Venue</a><span class="bb-anchor-match" data-msg="Venue match ✅
+  VENUE page: &quot;Hit Factory (The), New York City, NY&quot;
+DETAIL event: &quot;Hit Factory (The), New York City, NY&quot;" style="cursor: help;"> ✅</span></p>
+#+end_example
+
+to follow the above. Specifically text inside '"<text>"' should be in white
+
+** DONE function makeOnstageTagsGlyphSpan(additionalTags, onstageUrl) {
+*** initial
+
+For the DETAIL page http://brucebase.wikidot.com/gig:1971-07-22-d-scene-south-amboy-nj-early
+read @debug/tags.html
+
+1.)
+
+Change the tooltip for '<span class="bb-glyph"> 🏷️</span>'
+
+In the 'function makeOnstageTagsGlyphSpan(additionalTags, onstageUrl)' where currently the additional tags are included as '${[...additionalTags].sort().join(', ')}'
+render them like in the '<div class="page-tags"' container with group labels in front '<span class="bb-tag-group-label">'.
+Also use a "white" color for them and for the "tagcount" in the tooltip, plus leave out the 'onStageRelationRulesExplanation' from the tooltip.
+
+Basically use the same colorization as in other rich HTML tooltips not just red
+
+2.)
+
+In the '<span class="bb-page-title-warn" style="cursor: help;"> ⚠️</span>' make the tooltip display wider so that we do not get that many line wrappings in the tooltip
+
+*** bug
+
+Widen the tooltip on the DETAIL page even more and also widen the one on the YEAR pages 
+
+#+begin_example
+<span class="bb-event-title-warn" style="cursor: help;"> ⚠️</span>
 #+end_example
 
 ** DONE additional fuzzy tag checks for appearance in the event "notes" section or the first tab relation heading 
@@ -4279,7 +4395,7 @@ guarded by a boolean configuration variable
 
 make the list of fuzzy tag values expandable by the end_user
 
-** TODO additionally flag a song name on the EVENT DETAIL page under the "Setlist" tab with a "warning icon"/"explanatory tooltip"
+** DONE additionally flag a song name on the EVENT DETAIL page under the "Setlist" tab with a "warning icon"/"explanatory tooltip"
 
 Guarded by a boolean configuration variable inside 'const configSchema' (default: false) additionally flag a song name
 on the EVENT DETAIL page under the "Setlist" tab with a "warning icon"/"explanatory tooltip" if there is no
@@ -4329,6 +4445,7 @@ Arthur Baker's sessions remixing "Dancing In The Dark".
 |   |   |
 |---+---|
 |   |   |
+
 
 
 * Problems
