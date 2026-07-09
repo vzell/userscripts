@@ -1,5 +1,17 @@
 [
     {
+        "version": "3.12",
+        "date": "2026-07-09",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Remove the artificial gap between the page footer and .page-tags on DETAIL/VENUE/RETAIL/SONG/RELATION pages when no tag mismatch is found, by wrapping .page-tags in a new green-bordered '.bb-tags-box' (cancelling BruceBase's own clear:both) instead of leaving it unwrapped; also made tag line-grouping (groupTagsIntoLines) run on all five page types in both the match and mismatch cases, not just DETAIL."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.11",
         "date": "2026-07-09",
         "sections": [

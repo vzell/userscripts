@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.11
+// @version      3.12
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -8579,6 +8579,21 @@
 
     if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedSongs.length === 0
         && unmatchedLocations.length === 0 && unmatchedRelations.length === 0) {
+      const okWrapper = document.createElement('div');
+      okWrapper.className = 'bb-tags-box';
+      // BruceBase's own `.page-tags{clear:both}` rule clears the floated
+      // #side-bar navigation column (needed on the *unwrapped* page so the
+      // global #footer, which also clears it, doesn't visually collide with
+      // it). #main-content is offset via margin-left, not float, so nothing
+      // actually needs .page-tags itself to clear — #footer (which follows
+      // right after in the DOM and carries the same clear:both) still does
+      // that job on its own. Cancel the clear entirely here so this wrapper
+      // renders immediately after the preceding content instead of leaving a
+      // gap (either inside the border, or above it) sized to the sidebar.
+      okWrapper.style.cssText = 'border:3px solid #2a2; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
+      tagsContainer.parentNode.insertBefore(okWrapper, tagsContainer);
+      okWrapper.appendChild(tagsContainer);
+      tagsContainer.style.clear = 'none';
       groupTagsIntoLines(tagsContainer);
       return { additionalTags, onstageUrl };
     }
@@ -8698,7 +8713,25 @@
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches venue ${r.label}`);
     }
 
-    if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedLocations.length === 0) return;
+    if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedLocations.length === 0) {
+      const okWrapper = document.createElement('div');
+      okWrapper.className = 'bb-tags-box';
+      // BruceBase's own `.page-tags{clear:both}` rule clears the floated
+      // #side-bar navigation column (needed on the *unwrapped* page so the
+      // global #footer, which also clears it, doesn't visually collide with
+      // it). #main-content is offset via margin-left, not float, so nothing
+      // actually needs .page-tags itself to clear — #footer (which follows
+      // right after in the DOM and carries the same clear:both) still does
+      // that job on its own. Cancel the clear entirely here so this wrapper
+      // renders immediately after the preceding content instead of leaving a
+      // gap (either inside the border, or above it) sized to the sidebar.
+      okWrapper.style.cssText = 'border:3px solid #2a2; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
+      tagsContainer.parentNode.insertBefore(okWrapper, tagsContainer);
+      okWrapper.appendChild(tagsContainer);
+      tagsContainer.style.clear = 'none';
+      groupTagsIntoLines(tagsContainer);
+      return;
+    }
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
@@ -8747,6 +8780,8 @@
       missingSpan.textContent = ` ⚠️${r.candidateTag}`;
       span.appendChild(missingSpan);
     }
+
+    groupTagsIntoLines(tagsContainer);
   }
 
   /**
@@ -8872,7 +8907,25 @@
       return describeDateTag(tag, 'verified') || `Tag "${tag}" verified: matches the "Commercially Released" date`;
     });
 
-    if (missingTags.length === 0 && spuriousLinks.length === 0) return;
+    if (missingTags.length === 0 && spuriousLinks.length === 0) {
+      const okWrapper = document.createElement('div');
+      okWrapper.className = 'bb-tags-box';
+      // BruceBase's own `.page-tags{clear:both}` rule clears the floated
+      // #side-bar navigation column (needed on the *unwrapped* page so the
+      // global #footer, which also clears it, doesn't visually collide with
+      // it). #main-content is offset via margin-left, not float, so nothing
+      // actually needs .page-tags itself to clear — #footer (which follows
+      // right after in the DOM and carries the same clear:both) still does
+      // that job on its own. Cancel the clear entirely here so this wrapper
+      // renders immediately after the preceding content instead of leaving a
+      // gap (either inside the border, or above it) sized to the sidebar.
+      okWrapper.style.cssText = 'border:3px solid #2a2; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
+      tagsContainer.parentNode.insertBefore(okWrapper, tagsContainer);
+      okWrapper.appendChild(tagsContainer);
+      tagsContainer.style.clear = 'none';
+      groupTagsIntoLines(tagsContainer);
+      return;
+    }
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
@@ -8912,6 +8965,8 @@
       missingSpan.textContent = ` ⚠️${tag}`;
       span.appendChild(missingSpan);
     }
+
+    groupTagsIntoLines(tagsContainer);
   }
 
   // ── Song page tag helpers ─────────────────────────────────────────────────
@@ -8990,7 +9045,25 @@
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" recognized: matches the derived first-letter-per-word alias of song title "${songName}"`);
     }
 
-    if (missingTags.length === 0 && spuriousLinks.length === 0 && exactCheck.matchedTag) return;
+    if (missingTags.length === 0 && spuriousLinks.length === 0 && exactCheck.matchedTag) {
+      const okWrapper = document.createElement('div');
+      okWrapper.className = 'bb-tags-box';
+      // BruceBase's own `.page-tags{clear:both}` rule clears the floated
+      // #side-bar navigation column (needed on the *unwrapped* page so the
+      // global #footer, which also clears it, doesn't visually collide with
+      // it). #main-content is offset via margin-left, not float, so nothing
+      // actually needs .page-tags itself to clear — #footer (which follows
+      // right after in the DOM and carries the same clear:both) still does
+      // that job on its own. Cancel the clear entirely here so this wrapper
+      // renders immediately after the preceding content instead of leaving a
+      // gap (either inside the border, or above it) sized to the sidebar.
+      okWrapper.style.cssText = 'border:3px solid #2a2; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
+      tagsContainer.parentNode.insertBefore(okWrapper, tagsContainer);
+      okWrapper.appendChild(tagsContainer);
+      tagsContainer.style.clear = 'none';
+      groupTagsIntoLines(tagsContainer);
+      return;
+    }
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
@@ -9037,6 +9110,8 @@
       missingSpan.textContent = ` ⚠️${exactCheck.tag}`;
       span.appendChild(missingSpan);
     }
+
+    groupTagsIntoLines(tagsContainer);
   }
 
   // ── Relation page tag helpers ─────────────────────────────────────────────
@@ -9318,7 +9393,25 @@
       }
     }
 
-    if (missingTags.length === 0 && spuriousLinks.length === 0) return;
+    if (missingTags.length === 0 && spuriousLinks.length === 0) {
+      const okWrapper = document.createElement('div');
+      okWrapper.className = 'bb-tags-box';
+      // BruceBase's own `.page-tags{clear:both}` rule clears the floated
+      // #side-bar navigation column (needed on the *unwrapped* page so the
+      // global #footer, which also clears it, doesn't visually collide with
+      // it). #main-content is offset via margin-left, not float, so nothing
+      // actually needs .page-tags itself to clear — #footer (which follows
+      // right after in the DOM and carries the same clear:both) still does
+      // that job on its own. Cancel the clear entirely here so this wrapper
+      // renders immediately after the preceding content instead of leaving a
+      // gap (either inside the border, or above it) sized to the sidebar.
+      okWrapper.style.cssText = 'border:3px solid #2a2; background:#fffbe6; padding:6px 10px; border-radius:4px; margin:4px 0;';
+      tagsContainer.parentNode.insertBefore(okWrapper, tagsContainer);
+      okWrapper.appendChild(tagsContainer);
+      tagsContainer.style.clear = 'none';
+      groupTagsIntoLines(tagsContainer);
+      return;
+    }
 
     const wrapper = document.createElement('div');
     wrapper.className = 'bb-tags-warn-box';
@@ -9356,6 +9449,8 @@
       missingSpan.textContent = ` ⚠️${tag}`;
       span.appendChild(missingSpan);
     }
+
+    groupTagsIntoLines(tagsContainer);
   }
 
   /**
@@ -10163,6 +10258,7 @@
       .bb-original-view .bb-relation-name-warn,
       .bb-original-view .bb-setlist-tab-ann { display: none !important; }
       .bb-original-view .bb-tags-warn-box   { border: none !important; background: none !important; padding: 0 !important; }
+      .bb-original-view .bb-tags-box        { border: none !important; background: none !important; padding: 0 !important; }
       /* .bb-setlist-tab-match sits on an <em> nested inside the tab's own
          <a href="javascript:;">, so 'inherit' correctly picks up that
          parent's already-plain color/cursor. .bb-tag-ok/.bb-relation-name-ok

@@ -12,6 +12,16 @@ Tag consistency checks run in these contexts:
 - **SONG page**: `annotateSongPageTags` annotates `.page-tags` inline on the live page.
 - **RELATION page**: `annotateRelationPageTags` annotates `.page-tags` inline on the live page.
 
+All five live-page annotators (DETAIL/VENUE/RETAIL/SONG/RELATION) share the
+same wrap-and-regroup finish: `.page-tags` always ends up wrapped in a
+`<div>` — gold `.bb-tags-warn-box` if any issues were found, green
+`.bb-tags-box` otherwise — with `tagsContainer.style.clear = 'none'`
+cancelling BruceBase's own `.page-tags{clear:both}` so the box sits flush
+against the preceding footer instead of leaving a gap sized to the floated
+`#side-bar`; then `groupTagsIntoLines(tagsContainer)` reflows the tags into
+per-first-letter lines (see "Tag line-grouping" below) regardless of which
+box was used.
+
 Every managed tag falls into exactly one of three states: **missing** (red),
 **spurious** (orange ⚠️), or **passing** (green — see below). Unmanaged tags
 (tour codes, etc.) are never colored — **except** song-name tags on DETAIL
@@ -210,9 +220,13 @@ once at the top of `runDetailPage` to avoid a duplicate parse), `rawDetailName`
    venue/city/state/country tags green too.
 6. Runs the "On Stage" tab relation tag check (see below) and marks matched
    `"onstage"`/relation tags green too.
-7. If any issues found (missing/spurious tags, unmatched setlist songs,
-   unmatched location parts, OR unmatched relations), wraps `.page-tags`
-   parent in a gold warning box (`<div class="bb-tags-warn-box">`).
+7. Always wraps `.page-tags` in a box, cancelling BruceBase's own
+   `.page-tags{clear:both}` (`tagsContainer.style.clear = 'none'`) so the box
+   sits flush against the preceding footer instead of leaving a gap sized to
+   the floated `#side-bar`: a gold `<div class="bb-tags-warn-box">` if any
+   issues were found (missing/spurious tags, unmatched setlist songs,
+   unmatched location parts, OR unmatched relations), otherwise a green
+   `<div class="bb-tags-box">`.
 8. Appends `<span class="bb-tag-spurious">⚠️</span>` after spurious tag links.
 9. Appends `<span class="bb-tag-missing">⚠️tag</span>` spans for missing tags,
    one per unmatched setlist song (showing the derived-alias candidate), one
@@ -717,12 +731,14 @@ new optional `hasHelp` boolean argument; when true, `expected.add('help')`.
 
 BruceBase's raw `.page-tags` markup, plus everything every check above adds
 to it, renders as one long unbroken line — hard to scan on events with many
-tags. `groupTagsIntoLines(tagsContainer)` is a final DOM-reorganization pass
-in `annotateDetailPageTags` (DETAIL page only — the YEAR page's nested
-"Tags" button already renders one `<li>` per tag, see "YEAR page Tags
-button" above, so it doesn't need this) that reflows `.page-tags`' `<span>`
-into multiple lines, one per group of tags sharing the same lowercase first
-character:
+tags. `groupTagsIntoLines(tagsContainer)` is a final DOM-reorganization pass,
+called (in both the match and mismatch branches) by all five live-page
+annotators — `annotateDetailPageTags`, `annotateVenuePageTags`,
+`annotateRetailPageTags`, `annotateSongPageTags`, and
+`annotateRelationPageTags` — that reflows `.page-tags`' `<span>` into
+multiple lines, one per group of tags sharing the same lowercase first
+character (the YEAR page's nested "Tags" button already renders one `<li>`
+per tag, see "YEAR page Tags button" above, so it doesn't need this):
 
 1. Reads `[...span.children]` (element children only — skips the
    whitespace text nodes already present in BruceBase's markup).
@@ -846,6 +862,7 @@ from the live page's `.yui-nav em` elements:
 | `.bb-tag-missing` | Bold red span for expected-but-absent tags |
 | `.bb-tag-spurious` | Orange ⚠️ for present-but-unexpected managed tags |
 | `.bb-tag-ok` | Bold green (`#2a2`) for present-and-expected ("passing") managed tags; reset to `inherit` in `.bb-original-view` |
-| `.bb-tags-warn-box` | Gold border, #fffbe6 background wrapper around `.page-tags` when issues found |
+| `.bb-tags-warn-box` | Gold border, #fffbe6 background wrapper around `.page-tags` when issues found; reset to invisible in `.bb-original-view` |
+| `.bb-tags-box` | Green (`#2a2`) border, #fffbe6 background wrapper around `.page-tags` when no issues found; reset to invisible in `.bb-original-view` |
 | `.bb-tag-group-line` | Block-level wrapper for one first-letter group of tags (see "Tag line-grouping"); `display: contents` in `.bb-original-view` |
 | `.bb-tag-group-label` | Small bold gray letter label prefixing each `.bb-tag-group-line`; hidden in `.bb-original-view` |
