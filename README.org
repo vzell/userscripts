@@ -57,7 +57,7 @@ The following event types are known:
 
 gig, interview, nogig, offstage, onstage, rehearsal, soundcheck
 
-Sdjust the code accordingly. If an unknonw event typ is detected, show a unicode "?" mark instead of the green checkmark
+Adjust the code accordingly. If an unknonw event typ is detected, show a unicode "?" mark instead of the green checkmark
 or the red cross.
 
 Also add comprehensive debug logging during parsing
@@ -3589,7 +3589,6 @@ When the 2-digit day part of an event date e.g. http://brucebase.wikidot.com/reh
 if there is additionally a one character like "a", "b", "c" etc. appended to the 2-digit event day (meaning, the first,
 second, third etc.event on the same day(month, when "00")), that character should also be present as tag value
 
-
 ** DONE help icon
 *** initial
 
@@ -4105,7 +4104,6 @@ only if it has sub pages
 like "http://brucebase.wikidot.com/venue:leonard-gym-washington-dc"
 
 
-
 ** DONE remove newlines in the yellow warning box box around the tags on EVENT DETAIL pages
 *** initial
 
@@ -4119,7 +4117,7 @@ See also the raw HTML code @debug/tag-warning-box.html and uploaded screenshot
 OK, it worked, now the golden warnig box sourround the actual tags without internally showing artificial newlines.
 
 But there are still newlines between '<div class="list-pages-box">'
-and the start of the actual golden warnig box '<div class="bb-tags-warn-box"'
+and the start of the actual golden warning box '<div class="bb-tags-warn-box"'
 
 Please remove them on the processed final page
 
@@ -4166,6 +4164,171 @@ http://brucebase.wikidot.com/recording:2012-01-13-mattison-avenue-asbury-park-nj
 ** Willie Nile tags are NOT processed, why
 
 http://brucebase.wikidot.com/relation:willie-nile
+
+** DONE green box
+
+1.)
+
+Also remove the artificial new lines on pages like e.g. http://brucebase.wikidot.com/gig:1971-01-08-upstage-asbury-park-nj-late
+where no tag mismatches are detected like on http://brucebase.wikidot.com/gig:1974-02-24-main-point-bryn-mawr-pa-early
+between the container
+
+#+begin_example
+<div style="text-align: center;">
+<p><a href="/content:disclaimer" target="_blank" rel="noopener noreferrer">Disclaimer</a> | <span style="white-space: pre-wrap;">©</span> 1996 - 2026 | <a target="_blank" href="mailto:brucebase.wiki@gmail.com">Brucebase</a></p>
+<div style="text-align: center;"><a href="https://www.facebook.com/brucebase" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_facebook.png" title="Follow us on Facebook" alt="icon_facebook.png" class="image"></a> <a href="http://www.twitter.com/brucebasewiki" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_twitterx.png" title="Follow us on Twitter" alt="icon_twitterx.png" class="image"></a> <a href="https://www.instagram.com/brucebasewiki" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_instagram.png" title="Follow us on Instagram" alt="icon_instagram.png" class="image"></a> <a href="http://www.youtube.com/brucebasewiki" target="_blank"><img src="http://brucebase.wdfiles.com/local--files/content:files/icon_youtube.png" title="Check us out on Youtube" alt="icon_youtube.png" class="image"></a></div>
+</div>
+#+end_example
+
+and the start of the tags '<div class="page-tags">'
+
+2.)
+
+Additionally also surround the tags with a '<div class="bb-tags-box"' (in the case of no tag mismatches) but with a
+green border and the same yellow/orange background similar to '<div class="bb-tags-warn-box"' in the case of tag
+mismatches
+
+** why "Event name mismatch between YEAR and DETAIL page" also there actually is NONE
+
+Why does the "Setlist" tab on EVENT DETAIL pages like e.g. http://brucebase.wikidot.com/gig:1971-01-08-upstage-asbury-park-nj-late
+show the following measleading tooltip warning
+
+#+begin_example
+<em>Setlist<span class="bb-setlist-tab-ann" data-msg="Event name mismatch between YEAR and DETAIL page" title="Event name mismatch between YEAR and DETAIL page" style="cursor: help;"> ⚠️</span></em>
+#+end_example
+
+although the "Setlist" tab has just the well known "No set details known." and "No Handwritten or Printed Setlist available." information lines
+
+Setlist may be inaccurate.
+Setlist incomplete and may be inaccurate.
+
+** rich HTML tooltip for section label mismatch + LCS-based diff highlightning of label mismatch
+
+rich HTML tooltip for section label mismatch + LCS-based diff highlightning of label mismatch
+
+#+begin_example
+<span class="bb-section-label-warn bb-para-warn" data-msg="Section label mismatch: YEAR page has &quot;with Willie Nile&quot;, DETAIL page has &quot;With Willie Nile&quot;" title="Section label mismatch: YEAR page has &quot;with Willie Nile&quot;, DETAIL page has &quot;With Willie Nile&quot;">⚠️</span>
+#+end_example
+
+LCS-based diff
+
+** TODO light blue background stretches up to the end instead of just the song name
+
+light blue background stretches up to the end instead of just the song name
+
+#+begin_example
+<li class="bb-song-detail-only" data-detail-song="INSTRUMENTAL" value="3"><a href="/song:unknown" target="_blank" rel="noopener noreferrer">INSTRUMENTAL</a><span class="bb-glyph bb-icon-sorry" data-msg="No tag found for setlist song &quot;INSTRUMENTAL&quot; (tried exact match and derived alias &quot;i&quot;)" title="No tag found for setlist song &quot;INSTRUMENTAL&quot; (tried exact match and derived alias &quot;i&quot;)"> ⚠️</span></li>
+#+end_example
+
+** retail
+
+#+begin_example
+<span class="bb-glyph bb-icon-sorry" data-msg="Retail icon on YEAR page but no retail reference found in the Recording tab." title="Retail icon on YEAR page but no retail reference found in the Recording tab.">⚠️</span>
+#+end_example
+
+==>
+
+#+begin_example
+<span class="bb-glyph bb-icon-sorry" data-msg="Retail icon on YEAR page but no retail reference found in the Recording tab." title="Retail icon on YEAR page but no retail reference found in the Recording tab of DETAIL page.">⚠️</span>
+#+end_example
+
+** DONE additional fuzzy tag checks for appearance in the event "notes" section or the first tab relation heading 
+
+Add additional fuzzy tag checks for the following list of tag values
+
+#+begin_example
+benefit
+anniversary
+interview
+funeral
+#+end_example
+
+and colorize them "green" if they appear as a substring (case doesn't matter) either in the event "notes" section
+
+#+begin_example
+For EVENT DETAIL, VENUE, SONG and RELATION pages the free text starting after the '<div id="page-content">' container, up to but NOT including the 'class="yui-navset' container
+#+end_example
+
+or when the first tab of a such a page starts with an event alias name, e.g.
+
+#+begin_example
+<p><strong>Democracy Now! 30th Anniversary Celebration</strong></p>
+#+end_example
+
+before the actual relation names
+
+1.)
+
+So e.g. on the EVENT DETAIL page http://brucebase.wikidot.com/gig:2026-01-17-hackensack-meridian-health-theatre-red-bank-n
+because the text "Bruce makes a surprise appearance at the twenty-sixth annual Light Of Day Benefit. " appears as a part of the event notes, "benefit" as a tag if present should be colorized in "green"
+
+2.)
+
+For the example
+
+#+begin_example
+<p><strong>Democracy Now! 30th Anniversary Celebration</strong></p>
+#+end_example
+
+in the DETAIL page http://brucebase.wikidot.com/gig:2026-03-23-riverside-church-new-york-city-ny
+"anniversary" as a tag if present should be colorized in "green"
+
+** DONE make the list of fuzzy tag values expandable by the end_user
+
+guarded by a boolean configuration variable
+
+make the list of fuzzy tag values expandable by the end_user
+
+** TODO additionally flag a song name on the EVENT DETAIL page under the "Setlist" tab with a "warning icon"/"explanatory tooltip"
+
+Guarded by a boolean configuration variable inside 'const configSchema' (default: false) additionally flag a song name
+on the EVENT DETAIL page under the "Setlist" tab with a "warning icon"/"explanatory tooltip" if there is no
+corresponding derived tag present.
+
+Also show the fact on the event entry on the YEAR page with the same "warning icon"/"explanatory tooltip"
+
+** fuzzy tag detection of "snippets" when snippet/interlude is part of the free-text event note
+
+#+begin_example
+snippet of "Death To My Hometown"
+"Land Of 1000 Dances" interlude
+"Land Of Hope And Dreams" intro
+"Murder Incorporated" and the second "My City Of Ruins" are just snippets
+#+end_example
+
+exists in the event "notes" section
+
+** tour_<tourname> tag check within the tour ranges
+
+| Tour         | date range |
+|--------------+------------|
+| tour_lohad   |            |
+| tour_lohadnk |            |
+|              |            |
+
+| tour_no | special handling |
+
+
+** TODO more "Issues" buttons (sub-types) - ALL, names, setlist, relations, anchors, venue, tags, etc
+
+** why yellow highlightning of "Set details" on e.g. http://brucebase.wikidot.com/2026#240326 of the string "Set details may be inaccurate."
+
+** song alias
+
+bitu - Born in the U.S.A.
+
+** retail handling for "Recording" tab, maybe make it an "Green" warning icon
+
+#+begin_example
+released versions of "Man At The Top" and "Rockaway The Days" were recorded at this session.
+album version of "Dancing In The Dark" was recorded at this session.
+album version of "Dancing In The Dark" was completed at this session.
+Arthur Baker's sessions remixing "Dancing In The Dark".
+#+end_example
+
+|   |   |
+|---+---|
+|   |   |
 
 
 * Problems
