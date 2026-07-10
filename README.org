@@ -4429,8 +4429,9 @@ exists in the event "notes" section
 
 ** song alias
 
+add "'devils & dust':'dad'" to SONG_TAG_ALIAS_OVERRIDES
+
 bitu - Born in the U.S.A.
-dad - Devil & Dust
 
 ** retail handling for "Recording" tab, maybe make it an "Green" warning icon
 
@@ -4445,8 +4446,7 @@ Arthur Baker's sessions remixing "Dancing In The Dark".
 |---+---|
 |   |   |
 
-
-** tour premieres
+** DONE tour premieres
 *** initial
 
 Implement a new tag value consistency check which checks the number of tour premieres on a Springsteen EVENT DETAIL page
@@ -4487,7 +4487,7 @@ Tour premieres on the YEAR page are still NOT rendered in BOLD after the latest 
 
 This leads to false tooltip messages about "Mismatch ❌" on the DETAIL pages
 
-** "prem" tag must be present, when at least one tour premiere is present
+** DONE "prem" tag must be present, when at least one tour premiere is present
 
 1.)
 
@@ -4496,6 +4496,8 @@ This leads to false tooltip messages about "Mismatch ❌" on the DETAIL pages
 2.)
 
 add "'devils & dust':'dad'" to SONG_TAG_ALIAS_OVERRIDES
+
+
 
 * Problems
 ** http://brucebase.wikidot.com/content:five-rings-farm-wellington-fl tag "appearnaces"
