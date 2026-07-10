@@ -43,6 +43,7 @@ which each get their own separate check independent of
 | `MANAGED_CONTENT_TAGS` | `Set` of content tags whose presence can be verified |
 | `SPURIOUS_TAG_REASONS` | `{tag: 'human-readable reason'}` for content tags |
 | `SONG_TAG_ALIAS_OVERRIDES` | `{songTitleLowercase: 'expectedTag'}` — user-editable manual overrides for the setlist song tag check (empty by default) |
+| `SONG_COMBINATION_TAG_OVERRIDES` | `{fullCombinationStringLowercase: 'expectedTag'}` — user-editable, end-user-extensible overrides for a medley/tribute *combination* (e.g. `'land of hope and dreams - people get ready'` → `'lohad.pgr'`) tagged as one fixed value instead of one tag per song — checked before `checkSetlistSongTags` splits on `" - "` |
 | `US_STATE_NAMES` | `{abbr: 'Full State Name'}` — all 50 US states + DC, for the location tag check |
 | `CA_PROVINCE_NAMES` | `{abbr: 'Full Province Name'}` — all 13 Canadian provinces/territories, for the location tag check |
 | `COUNTRY_EXTRA_TAGS` | `{countryName: ['extraTag', …]}` — extra continent/region tags expected alongside a bare country's own slug (e.g. `England` → `unitedkingdom`, `europe`); not exhaustive, user-extendable |
@@ -52,6 +53,10 @@ which each get their own separate check independent of
 | `relationMethodLabel(method, tabLabel)` | Function (not a lookup constant) returning the human-readable reason for the relation tag check's tooltips, parameterized by which tab (`"On Stage"`/`"In Studio"`/`"On Audio"`/`"On Set"`) produced the match |
 | `FUZZY_SUBSTRING_TAGS` | `{award: ['award'], grammy: ['grammy'], private: ['private', 'closed'], benefit: ['benefit'], anniversary: ['anniversary'], interview: ['interview'], funeral: ['funeral']}` — generic, event-type-independent tags verified against the event alias and/or page notes text (see "Fuzzy substring tag check" below) rather than any per-event-type rule; each tag maps to one or more substrings that verify it (not necessarily equal to the tag itself) |
 | `TOUR_PREMIERE_TAG_VALUES` | `Set` of allowed tour-premiere-count tag values: `'1'`..`'9'`, `'9+'` — see "Tour-premiere-count tag check" below |
+| `TOUR_DEFINITIONS` | `[{name, tag, ranges: [[start,end], …]}, …]` — user-editable, end-user-extensible table of Springsteen tour date ranges (dates `"YYYY-MM-DD"`) → tags, for the DETAIL-page tour-association tag check — see "Tour association tag check" below |
+| `TOUR_TAG_SET` | `Set` of every tag in `TOUR_DEFINITIONS`, derived automatically — kept in sync as that table is edited |
+| `TOUR_NO_TAG` | The literal string `'tour_no'` — the special tag for an event confirmed NOT part of a tour that otherwise covers its date |
+| `TOUR_NO_OVERRIDES` | `{eventPath: true \| false}` — user-editable manual overrides for the `tour_no` heuristic, keyed by the event's URL path with no leading slash (empty by default) |
 
 `MANAGED_CONTENT_TAGS` covers: event types (`gig`, `interview`, `nobruce`,
 `nogig`, `offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck`) plus
@@ -83,6 +88,7 @@ which each get their own separate check independent of
 | `help` | The YEAR page shows a "Help Us" call-to-action icon for this event (see "Help-icon tag check" below) — passed in as `computeExpectedTags`'s optional `hasHelp` argument, since the icon lives on the YEAR page, not (as far as observed) the DETAIL page itself |
 | Tour-premiere count | `computeTourPremiereTagValue(countTourPremiereSongs(doc))` — see "Tour-premiere-count tag check" below. Omitted entirely (no tag expected) when the count is 0 |
 | `prem` | Expected alongside the count tag whenever `countTourPremiereSongs(doc) > 0` — i.e. whenever at least one tour-premiere song is present. A member of `MANAGED_CONTENT_TAGS` (unlike the bare count tag, which is managed via the day-number-shape rule — see "Tour-premiere-count tag check" below), so it's checked/colored the same way as `bootleg`/`storyteller`/etc. |
+| Tour association tag(s) | `computeExpectedTags`'s optional `tourExpectedTags` argument — precomputed by the caller via `checkEventTourTags(eventDate, eventPath, alias)` (same "caller precomputes, passes it in" pattern as `hasHelp`/`hasFeatured`), since that check needs the event's URL path and alias, which `computeExpectedTags` doesn't otherwise have. See "Tour association tag check" below |
 
 `getNewsMemTab(doc, tabMap)` tries both `"News/Memorabilia"` and `"News"` tab
 labels so that events with only a `"News"` tab are still checked.
@@ -122,6 +128,94 @@ premiere-count check.
 
 ---
 
+## Tour association tag check (`checkEventTourTags`, `findMatchingTours`, `pickMostSpecificTour`)
+
+Not to be confused with the tour-*premiere* check above (a song's live debut) —
+this checks which Springsteen **concert tour** (e.g. "Land Of Hope And Dreams")
+an event's date falls within, per the user-editable `TOUR_DEFINITIONS` table,
+and expects the matching tag(s) to be present. `findMatchingTours(eventDate)`
+returns every `TOUR_DEFINITIONS` entry whose `ranges` cover `eventDate` (plain
+string comparison — dates are always `"YYYY-MM-DD"`, so lexical order matches
+chronological order).
+
+**The `tour_no` exception**: real tour events normally have no event alias, so
+before checking the deduced tag(s), `checkEventTourTags(eventDate, eventPath,
+alias)` first decides whether this event is actually an *exception* — a
+one-off show (charity gig, award ceremony, etc.) slotted into a tour's date
+range but not really part of it, e.g.
+[gig:2026-04-18-pollak-theatre-west-long-branch-nj](http://brucebase.wikidot.com/gig:2026-04-18-pollak-theatre-west-long-branch-nj)
+inside the "Land Of Hope And Dreams" range. The heuristic: an event alias
+(`extractEventAlias(doc)` — the same `<p><strong>ALIAS</strong></p>` +
+`<hr>` first-tab pattern the `FUZZY_SUBSTRING_TAGS` check already uses, e.g.
+`American Music Honors`) present ⇒ `tour_no`; absent ⇒ the deduced tour
+tag(s). `TOUR_NO_OVERRIDES[eventPath]` (`true`/`false`) overrides this default
+in either direction for a specific event, when the heuristic gets it wrong.
+
+- When `tour_no` applies: `expectedTags = {TOUR_NO_TAG}` — the deduced tour
+  tag(s) are *not* expected (and are spurious if present).
+- Otherwise: `expectedTags` is the full set of every matching tour's tag —
+  more than one when tours overlap (e.g. both `tour_lohad` and `tour_lohadnk`
+  for a date inside the "No Kings" leg, since it's nested inside the larger
+  "Land Of Hope And Dreams" tour).
+- When `eventDate` falls outside every known tour's range, `checkEventTourTags`
+  returns `null` and nothing is checked at all (silent no-op — the vast
+  majority of DETAIL pages).
+
+**Routed entirely through the existing generic tag machinery** rather than a
+bespoke check (unlike the song/location/relation checks, which need their own
+missing/matched arrays): the tour tag(s) are folded directly into
+`computeExpectedTags`'s returned `Set` via its `tourExpectedTags` parameter, so
+the existing missing/spurious/passing `Set`-diffing in both
+`annotateDetailPageTags` and `addTagsButton` handles rendering (including
+multiple simultaneously-expected tour tags) with no new rendering code —
+`isManagedTag` just needed to recognize `TOUR_NO_TAG`/`TOUR_TAG_SET` members,
+and `spuriousTagMsg`/`passingTagMsg` each gained one optional `tourCheck`
+parameter (the full `checkEventTourTags(...)` result) plus a branch: `tour_no`'s
+message names the tour(s) it falls within (or, if `tourCheck` is `null` because
+the current tag being checked was a leftover/wrong tour tag on a date outside
+every known tour, says so); a `tour_xxx` tag's message names its own tour via
+`TOUR_DEFINITIONS`, and — when `tourCheck.isTourNo` — mentions the alias (or
+"`TOUR_NO_OVERRIDES`") that excluded it instead. Because tour tags render via
+the same `.bb-tag-missing`/`.bb-tag-spurious` classes as every other managed
+tag, `collectPageWarnings()` picks up any tour-tag issue for the `#page-title`
+"N issues found" tooltip automatically.
+
+**Page-title tour name and event alias**: when the event is confirmed a
+genuine tour event (not `tour_no`) and matches more than one
+`TOUR_DEFINITIONS` entry, `pickMostSpecificTour(tours)` picks the one with
+the smallest total day-span across its own ranges (e.g. "Land Of Hope And
+Dreams - No Kings", a single ~2-month leg, over the umbrella "Land Of Hope
+And Dreams", ~4 months combined across two legs) — a heuristic, not a
+guarantee; ties break toward whichever entry appears first in
+`TOUR_DEFINITIONS`.
+
+- **DETAIL page** (always on): `runDetailProcessing` calls, in order,
+  `addOnstageTagsGlyph` (🏷️, when applicable), `addEventAliasSpan(eventAlias)`
+  (when `annotateDetailPageTags`'s returned `eventAlias` is non-null —
+  independent of `tourCheck`/`tour_no`, since an event can have an alias
+  regardless of whether its date falls within any known tour at all), then
+  `addTourNameSpan(tourCheck.mostSpecificTour.name)` (only when
+  `!tourCheck.isTourNo`). `addEventAliasSpan` reuses `makeAliasSpan` — the
+  exact same `.bb-event-alias` element the YEAR page already shows — but
+  DETAIL's `#page-title` `<h1>` renders at a much larger font than the YEAR
+  page's event-heading line, so it would otherwise look oversized; a scoped
+  `#page-title .bb-event-alias { font-size: 0.6em; }` override (matching
+  `.bb-event-type-detail`'s existing proportions) fixes this without
+  touching the YEAR page's own (already correctly-sized) usage.
+  `.bb-tour-name` carries the same `font-size: 0.6em` directly, plus its own
+  distinct color (`#06c`) so the two are visually distinguishable.
+- **YEAR page** (opt-in, `bbp_show_tour_name_on_year_page`, default `false`):
+  see [YEAR_PAGE.md](YEAR_PAGE.md)'s "1b. Tour name annotation" for the
+  `titleTailAnchor`-chained insertion mechanics. Styled via
+  `.bb-year-tour-name` — same italic/bold shape as `.bb-event-alias`, but
+  colored to match the DETAIL page's `.bb-tour-name` (blue `#06c`) instead of
+  the alias's gray, so a tour name reads consistently as a tour name on
+  either page. No font-size override, unlike DETAIL's `.bb-tour-name`/
+  `#page-title .bb-event-alias` — the YEAR page's event-heading line was
+  never oversized to begin with.
+
+---
+
 ## Bidirectional checking
 
 **Missing** (expected but absent):
@@ -141,10 +235,11 @@ premiere-count check.
 names, weekday names, 4-digit years, 1–2 digit day numbers (0–31 — `0`/`00`
 included, BruceBase's unknown-day-of-month convention), single lowercase
 letters (the day-suffix a/b/c/… distinguishing multiple same-day events —
-mirrors `isManagedRetailTag`'s identical rule for retail pages), and `"9+"`
+mirrors `isManagedRetailTag`'s identical rule for retail pages), `"9+"`
 (the tour-premiere-count tag's one non-numeric value — bare single digits
 `1`-`9` are already covered by the day-number rule; see "Tour-premiere-count
-tag check" below for how the two are told apart).
+tag check" below for how the two are told apart), and `TOUR_NO_TAG`/
+`TOUR_TAG_SET` members (see "Tour association tag check" below).
 
 **Passing** (present AND condition met):
 - Every context also marks these tags to make correct data visible without
@@ -352,14 +447,27 @@ tags are never in `MANAGED_CONTENT_TAGS`), on both `annotateDetailPageTags`
 using the fetched `doc` — it calls `parseDetailSetlist(doc)` itself since it
 doesn't have an already-parsed `detailSections` at hand).
 
-`checkSetlistSongTags(detailSections, actualTags)` first flattens
-`detailSections.flatMap(s => s.songs)`, then splits every song string on
-`" - "` (the medley/tribute separator also used by `songCompareKey`, e.g.
-`"LIGHT OF DAY - HAPPY BIRTHDAY TO YOU"` → two independent songs, each
-checked and expected to have its *own* tag: `lightofday` and
-`happybirthdaytoyou`), takes the unique set of resulting song titles, and
-for each, via `checkOneSongTag(song, actualTags)`, tries three lookups in
-order — the first one that matches an actual tag wins:
+`checkSetlistSongTags(detailSections, actualTags)` first takes the unique
+set of raw (unsplit) song strings from `detailSections.flatMap(s =>
+s.songs)`. Each raw string is checked against
+`SONG_COMBINATION_TAG_OVERRIDES` *before* any splitting — a small,
+user-editable, end-user-extensible lookup table (same shape/placement
+convention as `SONG_TAG_ALIAS_OVERRIDES`, keyed by the lowercase, trimmed
+**full** combination string) for the case where BruceBase tags a whole
+medley/tribute combination with one fixed value rather than one tag per
+song, e.g. `"LAND OF HOPE AND DREAMS - PEOPLE GET READY"` → `"lohad.pgr"`
+(checked as a single unit against that one tag, method `'combination'` —
+neither song's own individual tag is expected or checked for this entry).
+
+A raw string with no combination-override entry is split on `" - "` (the
+medley/tribute separator also used by `songCompareKey`, e.g. `"LIGHT OF DAY
+- HAPPY BIRTHDAY TO YOU"` → two independent songs, each checked and
+expected to have its *own* tag: `lightofday` and `happybirthdaytoyou`) —
+individual song names are deduplicated across the whole setlist (a song
+appearing standalone elsewhere and also as half of an ordinary, non-override
+medley is only checked once) — and for each, via `checkOneSongTag(song,
+actualTags)`, tries three lookups in order — the first one that matches an
+actual tag wins:
 
 1. **Exact match** (`songTagSlug(song)`): lowercase, with accents/diacritics
    stripped first (`stripDiacritics`, e.g. `"JOLÉ BLON"` → `"JOLE BLON"`)
@@ -393,12 +501,16 @@ order — the first one that matches an actual tag wins:
    alias), and `"TENTH AVENUE FREEZE-OUT"` → `10th`. Add entries here as
    exceptions are discovered; no code changes needed elsewhere.
 
-Result shape: `{ song, matchedTag, method: 'exact'|'alias'|'override'|null }[]`.
+Result shape: `{ song, matchedTag, method: 'exact'|'alias'|'override'|'combination'|null }[]`.
 A matched song's tag is colored green via `markPassingTagLinks`/inline
 title-setting (same convention as other passing tags) with a tooltip naming
-the song and the method. An unmatched song is rendered like a missing tag,
-showing the derived-alias candidate (or the exact-match candidate as
-fallback) so it's clear what to add.
+the song and the method (`songMethodLabel` maps each method to its
+human-readable phrase, e.g. `combination` → `"song combination override"`).
+An unmatched song is rendered like a missing tag: for a `'combination'`
+result, `r.song` is the full unsplit combination string and the shown
+candidate/tooltip reference `SONG_COMBINATION_TAG_OVERRIDES` directly (looked
+up again by that same string) rather than the derived-alias/exact-match
+candidate any other unmatched song shows.
 
 Sibling override tables for other page types (`RELATION_TAG_ALIAS_OVERRIDES`,
 `RETAIL_TAG_ALIAS_OVERRIDES`) are not implemented yet. `VENUE_TAG_ALIAS_OVERRIDES`

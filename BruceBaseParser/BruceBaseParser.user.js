@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.20
+// @version      3.21
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -100,6 +100,52 @@
   ]);
 
   /**
+   * User-editable, end-user-extensible table of Springsteen tour date ranges
+   * — NOT to be confused with the setlist tour-*premiere* check just below
+   * (a song's live debut) — used by the DETAIL-page tour-association tag
+   * check (see checkEventTourTags). Each entry: official tour name, the tag
+   * BruceBase uses for events during that tour, and one or more inclusive
+   * ["YYYY-MM-DD","YYYY-MM-DD"] date ranges (a tour can have disjoint legs,
+   * e.g. Land Of Hope And Dreams' 2025 and 2026 legs). Multiple entries can
+   * cover the same date — e.g. a named sub-leg nested inside a larger tour
+   * — see pickMostSpecificTour for how the page-title annotation picks a
+   * single winner among matches.
+   */
+  const TOUR_DEFINITIONS = [
+    { name: 'Vote For Change',                   tag: 'tour_vfc',     ranges: [['2004-10-01', '2004-10-13']] },
+    { name: 'Devils & Dust Solo and Acoustic',    tag: 'tour_dd',      ranges: [['2005-04-25', '2005-11-22']] },
+    { name: 'Land Of Hope And Dreams',            tag: 'tour_lohad',   ranges: [['2025-05-14', '2025-07-03'], ['2026-03-31', '2026-05-30']] },
+    { name: 'Land Of Hope And Dreams - No Kings', tag: 'tour_lohadnk', ranges: [['2026-03-31', '2026-05-30']] },
+  ];
+
+  /** Set of every tag in TOUR_DEFINITIONS, kept in sync automatically as that table is edited. */
+  const TOUR_TAG_SET = new Set(TOUR_DEFINITIONS.map(t => t.tag));
+
+  /**
+   * Special tag for an event whose date falls within a tour's date range
+   * (per TOUR_DEFINITIONS) but is confirmed NOT actually part of that tour
+   * — e.g. a one-off charity gig or award ceremony slotted in between real
+   * tour dates. See checkEventTourTags for how this is deduced.
+   */
+  const TOUR_NO_TAG = 'tour_no';
+
+  /**
+   * User-editable manual overrides for the tour_no heuristic (see
+   * checkEventTourTags): keyed by the event's URL path (e.g.
+   * "gig:2026-04-18-pollak-theatre-west-long-branch-nj" — matching the
+   * top-level `path` constant's format, no leading slash). `true` forces
+   * "not part of the tour" (tour_no) even without an event alias; `false`
+   * forces "part of the tour" even though an alias IS present (a real tour
+   * show that happens to also carry its own promotional nickname). Empty
+   * by default — the default heuristic (event alias present => tour_no)
+   * already covers the common case; add an entry here only for a genuine
+   * exception.
+   */
+  const TOUR_NO_OVERRIDES = {
+    // 'gig:2026-04-18-pollak-theatre-west-long-branch-nj': true,
+  };
+
+  /**
    * Allowed tag values for the setlist tour-premiere-count check (see
    * computeTourPremiereTagValue) — BruceBase's convention for tagging how
    * many songs a DETAIL page's Setlist tab shows as bold (a tour debut):
@@ -171,6 +217,26 @@
     'tenth avenue freeze-out': '10th',
     'wreck on the highway': 'wroth',
     'you can look (but you better not touch)': 'youcanlook',
+  };
+
+  /**
+   * User-editable, end-user-extensible manual overrides for setlist song
+   * *combinations* — a medley/tribute entry joined by " - " (BruceBase's
+   * separator, e.g. "LAND OF HOPE AND DREAMS - PEOPLE GET READY") that
+   * BruceBase tags with a single fixed value for the pair, rather than one
+   * tag per individual song. Checked in `checkSetlistSongTags` *before* the
+   * default per-song split (see `SONG_TAG_ALIAS_OVERRIDES` doc comment for
+   * that default behavior) — a combination whose full (unsplit) string
+   * matches a key here is checked as one unit against the given tag, and
+   * never split into its individual songs at all. Keyed by the lowercase,
+   * trimmed full combination string exactly as it appears in
+   * `parseDetailSetlist`'s `songs` array (i.e. both song names joined by
+   * `" - "`); value is the exact tag string expected on the DETAIL page.
+   * Empty of real entries so far except the one already known —
+   * populate as further exceptions are discovered.
+   */
+  const SONG_COMBINATION_TAG_OVERRIDES = {
+    'land of hope and dreams - people get ready': 'lohad.pgr',
   };
 
   /** USPS state abbreviation -> full state name, for the event-name/venue-name location tag check. */
@@ -492,6 +558,21 @@
           type: 'checkbox',
           default: false,
           description: 'Show a ⚠️ warning icon next to setlist songs (DETAIL page Setlist tab, and YEAR page inline setlist) that have no corresponding tag on the event\'s DETAIL page.'
+      },
+
+      // ============================================================
+      // TOUR ASSOCIATION SECTION
+      // ============================================================
+      divider_tour: {
+          type: 'divider',
+          label: '🎸 TOUR ASSOCIATION'
+      },
+
+      bbp_show_tour_name_on_year_page: {
+          label: 'Show Tour Name on YEAR Page',
+          type: 'checkbox',
+          default: false,
+          description: 'Also show the matching Springsteen tour\'s official name (see TOUR_DEFINITIONS) next to each event on the YEAR page, styled the same as the event alias. Off by default since not every event has a known tour association.'
       },
   };
 
@@ -3737,6 +3818,14 @@
 
       const eventAlias = extractEventAlias(doc);
       const yearGlyphSpan = addYearGlyph(element, nameMatch, isEarlyLate, yearNameUpper, normalizedDetailName, rawDetailName, eventType, eventAlias, anchorName);
+      // Tracks whichever title-decoration span was inserted last via
+      // `.after(...)`, so further insertions (onstage-tags glyph, tour
+      // name) chain in the order they're computed rather than all
+      // competing to be "right after yearGlyphSpan" — addYearGlyph already
+      // placed the event-alias span right after yearGlyphSpan itself, so
+      // starting the chain there keeps every subsequent insertion ahead of
+      // the alias (matching the DOM order BruceBase-adjacent code expects).
+      let titleTailAnchor = yearGlyphSpan;
 
       // ── Onstage companion page (tags-per-page cap spillover) ─────────────
       const eventPath  = new URL(url).pathname.replace(/^\//, '');
@@ -3748,7 +3837,17 @@
         const docActualTags = new Set(docTagLinks.map(a => a.textContent.trim().toLowerCase()));
         const onstageAdditionalTags = [...onstageResult.tags].filter(t => !docActualTags.has(t));
         if (onstageAdditionalTags.length > 0) {
-          yearGlyphSpan.after(makeOnstageTagsGlyphSpan(onstageAdditionalTags, onstageResult.url));
+          const onstageGlyphSpan = makeOnstageTagsGlyphSpan(onstageAdditionalTags, onstageResult.url);
+          titleTailAnchor.after(onstageGlyphSpan);
+          titleTailAnchor = onstageGlyphSpan;
+        }
+      }
+
+      // ── Tour name annotation (opt-in, see bbp_show_tour_name_on_year_page) ──
+      if (Lib.settings.bbp_show_tour_name_on_year_page) {
+        const tourCheck = checkEventTourTags(eventDate, eventPath, eventAlias);
+        if (tourCheck && !tourCheck.isTourNo && tourCheck.mostSpecificTour) {
+          titleTailAnchor.after(makeYearTourNameSpan(tourCheck.mostSpecificTour.name));
         }
       }
 
@@ -4206,6 +4305,12 @@
         const tagResult = annotateDetailPageTags(detailTabMap, detailDateM[1], detailEventType, detailSections, rawDetailName, onstageResult, detailHasHelp, detailHasFeatured, venueDetailExtra);
         if (tagResult.additionalTags.length > 0) {
           addOnstageTagsGlyph(tagResult.additionalTags, tagResult.onstageUrl);
+        }
+        if (tagResult.eventAlias) {
+          addEventAliasSpan(tagResult.eventAlias);
+        }
+        if (tagResult.tourCheck && !tagResult.tourCheck.isTourNo && tagResult.tourCheck.mostSpecificTour) {
+          addTourNameSpan(tagResult.tourCheck.mostSpecificTour.name);
         }
       }
 
@@ -5794,6 +5899,25 @@
   }
 
   /**
+   * Builds the YEAR page's opt-in tour-name span (see
+   * bbp_show_tour_name_on_year_page / checkEventTourTags). Same italic/bold
+   * " — Text" shape as makeAliasSpan's event-alias span, but its own
+   * ".bb-year-tour-name" class colors it to match the DETAIL page's
+   * ".bb-tour-name" (blue, `#06c`) instead of the alias's gray — so a tour
+   * name reads as a tour name on either page, distinct from an alias, while
+   * the YEAR page's font-size stays unscaled (that page's event-heading
+   * line was never oversized to begin with, unlike DETAIL's `#page-title`).
+   * @param {string} tourName
+   * @returns {HTMLSpanElement}
+   */
+  function makeYearTourNameSpan(tourName) {
+    const span = document.createElement('span');
+    span.className = 'bb-year-tour-name';
+    span.textContent = ` — ${tourName}`;
+    return span;
+  }
+
+  /**
    * Checks FUZZY_SUBSTRING_TAGS against the event alias (see
    * extractEventAlias). A tag is "verified" only when it's both present on
    * the page AND at least one of its configured substrings occurs
@@ -7222,6 +7346,9 @@
     // same-day events (see extractEventDaySuffix), mirroring isManagedRetailTag's
     // identical rule for retail pages' alphabetical-index tags.
     if (/^[a-z]$/.test(tag)) return true;
+    // Tour association tag (see TOUR_DEFINITIONS/checkEventTourTags) or the
+    // special "not part of the tour" exception tag.
+    if (tag === TOUR_NO_TAG || TOUR_TAG_SET.has(tag)) return true;
     return false;
   }
 
@@ -7230,10 +7357,27 @@
    * page but whose expected condition is NOT met (a "spurious" tag).
    * @param {string}      tag
    * @param {Set<string>} expectedTags - Result of computeExpectedTags().
+   * @param {ReturnType<typeof checkEventTourTags>} [tourCheck] - Precomputed
+   *   by the caller, needed only for the TOUR_NO_TAG/TOUR_TAG_SET messages
+   *   below (every other tag ignores this param).
    * @returns {string}
    */
-  function spuriousTagMsg(tag, expectedTags) {
+  function spuriousTagMsg(tag, expectedTags, tourCheck = null) {
     if (SPURIOUS_TAG_REASONS[tag]) return `Tag "${tag}" is present but: ${SPURIOUS_TAG_REASONS[tag]}`;
+    if (tag === TOUR_NO_TAG) {
+      if (!tourCheck) return `Tag "${TOUR_NO_TAG}" is present but this event's date doesn't fall within any known tour's date range — there's nothing for it to exclude`;
+      const names = tourCheck.matchedTours.map(t => `"${t.name}"`).join(', ');
+      return `Tag "${TOUR_NO_TAG}" is present but this event's date falls within ${names} and no exclusion (event alias, or a TOUR_NO_OVERRIDES entry) was found — this looks like a genuine tour event`;
+    }
+    if (TOUR_TAG_SET.has(tag)) {
+      const def  = TOUR_DEFINITIONS.find(t => t.tag === tag);
+      const name = def ? def.name : tag;
+      if (tourCheck?.isTourNo) {
+        const reason = tourCheck.alias ? `event alias "${tourCheck.alias}" found on this page` : 'marked via TOUR_NO_OVERRIDES';
+        return `Tag "${tag}" is present but this event is excluded from the "${name}" tour (${reason}) — expected "${TOUR_NO_TAG}" instead`;
+      }
+      return `Tag "${tag}" is present but this event's date is outside the "${name}" tour's date range`;
+    }
     if (/^\d{4}$/.test(tag)) {
       const exp = [...expectedTags].find(t => /^\d{4}$/.test(t)) || '?';
       return `Year tag "${tag}" present but event year is "${exp}"`;
@@ -7277,10 +7421,22 @@
    * page and whose expected condition IS met (a "passing" tag).
    * @param {string}      tag
    * @param {Set<string>} expectedTags - Result of computeExpectedTags().
+   * @param {ReturnType<typeof checkEventTourTags>} [tourCheck] - Precomputed
+   *   by the caller, needed only for the TOUR_NO_TAG/TOUR_TAG_SET messages
+   *   below (every other tag ignores this param).
    * @returns {string}
    */
-  function passingTagMsg(tag, expectedTags) {
+  function passingTagMsg(tag, expectedTags, tourCheck = null) {
     if (PASSING_TAG_REASONS[tag]) return `Tag "${tag}" verified: ${PASSING_TAG_REASONS[tag]}`;
+    if (tag === TOUR_NO_TAG) {
+      return tourCheck?.alias
+        ? `Tag "${TOUR_NO_TAG}" verified: event alias "${tourCheck.alias}" found — not considered part of the tour(s) that otherwise cover this date`
+        : `Tag "${TOUR_NO_TAG}" verified: manually marked as not part of the tour (TOUR_NO_OVERRIDES)`;
+    }
+    if (TOUR_TAG_SET.has(tag)) {
+      const def = TOUR_DEFINITIONS.find(t => t.tag === tag);
+      return `Tag "${tag}" verified: matches the "${def ? def.name : tag}" tour's date range`;
+    }
     if (/^\d{4}$/.test(tag))       return `Year tag "${tag}" verified: matches the event date`;
     if (MONTH_NAMES.includes(tag)) return `Month tag "${tag}" verified: matches the event date`;
     if (DAY_NAMES.includes(tag))   return `Weekday tag "${tag}" verified: matches the event date`;
@@ -7378,19 +7534,38 @@
 
   /**
    * Checks that every unique setlist song (from an already-parsed
-   * parseDetailSetlist result) has a corresponding tag. A song string
-   * containing " - " (e.g. "LIGHT OF DAY - HAPPY BIRTHDAY TO YOU", the
-   * multi-song medley/tribute separator also used by songCompareKey) is
-   * split into independent songs first, each checked on its own — so a
-   * medley entry can require two separate tags, one per song.
+   * parseDetailSetlist result) has a corresponding tag.
+   *
+   * Before splitting, each raw (unsplit) song string is checked against
+   * `SONG_COMBINATION_TAG_OVERRIDES` — a medley/tribute string joined by
+   * " - " that BruceBase tags as a single fixed value for the whole
+   * combination (e.g. "LAND OF HOPE AND DREAMS - PEOPLE GET READY" →
+   * `"lohad.pgr"`) is checked as one unit against that tag and never split.
+   * Otherwise, a song string containing " - " (the multi-song
+   * medley/tribute separator also used by `songCompareKey`) is split into
+   * independent songs, each checked on its own via `checkOneSongTag` — so
+   * an ordinary medley entry can require two separate tags, one per song.
    * @param {Section[]}   detailSections - Result of parseDetailSetlist(doc).
    * @param {Set<string>} actualTags     - Lowercase tags present on the page.
-   * @returns {{song: string, matchedTag: string|null, method: 'exact'|'alias'|'override'|null}[]}
+   * @returns {{song: string, matchedTag: string|null, method: 'exact'|'alias'|'override'|'combination'|null}[]}
    */
   function checkSetlistSongTags(detailSections, actualTags) {
-    const allSongs = detailSections.flatMap(s => s.songs).flatMap(song => song.split(/\s+-\s+/));
-    const uniqueSongs = [...new Set(allSongs)];
-    return uniqueSongs.map(song => checkOneSongTag(song, actualTags));
+    const uniqueRaw = [...new Set(detailSections.flatMap(s => s.songs))];
+    const results = [];
+    const seenIndividual = new Set();
+    for (const raw of uniqueRaw) {
+      const comboTag = SONG_COMBINATION_TAG_OVERRIDES[raw.toLowerCase().trim()];
+      if (comboTag !== undefined) {
+        results.push({ song: raw, matchedTag: isTagPresent(comboTag, actualTags) ? comboTag : null, method: 'combination' });
+        continue;
+      }
+      for (const part of raw.split(/\s+-\s+/)) {
+        if (seenIndividual.has(part)) continue;
+        seenIndividual.add(part);
+        results.push(checkOneSongTag(part, actualTags));
+      }
+    }
+    return results;
   }
 
   /**
@@ -7656,13 +7831,85 @@
     return m ? m[1] : null;
   }
 
+  // ── Tour association tag check ────────────────────────────────────────────
+  // (Springsteen concert tour, e.g. "Land Of Hope And Dreams" — NOT to be
+  // confused with the setlist tour-*premiere* check above, a song's live debut.)
+
+  /**
+   * Returns every TOUR_DEFINITIONS entry with a date range covering eventDate.
+   * Plain string comparison is safe here: eventDate/start/end are always
+   * "YYYY-MM-DD", and lexical order matches chronological order for that format.
+   * @param {string} eventDate - "YYYY-MM-DD"
+   * @returns {typeof TOUR_DEFINITIONS}
+   */
+  function findMatchingTours(eventDate) {
+    return TOUR_DEFINITIONS.filter(t => t.ranges.some(([start, end]) => eventDate >= start && eventDate <= end));
+  }
+
+  /**
+   * Picks the "most specific" tour among several TOUR_DEFINITIONS entries
+   * matching the same date — the one with the smallest total day-span
+   * across its own ranges wins, e.g. "Land Of Hope And Dreams - No Kings"
+   * (a single ~2-month leg) over the umbrella "Land Of Hope And Dreams"
+   * (~4 months combined across its two legs) for a date inside their
+   * overlap. A heuristic, not a guarantee — ties (and any case it gets
+   * wrong) break toward whichever entry appears first in TOUR_DEFINITIONS;
+   * refine here if a future addition to that end-user-extensible table
+   * needs a different rule.
+   * @param {typeof TOUR_DEFINITIONS} tours
+   * @returns {typeof TOUR_DEFINITIONS[0]|null}
+   */
+  function pickMostSpecificTour(tours) {
+    if (tours.length === 0) return null;
+    const spanDays = t => t.ranges.reduce((sum, [s, e]) => sum + (Date.parse(e) - Date.parse(s)), 0);
+    return tours.reduce((best, t) => spanDays(t) < spanDays(best) ? t : best);
+  }
+
+  /**
+   * Determines this event's tour tag(s) from its date (see TOUR_DEFINITIONS),
+   * resolving to the special TOUR_NO_TAG instead when an event alias (see
+   * extractEventAlias) — or a manual TOUR_NO_OVERRIDES entry — indicates the
+   * event isn't actually part of the tour(s) that otherwise cover its date
+   * (e.g. a one-off charity gig or award ceremony during an otherwise
+   * continuous tour). Takes the already-extracted `alias` (rather than a
+   * `doc` to extract it from) since every call site already computes it for
+   * the existing FUZZY_SUBSTRING_TAGS alias-substring check.
+   * @param {string|null} eventDate - "YYYY-MM-DD".
+   * @param {string}      eventPath - "type:date-slug" (no leading slash), for TOUR_NO_OVERRIDES lookup.
+   * @param {string|null} alias     - Result of extractEventAlias(doc).
+   * @returns {{
+   *   expectedTags: Set<string>,
+   *   isTourNo: boolean,
+   *   alias: string|null,
+   *   matchedTours: typeof TOUR_DEFINITIONS,
+   *   mostSpecificTour: typeof TOUR_DEFINITIONS[0]|null
+   * }|null} null when eventDate falls outside every known tour's range — nothing to check.
+   */
+  function checkEventTourTags(eventDate, eventPath, alias) {
+    const matchedTours = findMatchingTours(eventDate || '');
+    if (matchedTours.length === 0) return null;
+
+    const override = TOUR_NO_OVERRIDES[eventPath];
+    const isTourNo = override !== undefined ? override : !!alias;
+
+    return {
+      expectedTags: isTourNo ? new Set([TOUR_NO_TAG]) : new Set(matchedTours.map(t => t.tag)),
+      isTourNo,
+      alias: isTourNo ? alias : null,
+      matchedTours,
+      mostSpecificTour: isTourNo ? null : pickMostSpecificTour(matchedTours),
+    };
+  }
+
   /**
    * Computes the set of tags expected on a DETAIL page, derived from the
    * event date/type and tab content (Recording, News/Memorabilia, setlist,
    * Storyteller, Eyewitness). Also expects "underconstruction" when doc
    * shows BruceBase's "Under Construction" banner (see hasUnderConstructionBanner),
-   * and a tour-premiere-count tag (see computeTourPremiereTagValue) matching
-   * the number of Setlist tab songs rendered in bold.
+   * a tour-premiere-count tag (see computeTourPremiereTagValue) matching
+   * the number of Setlist tab songs rendered in bold, and — when
+   * `tourExpectedTags` is given — the tour association tag(s) it names
+   * (see checkEventTourTags).
    * @param {Document}            doc
    * @param {Map<string,number>}  tabMap
    * @param {string|null}         eventDate  - "YYYY-MM-DD" (no day-suffix letter).
@@ -7676,9 +7923,13 @@
    * @param {boolean}             [hasFeatured] - Whether the YEAR page shows
    *   a "Featured" icon for this event (see hasFeaturedIcon /
    *   eventHasFeaturedIcon). When true, "featured" is always expected as a tag.
+   * @param {Set<string>|null}    [tourExpectedTags] - Result of
+   *   checkEventTourTags(...).expectedTags, precomputed by the caller (same
+   *   pattern as hasHelp/hasFeatured) since it needs the event alias/path,
+   *   which computeExpectedTags itself doesn't have.
    * @returns {Set<string>}
    */
-  function computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix = null, hasHelp = false, hasFeatured = false) {
+  function computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix = null, hasHelp = false, hasFeatured = false, tourExpectedTags = null) {
     const expected = new Set();
 
     const dm = (eventDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -7760,6 +8011,10 @@
       expected.add('prem');
     }
 
+    // Tour association: which known Springsteen tour(s) this event's date
+    // falls within (or the tour_no exception) — see checkEventTourTags.
+    if (tourExpectedTags) for (const t of tourExpectedTags) expected.add(t);
+
     return expected;
   }
 
@@ -7835,7 +8090,15 @@
       : [];
     for (const t of onstageAdditionalTags) actualTags.add(t);
 
-    const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix, hasHelp, hasFeatured);
+    // Tour association: which known Springsteen tour(s) (if any) this
+    // event's date falls within, or the tour_no exception — see
+    // checkEventTourTags. eventAlias is reused below for the fuzzy
+    // substring alias check, so it's extracted once, here.
+    const eventAlias = extractEventAlias(doc);
+    const eventPath  = href.replace(/^\//, '');
+    const tourCheck  = checkEventTourTags(eventDate, eventPath, eventAlias);
+
+    const expectedTags = computeExpectedTags(doc, tabMap, eventDate, eventType, daySuffix, hasHelp, hasFeatured, tourCheck?.expectedTags);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
 
     // Setlist song → tag check: every song in the Setlist tab should have a
@@ -7843,7 +8106,7 @@
     const songResults      = checkSetlistSongTags(parseDetailSetlist(doc), actualTags);
     const matchedSongsByTag = new Map(songResults.filter(r => r.matchedTag).map(r => [r.matchedTag, r]));
     const unmatchedSongs    = songResults.filter(r => !r.matchedTag);
-    const songMethodLabel   = { exact: 'exact match', alias: 'derived alias', override: 'manual override' };
+    const songMethodLabel   = { exact: 'exact match', alias: 'derived alias', override: 'manual override', combination: 'song combination override' };
 
     // Event-name → tag check: venue/city/state/country parts of the page
     // title should each have a corresponding tag (exact match or manual override).
@@ -7864,7 +8127,6 @@
     // Alias-substring tag check: generic tags (FUZZY_SUBSTRING_TAGS) that are
     // present AND a case-insensitive substring of the event alias (e.g.
     // "grammy" matched by "68th Annual Grammy Awards Ceremony") are verified.
-    const eventAlias           = extractEventAlias(doc);
     const aliasResults         = checkAliasSubstringTags(eventAlias, actualTags);
     const matchedAliasByTag    = new Map(aliasResults.map(r => [r.tag, r]));
 
@@ -7888,13 +8150,18 @@
           ? `Tag "${tag}" verified: ${relationMatch.label} — ${relationMethodLabel(relationMatch.method, relationMatch.tabLabel)}`
           : aliasMatch
           ? `Tag "${tag}" verified: ${aliasMatch.label}`
-          : passingTagMsg(tag, expectedTags);
+          : passingTagMsg(tag, expectedTags, tourCheck);
       }
-      return { tag, html: a.outerHTML, missing: false, spurious, tooltip: spurious ? spuriousTagMsg(tag, expectedTags) : '' };
+      return { tag, html: a.outerHTML, missing: false, spurious, tooltip: spurious ? spuriousTagMsg(tag, expectedTags, tourCheck) : '' };
     });
     const missingItems = [
       ...missingTags.map(tag => ({ tag, html: null, missing: true, spurious: false, tooltip: '' })),
       ...unmatchedSongs.map(r => {
+        if (r.method === 'combination') {
+          const candidate = SONG_COMBINATION_TAG_OVERRIDES[r.song.toLowerCase().trim()];
+          return { tag: candidate, html: null, missing: true, spurious: false,
+            tooltip: `No tag found for setlist song combination "${r.song}" (expected SONG_COMBINATION_TAG_OVERRIDES tag "${candidate}")` };
+        }
         const candidate = computeSongTagAlias(r.song) || songTagSlug(r.song);
         return { tag: candidate, html: null, missing: true, spurious: false,
           tooltip: `No tag found for setlist song "${r.song}" (tried exact match and derived alias "${candidate}")` };
@@ -8797,11 +9064,25 @@
    *   event's venue-detail segment is the only difference from the VENUE page title
    *   (see findVenueDetailExtra) — suppresses the corresponding "Venue detail" entry
    *   from the missing-tag report below, since it's informational, not a real gap.
-   * @returns {{additionalTags: string[], onstageUrl: string|null}} Tags found only on the onstage companion page, for addOnstageTagsGlyph.
+   * @returns {{
+   *   additionalTags: string[],
+   *   onstageUrl: string|null,
+   *   tourCheck: ReturnType<typeof checkEventTourTags>,
+   *   eventAlias: string|null
+   * }} `additionalTags`/`onstageUrl`: tags found only on the onstage companion
+   *   page, for addOnstageTagsGlyph. `tourCheck`/`eventAlias`: for
+   *   runDetailProcessing to render the tour-name/event-alias page-title spans.
    */
   function annotateDetailPageTags(tabMap, eventDate, eventType, detailSections, rawDetailName, onstageResult = null, hasHelp = false, hasFeatured = false, venueDetailExtra = null) {
+    // Extracted up front (rather than down where the tour check/fuzzy
+    // substring alias check need it) so it's always returned to the caller
+    // regardless of the early-return paths below — runDetailProcessing uses
+    // it to render the event alias next to the page title independently of
+    // whether a .page-tags block even exists.
+    const eventAlias = extractEventAlias(document);
+
     const tagsContainer = document.querySelector('.page-tags');
-    if (!tagsContainer) return { additionalTags: [], onstageUrl: null };
+    if (!tagsContainer) return { additionalTags: [], onstageUrl: null, tourCheck: null, eventAlias };
     hasHelp = hasHelp || hasHelpIcon(document);
     hasFeatured = hasFeatured || hasFeaturedIcon(document);
 
@@ -8865,7 +9146,13 @@
       computePreferDottedEStreetTag(tabMap, extractOnStageRelationNames(document), eventType)
     );
 
-    const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType, extractEventDaySuffix(path), hasHelp, hasFeatured);
+    // Tour association: which known Springsteen tour(s) (if any) this
+    // event's date falls within, or the tour_no exception — see
+    // checkEventTourTags. eventAlias was already extracted at the top of
+    // this function (before the .page-tags early return).
+    const tourCheck = checkEventTourTags(eventDate, path, eventAlias);
+
+    const expectedTags = computeExpectedTags(document, tabMap, eventDate, eventType, extractEventDaySuffix(path), hasHelp, hasFeatured, tourCheck?.expectedTags);
     const missingTags  = [...expectedTags].filter(t => !isTagPresent(t, actualTags)).sort();
     const spuriousLinks = tagLinks.filter(a => {
       const tag = a.textContent.trim().toLowerCase();
@@ -8875,14 +9162,14 @@
       const tag = a.textContent.trim().toLowerCase();
       return isManagedTag(tag) && isTagPresent(tag, expectedTags);
     });
-    markPassingTagLinks(passingLinks, tag => passingTagMsg(tag, expectedTags));
+    markPassingTagLinks(passingLinks, tag => passingTagMsg(tag, expectedTags, tourCheck));
 
     // Setlist song → tag check: every song in the Setlist tab should have a
     // corresponding tag (exact match, derived alias, or manual override).
     const songResults   = checkSetlistSongTags(detailSections, actualTags);
     const matchedSongs   = songResults.filter(r => r.matchedTag);
     const unmatchedSongs = songResults.filter(r => !r.matchedTag);
-    const songMethodLabel = { exact: 'exact match', alias: 'derived alias', override: 'manual override' };
+    const songMethodLabel = { exact: 'exact match', alias: 'derived alias', override: 'manual override', combination: 'song combination override' };
     for (const r of matchedSongs) {
       const a = tagToAnchor.get(r.matchedTag);
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches setlist song "${r.song}" (${songMethodLabel[r.method]})`);
@@ -8912,7 +9199,7 @@
     // page's free-text notes (e.g. "benefit" matched by a notes paragraph
     // mentioning "...Light Of Day Benefit.") are verified. Never
     // contributes to missingTags — absence is not flagged.
-    const aliasResults = checkAliasSubstringTags(extractEventAlias(document), actualTags);
+    const aliasResults = checkAliasSubstringTags(eventAlias, actualTags);
     for (const r of aliasResults) {
       const a = tagToAnchor.get(r.tag);
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
@@ -8941,7 +9228,7 @@
       okWrapper.appendChild(tagsContainer);
       tagsContainer.style.clear = 'none';
       groupTagsIntoLines(tagsContainer);
-      return { additionalTags, onstageUrl };
+      return { additionalTags, onstageUrl, tourCheck, eventAlias };
     }
 
     const wrapper = document.createElement('div');
@@ -8963,7 +9250,7 @@
     // Flag spurious tags with an orange ⚠️ icon next to the tag link.
     for (const a of spuriousLinks) {
       const tag     = a.textContent.trim().toLowerCase();
-      const msg     = spuriousTagMsg(tag, expectedTags);
+      const msg     = spuriousTagMsg(tag, expectedTags, tourCheck);
       const warnSpan = document.createElement('span');
       warnSpan.className = 'bb-tag-spurious';
       warnSpan.style.cssText = 'color:darkorange; font-weight:bold; cursor:help; margin:0 2px;';
@@ -8992,8 +9279,12 @@
           .map(a => [a.textContent.trim().toLowerCase(), a]))
       : null;
     for (const r of unmatchedSongs) {
-      const candidate = computeSongTagAlias(r.song) || songTagSlug(r.song);
-      const msg = `No tag found for setlist song "${r.song}" (tried exact match and derived alias "${candidate}")`;
+      const candidate = r.method === 'combination'
+        ? SONG_COMBINATION_TAG_OVERRIDES[r.song.toLowerCase().trim()]
+        : (computeSongTagAlias(r.song) || songTagSlug(r.song));
+      const msg = r.method === 'combination'
+        ? `No tag found for setlist song combination "${r.song}" (expected SONG_COMBINATION_TAG_OVERRIDES tag "${candidate}")`
+        : `No tag found for setlist song "${r.song}" (tried exact match and derived alias "${candidate}")`;
       const missingSpan = document.createElement('span');
       missingSpan.className = 'bb-tag-missing';
       missingSpan.style.cssText = 'color:red; font-weight:bold; margin:0 3px;';
@@ -9030,7 +9321,7 @@
     }
 
     groupTagsIntoLines(tagsContainer);
-    return { additionalTags, onstageUrl };
+    return { additionalTags, onstageUrl, tourCheck, eventAlias };
   }
 
   /**
@@ -10183,6 +10474,42 @@
     h1.appendChild(makeOnstageTagsGlyphSpan(additionalTags, onstageUrl));
   }
 
+  /**
+   * Appends the most-specific matching tour's official name (see
+   * checkEventTourTags/pickMostSpecificTour), prefixed with " — " (same
+   * visual convention as makeAliasSpan's event-alias span), to the DETAIL
+   * page's <h1> (inside #page-title). Only called when the event is
+   * confirmed part of a real tour (not the tour_no exception) — see
+   * runDetailProcessing.
+   * @param {string} tourName
+   */
+  function addTourNameSpan(tourName) {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+    const h1 = pageTitle.querySelector('h1') || pageTitle;
+    const span = document.createElement('span');
+    span.className = 'bb-tour-name';
+    span.textContent = ` — ${tourName}`;
+    h1.appendChild(span);
+  }
+
+  /**
+   * Appends the event alias (see extractEventAlias) to the DETAIL page's
+   * <h1> (inside #page-title), reusing makeAliasSpan — the same
+   * ".bb-event-alias" element/styling the YEAR page already shows in its
+   * event heading — so the two pages present the alias identically. Font
+   * size is corrected for the DETAIL page's larger title context via the
+   * `#page-title .bb-event-alias` CSS override (see addStyles); the YEAR
+   * page's own usage is untouched.
+   * @param {string} alias
+   */
+  function addEventAliasSpan(alias) {
+    const pageTitle = document.getElementById('page-title');
+    if (!pageTitle) return;
+    const h1 = pageTitle.querySelector('h1') || pageTitle;
+    h1.appendChild(makeAliasSpan(alias));
+  }
+
   // ── Tooltip ───────────────────────────────────────────────────────────────
 
   function showYearTooltip(evt, yearName, normalizedDetailName, rawDetailName, eventType, match, isEarlyLate = false, anchorName = null) {
@@ -10629,6 +10956,13 @@
       .bb-event-type        { color: #888; font-style: italic; font-weight: normal; }
       .bb-event-type-detail { font-size: 0.6em; font-weight: normal; color: #666; font-style: italic; vertical-align: middle; }
       .bb-event-alias       { font-style: italic; font-weight: bold; color: #555; }
+      .bb-tour-name         { font-style: italic; font-weight: bold; color: #06c; font-size: 0.6em; vertical-align: middle; }
+      /* On the DETAIL page, .bb-event-alias sits directly inside the large
+         #page-title <h1> (unlike its YEAR-page usage, inside a much smaller
+         event-heading line) and would otherwise inherit that oversized font
+         — match .bb-event-type-detail/.bb-tour-name's proportions instead. */
+      #page-title .bb-event-alias { font-size: 0.6em; vertical-align: middle; }
+      .bb-year-tour-name    { font-style: italic; font-weight: bold; color: #06c; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }
       .bb-event-title-warn { cursor: help; font-style: normal; margin-left: 2px; }
       /* Informational (not a real mismatch) venue-detail glyph — see findVenueDetailExtra.

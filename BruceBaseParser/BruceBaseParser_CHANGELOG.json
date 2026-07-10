@@ -1,5 +1,22 @@
 [
     {
+        "version": "3.21",
+        "date": "2026-07-10",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added a tour association tag consistency check to DETAIL pages: the new user-editable TOUR_DEFINITIONS table maps a Springsteen concert tour's official name and date range(s) to a tag (e.g. \"Land Of Hope And Dreams\" -> tour_lohad), checked via the new checkEventTourTags/findMatchingTours against the event's date. When an event alias is found in the first (\"On Stage\") tab (extractEventAlias) - or a manual TOUR_NO_OVERRIDES entry - the special tour_no tag is expected instead, for a one-off show (e.g. an award ceremony) slotted into a tour's date range but not really part of it. Routed entirely through the existing computeExpectedTags/isManagedTag/spuriousTagMsg/passingTagMsg machinery (both gained an optional tourCheck parameter), so missing/spurious/passing rendering and the #page-title 'N issues found' tooltip pick it up for free on both the DETAIL page (annotateDetailPageTags) and the YEAR page's Tags button (addTagsButton).",
+                    "When a real tour event is confirmed (not tour_no), the most specific matching tour's official name (see the new pickMostSpecificTour) is now appended to the DETAIL page's #page-title (new addTourNameSpan/.bb-tour-name), right after the 🏷️ onstage-tags glyph.",
+                    "The DETAIL page's #page-title now also shows the event alias (extractEventAlias) when present, right after the tour name/🏷️ glyph - the new addEventAliasSpan reuses the exact same .bb-event-alias element the YEAR page already shows, so both pages present it identically; a new #page-title .bb-event-alias { font-size: 0.6em } override (matching .bb-event-type-detail's proportions) keeps it from inheriting the much larger #page-title <h1> font. .bb-tour-name got the same font-size fix.",
+                    "Added a new 'Show Tour Name on YEAR Page' setting (bbp_show_tour_name_on_year_page, default off, new '🎸 TOUR ASSOCIATION' configSchema section): when enabled, also shows the matching tour's official name on each YEAR page event heading (new .bb-year-tour-name, same italic/bold shape as .bb-event-alias) via the new makeYearTourNameSpan, chained after the existing onstage-tags glyph insertion (new titleTailAnchor tracking in processOneYearEvent) so multiple title decorations insert in the order they're computed.",
+                    ".bb-year-tour-name now colors the YEAR page's tour name to match the DETAIL page's .bb-tour-name (blue #06c) instead of the event alias's gray, so a tour name reads consistently as a tour name on either page rather than looking like an alias.",
+                    "Added SONG_COMBINATION_TAG_OVERRIDES, a user-editable, end-user-extensible table for setlist song combinations (medley/tribute entries joined by \" - \") that BruceBase tags with a single fixed value for the whole pair instead of one tag per song - e.g. \"LAND OF HOPE AND DREAMS - PEOPLE GET READY\" -> \"lohad.pgr\". checkSetlistSongTags now checks each raw (unsplit) setlist song string against this table before its usual per-song split, with a new 'combination' method value threaded through the existing matched/missing tag rendering and tooltips on both the DETAIL page and the YEAR page's Tags button."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.20",
         "date": "2026-07-10",
         "sections": [

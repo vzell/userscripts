@@ -64,12 +64,19 @@ g. **Tag annotation** — `annotateDetailPageTags(tabMap, eventDate, eventType,
    detailSections, rawDetailName, onstageResult, hasHelp, hasFeatured,
    venueDetailExtra)`. Merges any onstage-only tags into its internal tag set
    before running all consistency checks (see [TAGS.md](TAGS.md)), and returns
-   `{ additionalTags, onstageUrl }`. When `additionalTags.length > 0`,
-   `addOnstageTagsGlyph(additionalTags, onstageUrl)` appends a 🏷️ glyph to
-   `#page-title h1` with a rich tooltip listing the extra tags and linking
-   to the companion page. Always finishes by reorganizing `.page-tags` into
-   per-first-letter lines (`groupTagsIntoLines` — see TAGS.md), regardless
-   of whether any consistency issues were found.
+   `{ additionalTags, onstageUrl, tourCheck, eventAlias }`. When
+   `additionalTags.length > 0`, `addOnstageTagsGlyph(additionalTags,
+   onstageUrl)` appends a 🏷️ glyph to `#page-title h1` with a rich tooltip
+   listing the extra tags and linking to the companion page. Then, when
+   `eventAlias` is non-null, `addEventAliasSpan(eventAlias)` appends the same
+   `.bb-event-alias` span the YEAR page shows (see TAGS.md's "Tour association
+   tag check" for the font-size correction this needs on the DETAIL page's
+   larger `#page-title`); when `tourCheck` resolves to a genuine tour event
+   (not the `tour_no` exception) with a `mostSpecificTour`,
+   `addTourNameSpan(tourCheck.mostSpecificTour.name)` appends the tour's
+   official name (`.bb-tour-name`) right after that. Always finishes by
+   reorganizing `.page-tags` into per-first-letter lines (`groupTagsIntoLines`
+   — see TAGS.md), regardless of whether any consistency issues were found.
 
 h. **Anchor consistency check** — find `<a href="/YEAR#FRAGMENT">Info & Setlist</a>`
    on the current page via `findInfoSetlistLink(document)`. Compare `FRAGMENT`

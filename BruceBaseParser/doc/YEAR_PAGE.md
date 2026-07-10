@@ -109,6 +109,30 @@ Fetches the DETAIL page with `fetchPage(url)`, then runs in sequence:
 - **LIST pages are out of scope**: `processOneListEvent` never fetches a
   per-event DETAIL document, so this feature isn't available there.
 
+### 1b. Tour name annotation (opt-in, `bbp_show_tour_name_on_year_page`)
+
+- Off by default (`configSchema`, "🎸 TOUR ASSOCIATION" section) — most
+  events have no known tour association at all.
+- When enabled, `checkEventTourTags(eventDate, eventPath, eventAlias)` (see
+  [TAGS.md](TAGS.md)'s "Tour association tag check") runs right after the
+  onstage-companion step above; if it resolves to a genuine tour event (not
+  the `tour_no` exception) with a `mostSpecificTour`, `makeYearTourNameSpan
+  (tourName)` is inserted — same italic/bold " — Text" shape as the
+  event-alias span, but its own `.bb-year-tour-name` class colors it to
+  match the DETAIL page's `.bb-tour-name` (blue `#06c`) instead of the
+  alias's gray, so a tour name reads consistently as a tour name on either
+  page.
+- `titleTailAnchor` (starting at `yearGlyphSpan`, the match/mismatch glyph)
+  tracks whichever title-decoration span was inserted last, so the onstage
+  glyph and the tour name always chain in the order they're computed — each
+  is inserted via `titleTailAnchor.after(...)`, then becomes the new
+  `titleTailAnchor` — rather than every insertion competing to land
+  immediately after `yearGlyphSpan` itself (which would reverse their
+  relative order when more than one applies). The pre-existing event-alias
+  span (already placed as `yearGlyphSpan`'s immediate next sibling by
+  `addYearGlyph`) is left untouched by this chain, so it always ends up
+  after both.
+
 ### 2. Timing blocks
 
 - `extractTimingBlocks(doc)` — returns all non-empty text strings from
