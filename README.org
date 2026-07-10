@@ -4402,26 +4402,17 @@ corresponding derived tag present.
 
 Also show the fact on the event entry on the YEAR page with the same "warning icon"/"explanatory tooltip"
 
-** fuzzy tag detection of "snippets" when snippet/interlude is part of the free-text event note
+** TODO fuzzy tag detection of "snippets" when snippet/interlude is part of the free-text event note
 
 #+begin_example
 snippet of "Death To My Hometown"
 "Land Of 1000 Dances" interlude
 "Land Of Hope And Dreams" intro
 "Murder Incorporated" and the second "My City Of Ruins" are just snippets
+"Two Hearts" includes "It Takes Two"; "Long Walk Home" includes the "Land Of Hope And Dreams" guitar intro.
 #+end_example
 
 exists in the event "notes" section
-
-** tour_<tourname> tag check within the tour ranges
-
-| Tour         | date range |
-|--------------+------------|
-| tour_lohad   |            |
-| tour_lohadnk |            |
-|              |            |
-
-| tour_no | special handling |
 
 ** TODO more "Issues" buttons (sub-types) - ALL, names, setlist, relations, anchors, venue, tags, etc
 
@@ -4496,6 +4487,140 @@ This leads to false tooltip messages about "Mismatch ❌" on the DETAIL pages
 2.)
 
 add "'devils & dust':'dad'" to SONG_TAG_ALIAS_OVERRIDES
+
+** plan: tour_<tourname> tag check within the tour ranges
+*** initial
+
+Implement a new tag value consistency check which checks if a Springsteen event from a specific date is part of a
+specific Springsteen tour on the EVENT DETAIL page,
+e.g. http://brucebase.wikidot.com/gig:2026-03-31-target-center-minneapolis-mn
+
+The following association table is a start for the implementation (it will be extended by the end-user later)
+
+| Springsteen official tour name     | Tag          | Tour date range(s) (First tour date - End tour date)              |
+|------------------------------------+--------------+-------------------------------------------------------------------|
+| Vote For Change                    | tour_vfc     | 2004-10-01 - 2004-10-13                                           |
+| Devils & Dust Solo and Acoustic    | tour_dd      | 2005-04-25 - 2005-11-22                                           |
+| Land Of Hope And Dreams            | tour_lohad   | 2025-05-14 - 2025-07-03, 2026-03-31 - 2026-05-30                  |
+| Land Of Hope And Dreams - No Kings | tour_lohadnk | 2026-03-31 - 2026-05-30                                           |
+|                                    | tour_no      | if an event during a tour is actually NOT part of the tour itself |
+
+When the date of a DETAIL EVENT falls in the range(s) of one or more Springsteen tours from the above table, the deduced
+tag value which needs to be checked for presence is located in the "Tag" column above.
+
+1.)
+
+Because there could be events which fall inside the above data ranges
+e.g. http://brucebase.wikidot.com/gig:2026-04-18-pollak-theatre-west-long-branch-nj which are actually NOT part of the
+tour itself, before matching the deduced tag value we need to check if the actual tag value to compare with, is the
+special "tour_no" tag. This is the case if there is an event alias defined in the first tab of the DETAIL page before
+the actual relation names, like e.g.
+
+#+begin_example
+<p><strong>American Music Honors</strong></p>
+#+end_example
+
+Real tour events normally do NOT have event alias names, but prepare for end-user overrideable exceptions in the userscript.
+
+As usual colorize in "green" the "tour_no" tag if present for such an event and flag it with a warning icon if absent
+plus a descriptive tooltip mentioning the event alias name.
+
+2.)
+
+ONLY if the event is a real tour event, add the most specific value from the "Springsteen official tour name" column
+(prefixed with "— ") as the tour name right after the '<span class="bb-glyph"> 🏷️</span>' in the '<div id="page-title">'
+line.
+
+3.)
+
+Then check the deduced tag value (from the above table) against the tags present on the page and colorize it/them
+"green" if present, otherwise flag it/them as usual with a warning icon and a descriptive tooltip mentioning the official tour name.
+
+*** act on @debug/tour.org
+
+act on @debug/tour.org
+
+*** also add an event alias (if present) on the DETAIL page at the same place where we currently add the official tour name
+
+1.)
+
+Also add an event alias (if present) on the DETAIL page e.g
+http://brucebase.wikidot.com/gig:2026-04-18-pollak-theatre-west-long-branch-nj at the same place where we currently add
+the official tour name. Choose the same font size for both the event alias and the tour name as BrueBase currently usees
+for the event title itself, other wise the text looks a little too big
+
+2.)
+
+Add a new configuration variable in the 'const configSchema' section (default: false), which when true, also adds the
+tour name (same font, size and color) on the YEAR page event entry as we currently do for the event alias
+e.g. http://brucebase.wikidot.com/2026#180426
+
+#+begin_example
+<p class="bb-event-heading-p bb-event-heading"><a name="180426"></a><br>
+<strong><a href="/gig:2026-04-18-pollak-theatre-west-long-branch-nj" target="_blank" rel="noopener noreferrer">2026-04-18 - POLLAK THEATRE, MONMOUTH UNIVERSITY, WEST LONG BRANCH, NJ</a><span class="bb-event-type"> (gig)</span><span class="bb-glyph"> ✅</span><span class="bb-glyph"> 🏷️</span><span class="bb-event-alias"> — American Music Honors</span><span class="bb-event-collapse-toggle" title="Click to collapse · Ctrl+Click to collapse all events"> ▾</span></strong></p>
+#+end_example
+
+*** TODO add tour and event alias together configurable
+
+e.g. http://brucebase.wikidot.com/rehearsal:2026-03-24-youth-temple-ocean-grove-nj
+
+** lohad.pgr
+
+1.)
+
+Use the same font color as on the DETAIL pages for the tour names on YEAR pages, currently we have
+
+#+begin_example
+<p class="bb-event-heading-p bb-event-heading"><a name="270526"></a><br>
+<strong><a href="/gig:2026-05-27-nationals-park-washington-dc" target="_blank" rel="noopener noreferrer">2026-05-27 - NATIONALS PARK, WASHINGTON, DC</a><span class="bb-event-type"> (gig)</span><span class="bb-glyph"> ✅</span><span class="bb-glyph"> 🏷️</span><span class="bb-event-title-warn" style="cursor: help;"> ⚠️</span><span class="bb-year-tour-name"> — Land Of Hope And Dreams - No Kings</span><span class="bb-event-collapse-toggle" title="Click to collapse · Ctrl+Click to collapse all events"> ▾</span></strong></p>
+#+end_example
+
+which is the same color as for evetn alias names
+
+2.)
+
+The song name combination "LAND OF HOPE AND DREAMS - PEOPLE GET READY" need a special treatment compared to standalone
+song names when it comes to deducing the tag name to compare against. In this case it should actually by compared
+against the fixed value "lohad.pgr". Prepare for future end-user overridable song name combinations.
+
+** jsdom/browser
+
+Is it recommended to system wide install a jsdom/browser for userscript development, so that it doesn't need to be
+repeatedly installed per repo
+
+#+begin_example
+● Not really — I'd avoid it. A few reasons and a better alternative:
+
+  - npm doesn't have a clean "system-wide library" story. Global installs (npm install -g jsdom) are meant for CLI binaries, not require()-able packages. Making it work elsewhere means NODE_PATH hacks, which npm itself discourages — it causes version drift and confusing
+  resolution across projects.
+  - You probably don't need it. This session, every time I wanted to sanity-check logic (date-range matching, song-split/combo handling, bold-detection matching), a tiny standalone Node script reimplementing just the pure function under test was enough — no DOM required, zero
+  deps, runs anywhere instantly.
+  - For genuine DOM fidelity, a single shared scratch project (e.g. ~/dev-tools/dom-harness/ with its own package.json) that all your userscript repos can node ~/dev-tools/dom-harness/test.js against is the "install once" pattern that actually works cleanly, no hacks — you cd
+  there instead of fighting module resolution. linkedom is worth considering over jsdom there too: much smaller/faster for querySelector-heavy checks.
+  - Since a userscript ultimately runs in a real browser via Tampermonkey, if you ever want more than logic-checks (actual layout/rendering), Playwright is a better match than jsdom anyway — and its browser binaries are already cached globally by design (~/.cache/ms-playwright),
+  so the heavy part is shared for free; only the thin playwright npm package needs adding per project.
+#+end_example
+
+#+begin_example
+set up a shared dom-harness project
+#+end_example
+
+** DONE ever do the tour premiere check for song names which are in BOLD
+
+ever do the tour premiere check for song names which are in BOLD on eiher the YEAR and/or the EVENT DETAIL pages
+
+Right now we get too many ...
+
+
+** TODO make the fonts/colors configurable
+** when "lohad.pgr" is presetn as a tag, "lohad" shouldn't be there anymore
+** check for "littlesteven" in addition to "stevenvanzandt"
+
+http://brucebase.wikidot.com/gig:2026-04-18-pollak-theatre-west-long-branch-nj
+
+** TODO "rescheduled" tag if "Show rescheduled from May 8." is present in the notes
+
+** "solo" tag if "solo" present in the notes
 
 
 
