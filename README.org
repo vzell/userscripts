@@ -4103,7 +4103,6 @@ only if it has sub pages
 
 like "http://brucebase.wikidot.com/venue:leonard-gym-washington-dc"
 
-
 ** DONE remove newlines in the yellow warning box box around the tags on EVENT DETAIL pages
 *** initial
 
@@ -4424,7 +4423,6 @@ exists in the event "notes" section
 
 | tour_no | special handling |
 
-
 ** TODO more "Issues" buttons (sub-types) - ALL, names, setlist, relations, anchors, venue, tags, etc
 
 ** why yellow highlightning of "Set details" on e.g. http://brucebase.wikidot.com/2026#240326 of the string "Set details may be inaccurate."
@@ -4432,6 +4430,7 @@ exists in the event "notes" section
 ** song alias
 
 bitu - Born in the U.S.A.
+dad - Devil & Dust
 
 ** retail handling for "Recording" tab, maybe make it an "Green" warning icon
 
@@ -4447,6 +4446,56 @@ Arthur Baker's sessions remixing "Dancing In The Dark".
 |   |   |
 
 
+** tour premieres
+*** initial
+
+Implement a new tag value consistency check which checks the number of tour premieres on a Springsteen EVENT DETAIL page
+e.g. http://brucebase.wikidot.com/gig:2005-05-03-pantages-theatre-hollywood-ca
+
+Read also the raw HTML for this event @debug/tour-premieres.html
+
+To derive the number of song tour premieres, count the number of song names under the "Setlist" tab when are rendered in
+BOLD e.g.
+
+#+begin_example
+<li value="1"><strong><a href="/song:my-beautiful-reward" target="_blank" rel="noopener noreferrer" class="bb-song-match" data-year-song="MY BEAUTIFUL REWARD" data-detail-song="MY BEAUTIFUL REWARD">MY BEAUTIFUL REWARD</a></strong></li>
+#+end_example
+
+If we for example get 6 song names in BOLD, a tag with a value of "6" should be present.
+
+The allowed tag values are 1, 2, 3, 4, 5, 6, 7, 8 and 9+
+
+"9+" is used if there are MORE then 9 song tour premieres in a specific event
+
+*** adjust tooltips for songs which are tour premieres and do not loose the BOLD attribute of song names on the YEAR pages when they are tour premieres after processing with our userscript
+
+1.)
+
+the BOLD (<strong>-wrapped song links) attribute of song names on the YEAR pages
+e.g. http://brucebase.wikidot.com/2005#030505 are currently lost after after processing with our userscript
+
+2.)
+
+add an additional consistency check when comparing song titles between an event on a YEAR page and the corresponding
+song title on the EVENT DETAIL page. Also adjust the rich HTML tooltip (on both YEAR and DETAIL page) for tour premier
+songs and add the fact that a song is a tour premiere and either flag as "Match ✅"/"Mismatch ❌" when a song is both
+flagged as tour premier on YEAR/DETAIL or otherwise if there is a mismatch
+
+*** bug
+
+Tour premieres on the YEAR page are still NOT rendered in BOLD after the latest fix. This is how they look like @debug/tp.html
+
+This leads to false tooltip messages about "Mismatch ❌" on the DETAIL pages
+
+** "prem" tag must be present, when at least one tour premiere is present
+
+1.)
+
+"prem" tag must be present on a DETAIL page, when at least one tour premiere is present
+
+2.)
+
+add "'devils & dust':'dad'" to SONG_TAG_ALIAS_OVERRIDES
 
 * Problems
 ** http://brucebase.wikidot.com/content:five-rings-farm-wellington-fl tag "appearnaces"
