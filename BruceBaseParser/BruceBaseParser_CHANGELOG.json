@@ -1,5 +1,38 @@
 [
     {
+        "version": "3.20",
+        "date": "2026-07-10",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "YEAR page: fixed tour-premiere songs losing their bold (<strong>) formatting after processing — renderSetlistElement rebuilds each setlist paragraph's HTML from the YEAR/DETAIL diff rather than reusing the original markup, which previously dropped BruceBase's own bold tour-debut marking. parseYearSetlist now records a per-song `premieres` flag (via the new collectYearBoldSongTexts) alongside each raw/compareKey song, threaded through the diff as `item.yearIsPremiere`, and renderSetlistElement/renderMatchWithConnectives re-wrap the rendered song in <strong> when set.",
+                    "Fixed collectYearBoldSongTexts detecting zero YEAR-page premieres (causing every song to falsely report a tour-premiere 'Mismatch ❌' against the DETAIL page): unlike the DETAIL page, where a premiere is a <strong>-wrapped `/song:` link, the YEAR page's setlist songs are plain text with no link at all — only the premiere ones are individually wrapped in `<strong>PLAIN TEXT</strong>`. collectYearBoldSongTexts now matches on the `<strong>` element's own text instead of requiring a nested anchor."
+                ]
+            },
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added a tour-premiere consistency check between the YEAR and DETAIL page's setlist song comparison: parseDetailSetlist now also records a per-song `premieres` flag (via the new isPremiereEntry, checking each song <li>/<p>'s existing <strong> wrapping), threaded through the YEAR<->DETAIL diff as `item.yearIsPremiere`/`item.detailIsPremiere` on both the YEAR page (processOneYearEvent) and DETAIL page (runDetailProcessing) pipelines, and rendered as `data-year-premiere`/`data-detail-premiere` on every song element on both pages. showSongTooltip's rich tooltip (shared by both pages) now shows a 'Tour premiere' row via the new buildTourPremiereRow whenever either side is a premiere, flagging 'Match ✅' when YEAR and DETAIL agree and 'Mismatch ❌' when they don't.",
+                    "The `prem` tag is now expected on a DETAIL page whenever at least one tour-premiere song is present (alongside the existing numeric tour-premiere-count tag) — added to MANAGED_CONTENT_TAGS with matching SPURIOUS_TAG_REASONS/PASSING_TAG_REASONS entries, so it's checked/colored the same way as bootleg/storyteller/etc.",
+                    "Added `'devils & dust': 'dad'` to SONG_TAG_ALIAS_OVERRIDES — neither the exact-match (`devilsdust`) nor the derived alias (`dd`) matched BruceBase's real tag for this song."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.19",
+        "date": "2026-07-10",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added a tour-premiere-count tag consistency check to DETAIL pages (computeExpectedTags/annotateDetailPageTags) and the YEAR page's Tags button (addTagsButton): counts the songs BruceBase renders in bold (<strong>) in the Setlist tab — its own convention for a song's tour debut — via the new countTourPremiereSongs/computeTourPremiereTagValue, and expects a matching bare tag value (\"1\"..\"9\", or \"9+\" for more than 9). isManagedTag/spuriousTagMsg/passingTagMsg now tell this bare-digit tag apart from the zero-padded day-of-month tag by shape, so e.g. a \"6\" tag for 6 tour premieres is no longer misreported as a day-of-month mismatch (TOUR_PREMIERE_TAG_VALUES)."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.18",
         "date": "2026-07-10",
         "sections": [

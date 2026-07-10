@@ -51,11 +51,12 @@ which each get their own separate check independent of
 | `RELATION_TAB_CONFIGS` | `{'On Stage': {fixedTag: 'onstage'}, 'In Studio': {fixedTag: 'studio'}, 'On Audio': {fixedTag: null}, 'On Set': {fixedTag: null}}` — which relation-listing tab (gig/rehearsal, recording audio session, nogig, recording video session) maps to which always-expected fixed tag (`null` = no fixed tag, only the per-relation-name checks apply), for `checkOnStageRelationTags` |
 | `relationMethodLabel(method, tabLabel)` | Function (not a lookup constant) returning the human-readable reason for the relation tag check's tooltips, parameterized by which tab (`"On Stage"`/`"In Studio"`/`"On Audio"`/`"On Set"`) produced the match |
 | `FUZZY_SUBSTRING_TAGS` | `{award: ['award'], grammy: ['grammy'], private: ['private', 'closed'], benefit: ['benefit'], anniversary: ['anniversary'], interview: ['interview'], funeral: ['funeral']}` — generic, event-type-independent tags verified against the event alias and/or page notes text (see "Fuzzy substring tag check" below) rather than any per-event-type rule; each tag maps to one or more substrings that verify it (not necessarily equal to the tag itself) |
+| `TOUR_PREMIERE_TAG_VALUES` | `Set` of allowed tour-premiere-count tag values: `'1'`..`'9'`, `'9+'` — see "Tour-premiere-count tag check" below |
 
 `MANAGED_CONTENT_TAGS` covers: event types (`gig`, `interview`, `nobruce`,
 `nogig`, `offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck`) plus
 `bootleg`, `livedl`, `news`, `memorabilia`, `ticket`, `setlist`, `handwritten`,
-`printed`, `storyteller`, `help`.
+`printed`, `storyteller`, `help`, `prem`.
 
 ---
 
@@ -80,9 +81,44 @@ which each get their own separate check independent of
 | `soundcheck` | `<p><strong>Soundcheck</strong></p>` header found in the setlist container, OR `#page-content` text matches `/\bsoundcheck\s*:/i` |
 | `storyteller` | Storyteller tab has non-Sorry content |
 | `help` | The YEAR page shows a "Help Us" call-to-action icon for this event (see "Help-icon tag check" below) — passed in as `computeExpectedTags`'s optional `hasHelp` argument, since the icon lives on the YEAR page, not (as far as observed) the DETAIL page itself |
+| Tour-premiere count | `computeTourPremiereTagValue(countTourPremiereSongs(doc))` — see "Tour-premiere-count tag check" below. Omitted entirely (no tag expected) when the count is 0 |
+| `prem` | Expected alongside the count tag whenever `countTourPremiereSongs(doc) > 0` — i.e. whenever at least one tour-premiere song is present. A member of `MANAGED_CONTENT_TAGS` (unlike the bare count tag, which is managed via the day-number-shape rule — see "Tour-premiere-count tag check" below), so it's checked/colored the same way as `bootleg`/`storyteller`/etc. |
 
 `getNewsMemTab(doc, tabMap)` tries both `"News/Memorabilia"` and `"News"` tab
 labels so that events with only a `"News"` tab are still checked.
+
+---
+
+## Tour-premiere-count tag check (`countTourPremiereSongs`, `computeTourPremiereTagValue`)
+
+BruceBase renders a Setlist tab song in bold (`<strong>`) to mark it as a
+tour debut ("tour premiere"). `countTourPremiereSongs(doc)` counts these by
+querying `getSetlistContainer(doc)` for `strong a[href^="/song:"]` — scoped to
+the setlist container so unrelated bold text elsewhere on the page (e.g. a
+Storyteller quote) is never counted. `computeTourPremiereTagValue(count)`
+then converts that count into BruceBase's tag-value convention (bare, never
+zero-padded): `"1"`.."9"` for 1-9 premieres, `"9+"` for more than 9, or
+`null` (no tag expected at all) when the count is 0.
+
+`computeExpectedTags` adds this value (when non-null) to the expected-tag
+set, so it's checked the same way as any other tag by both
+`annotateDetailPageTags` and the YEAR page's `addTagsButton`.
+
+The tricky part is telling this bare-digit tag apart from the also-numeric,
+also-1–2-digit day-of-month tag (see the table above) — both `"6"` and
+`"03"` match a naive `/^\d{1,2}$/`. The two conventions never actually
+collide because BruceBase always zero-pads the day-of-month tag to exactly
+2 digits (`"03"`, `"31"`, `"00"`) but never zero-pads a premiere-count tag —
+so `isManagedTag`, `spuriousTagMsg`, and `passingTagMsg` all check the
+premiere-shaped form (`/^[1-9]$/` or exactly `"9+"`) before falling back to
+the day-of-month interpretation (which is now itself tightened to
+`/^\d{2}$/` when locating the expected day value in `expectedTags`, so it no
+longer accidentally picks up a bare premiere-count entry). `passingTagMsg`
+additionally requires the tag to be the literal expected premiere value
+(`expectedTags.has(tag)`), not just premiere-shaped, so a legacy bare-digit
+day tag that only passes via `isTagPresent`'s zero-pad fallback still gets
+the correct "Day tag" message rather than being misattributed to the
+premiere-count check.
 
 ---
 
@@ -103,9 +139,12 @@ labels so that events with only a `"News"` tab are still checked.
 
 `isManagedTag(tag)` returns true for: `MANAGED_CONTENT_TAGS` members, month
 names, weekday names, 4-digit years, 1–2 digit day numbers (0–31 — `0`/`00`
-included, BruceBase's unknown-day-of-month convention), and single lowercase
+included, BruceBase's unknown-day-of-month convention), single lowercase
 letters (the day-suffix a/b/c/… distinguishing multiple same-day events —
-mirrors `isManagedRetailTag`'s identical rule for retail pages).
+mirrors `isManagedRetailTag`'s identical rule for retail pages), and `"9+"`
+(the tour-premiere-count tag's one non-numeric value — bare single digits
+`1`-`9` are already covered by the day-number rule; see "Tour-premiere-count
+tag check" below for how the two are told apart).
 
 **Passing** (present AND condition met):
 - Every context also marks these tags to make correct data visible without

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.18
+// @version      3.20
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -96,8 +96,19 @@
     'gig', 'interview', 'nobruce', 'nogig', 'offstage', 'onstage', 'recording', 'rehearsal', 'soundcheck',
     'bootleg', 'livedl', 'news', 'memorabilia', 'ticket',
     'setlist', 'handwritten', 'printed', 'storyteller', 'eyewitness', 'help', 'underconstruction',
-    'featured',
+    'featured', 'prem',
   ]);
+
+  /**
+   * Allowed tag values for the setlist tour-premiere-count check (see
+   * computeTourPremiereTagValue) — BruceBase's convention for tagging how
+   * many songs a DETAIL page's Setlist tab shows as bold (a tour debut):
+   * bare "1".."9" for 1-9 premieres, "9+" for more than 9. Never zero-padded
+   * (unlike the day-of-month tag), which is what lets isManagedTag /
+   * spuriousTagMsg / passingTagMsg tell a premiere-count tag apart from a
+   * day tag despite both being small plain numbers.
+   */
+  const TOUR_PREMIERE_TAG_VALUES = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '9+']);
 
   /** Human-readable reasons why each managed tag might be present but spurious. */
   const SPURIOUS_TAG_REASONS = {
@@ -115,6 +126,7 @@
     help:        'No "Help Us" call-to-action icon found on the YEAR page or the DETAIL page itself for this event',
     underconstruction: 'Page does not show the "Under Construction" banner',
     featured:    'No "Featured" icon found on the YEAR page or the DETAIL page itself for this event',
+    prem:        'No tour-premiere songs (bold-marked in the Setlist tab) were found',
   };
 
   /** Human-readable reasons why each managed tag is correctly present ("passing"). */
@@ -133,6 +145,7 @@
     help:        '"Help Us" call-to-action icon found on the YEAR page or the DETAIL page itself for this event',
     underconstruction: 'Page shows the "Under Construction" banner',
     featured:    '"Featured" icon found on the YEAR page or the DETAIL page itself for this event',
+    prem:        'At least one tour-premiere song (bold-marked in the Setlist tab) was found',
   };
 
   /**
@@ -152,6 +165,7 @@
   const SONG_TAG_ALIAS_OVERRIDES = {
     // 'incident on 57th street': 'incident57',
     '634-5789 (soulsville, u.s.a.)':'6345789',
+    'devils & dust': 'dad',
     'does this bus stop at 82nd street?': 'dtbsa82s',
     'rosalita (come out tonight)': 'rosalita',
     'tenth avenue freeze-out': '10th',
@@ -3575,13 +3589,15 @@
   function parseYearSetlist(setlistEls) {
     const sections = [];
     for (const el of setlistEls) {
-      let label = 'show';
+      let label  = 'show';
       let text;
+      let boldEl = el; // element bold-song detection is scoped to (see collectYearBoldSongTexts)
 
       if (el.tagName === 'BLOCKQUOTE') {
         label = 'recording';
         const inner = el.querySelector('p');
-        text = inner ? textWithoutSup(inner) : textWithoutSup(el);
+        text  = inner ? textWithoutSup(inner) : textWithoutSup(el);
+        boldEl = inner || el;
       } else {
         text = textWithoutSup(el);
         const m = text.match(/^([^/:\n]+[^/:\n\d]):\s*/); // label must not end in digit ("Encore:" OK, "3:07" not)
@@ -3591,18 +3607,48 @@
         }
       }
 
+      const boldTexts = collectYearBoldSongTexts(boldEl);
       const rawAndClean = text.split(' / ')
         .map(s => s.trim())
         .filter(s => s.length > 0)
-        .map(raw => ({ raw, compareKey: songCompareKey(raw) }))
+        .map(raw => ({ raw, compareKey: songCompareKey(raw), isPremiere: boldTexts.has(raw.toUpperCase()) }))
         .filter(p => p.compareKey.length > 0)
         .filter(p => !/[a-z]{2,}/.test(p.compareKey)); // prose has runs of lowercase; isolated "c" in "McGRATH" is OK
-      const songs    = rawAndClean.map(p => p.compareKey);
-      const rawSongs = rawAndClean.map(p => p.raw);
+      const songs     = rawAndClean.map(p => p.compareKey);
+      const rawSongs  = rawAndClean.map(p => p.raw);
+      const premieres = rawAndClean.map(p => p.isPremiere);
 
-      if (songs.length > 0) sections.push({ label, songs, rawSongs, sourceEl: el });
+      if (songs.length > 0) sections.push({ label, songs, rawSongs, premieres, sourceEl: el });
     }
     return sections;
+  }
+
+  /**
+   * Collects the set of song names (trimmed, uppercased — matching
+   * parseYearSetlist's raw-token form) that a YEAR page setlist element
+   * renders in bold (<strong>) — BruceBase's tour-premiere convention (see
+   * also countTourPremiereSongs, the DETAIL-page equivalent). Unlike the
+   * DETAIL page, YEAR-page setlist songs are plain text with no `/song:`
+   * link at all — e.g. `<strong>MY BEAUTIFUL REWARD</strong> / REASON TO
+   * BELIEVE / ...` — so this matches on the `<strong>` element's own text,
+   * not an anchor inside it. Only matches a token that is *exactly* one
+   * `<strong>`'s text (a connective list like "SONG A, SONG B, and/or SONG
+   * C" won't match even if one of its songs is individually bold — a known
+   * limitation of comparing whole `/`-separated tokens against whole
+   * `<strong>` texts).
+   * @param {Element} el - The element parseYearSetlist derives raw song text from.
+   * @returns {Set<string>}
+   */
+  function collectYearBoldSongTexts(el) {
+    const texts = new Set();
+    // Unlike the DETAIL page (where a premiere song is a <strong>-wrapped
+    // /song: link), the YEAR page's setlist songs are plain text — only the
+    // premiere ones are individually wrapped in <strong>PLAIN TEXT</strong>,
+    // with no anchor at all. Match on the <strong> text itself.
+    el.querySelectorAll('strong').forEach(s => {
+      texts.add(s.textContent.trim().toUpperCase());
+    });
+    return texts;
   }
 
   // Returns el.textContent with all <sup> child elements excluded, so that
@@ -3764,8 +3810,10 @@
         const detailSections    = parseDetailSetlist(doc);
         const yearFlat          = yearSections.flatMap(s => s.songs);
         const yearRawFlat       = yearSections.flatMap(s => s.rawSongs);
+        const yearPremFlat      = yearSections.flatMap(s => s.premieres);
         const detailFlat        = detailSections.flatMap(s => s.songs);
         const detailUrlFlat     = detailSections.flatMap(s => s.songUrls || s.songs.map(() => null));
+        const detailPremFlat    = detailSections.flatMap(s => s.premieres || s.songs.map(() => false));
         log(`  Setlist: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
 
         if (yearFlat.length > 0 || detailFlat.length > 0) {
@@ -3773,10 +3821,15 @@
           const detailParaFlat = detailSections.flatMap(s => s.songs.map(() => !!s.paragraphBased));
           let yp = 0, dp = 0;
           for (const item of diffItems) {
-            if (item.type !== 'detail-only') item.rawYearSong = yearRawFlat[yp++];
+            if (item.type !== 'detail-only') {
+              item.rawYearSong    = yearRawFlat[yp];
+              item.yearIsPremiere = !!yearPremFlat[yp];
+              yp++;
+            }
             if (item.type !== 'year-only') {
-              item.paragraphBased = detailParaFlat[dp];
-              item.detailSongUrl  = detailUrlFlat[dp];
+              item.paragraphBased   = detailParaFlat[dp];
+              item.detailSongUrl    = detailUrlFlat[dp];
+              item.detailIsPremiere = !!detailPremFlat[dp];
               dp++;
             }
           }
@@ -3866,13 +3919,15 @@
   // the detail page has no section at this index, or undefined if not applicable.
   // Renders a raw YEAR-page token that contains a list connective (", and/or", etc.).
   // Each song part gets .bb-song-match colouring; the separators stay plain (original colour).
-  function renderMatchWithConnectives(raw, yearSong, detailSong) {
+  // yearIsPremiere wraps each song part (not the separators) in <strong> — mirrors the
+  // plain-match branch below (see renderSetlistElement's 'match' case).
+  function renderMatchWithConnectives(raw, yearSong, detailSong, yearIsPremiere = false, detailIsPremiere = false) {
     const parts = raw.split(/(,\s+(?:(?:and\/or|and|or)\s+)?)/gi);
-    return parts.map((part, i) =>
-      i % 2 === 0
-        ? `<span class="bb-song-match" data-year-song="${esc(yearSong)}" data-detail-song="${esc(detailSong)}">${esc(part.trim())}</span>`
-        : esc(part)
-    ).join('');
+    return parts.map((part, i) => {
+      if (i % 2 !== 0) return esc(part);
+      const span = `<span class="bb-song-match" data-year-song="${esc(yearSong)}" data-detail-song="${esc(detailSong)}" data-year-premiere="${yearIsPremiere ? '1' : '0'}" data-detail-premiere="${detailIsPremiere ? '1' : '0'}">${esc(part.trim())}</span>`;
+      return yearIsPremiere ? `<strong>${span}</strong>` : span;
+    }).join('');
   }
 
   function renderSetlistElement(el, label, items, detailLabel, unmatchedSongNames = null) {
@@ -3950,29 +4005,37 @@
       const paraWarn = item.paragraphBased
         ? ` <span class="bb-para-warn" data-msg="Detail page lists this song as a paragraph (&lt;p&gt;) instead of a list item (&lt;ol&gt;/&lt;li&gt;). Setlist may be incomplete." title="Detail page lists this song as a paragraph (&lt;p&gt;) instead of a list item (&lt;ol&gt;/&lt;li&gt;). Setlist may be incomplete.">⚠️</span>`
         : '';
+      const yearPrem   = item.yearIsPremiere   ? '1' : '0';
+      const detailPrem = item.detailIsPremiere ? '1' : '0';
       if (item.type === 'match') {
         const raw = item.rawYearSong || item.yearSong;
         // Test on the cleaned name so that ", and" inside a "(with ...)" suffix
         // does not trigger the connective split.
         if (/,\s+(?:and\/or|and|or)\s+/i.test(item.yearSong)) {
-          html += renderMatchWithConnectives(raw, item.yearSong, item.detailSong) + paraWarn;
+          html += renderMatchWithConnectives(raw, item.yearSong, item.detailSong, item.yearIsPremiere, item.detailIsPremiere) + paraWarn;
         } else {
           const rawSuffix = item.rawYearSong ? esc(item.rawYearSong.slice(item.yearSong.length)) : '';
-          const matchData = `data-year-song="${esc(item.yearSong)}" data-detail-song="${esc(item.detailSong)}"`;
-          if (item.detailSongUrl) {
-            html += `<a href="${esc(item.detailSongUrl)}" class="bb-song-match" ${matchData}>${esc(item.yearSong)}</a>${rawSuffix}${paraWarn}`;
-          } else {
-            html += `<span class="bb-song-match" ${matchData}>${esc(item.yearSong)}</span>${rawSuffix}${paraWarn}`;
-          }
+          const matchData = `data-year-song="${esc(item.yearSong)}" data-detail-song="${esc(item.detailSong)}" data-year-premiere="${yearPrem}" data-detail-premiere="${detailPrem}"`;
+          // BruceBase renders a tour-premiere song in bold (<strong>) on the YEAR
+          // page itself — restore that here (lost otherwise, since this whole
+          // element is rebuilt from the diff rather than the original markup).
+          const inner = item.detailSongUrl
+            ? `<a href="${esc(item.detailSongUrl)}" class="bb-song-match" ${matchData}>${esc(item.yearSong)}</a>`
+            : `<span class="bb-song-match" ${matchData}>${esc(item.yearSong)}</span>`;
+          html += (item.yearIsPremiere ? `<strong>${inner}</strong>` : inner) + rawSuffix + paraWarn;
         }
       } else if (item.type === 'year-only') {
         const display = item.rawYearSong || item.yearSong;
-        html += `<span class="bb-song-year-only" data-year-song="${esc(item.yearSong)}">${esc(display)}</span>`;
+        const inner = `<span class="bb-song-year-only" data-year-song="${esc(item.yearSong)}" data-year-premiere="${yearPrem}">${esc(display)}</span>`;
+        html += item.yearIsPremiere ? `<strong>${inner}</strong>` : inner;
       } else if (item.type === 'detail-only') {
-        html += `<span class="bb-song-detail-only" data-detail-song="${esc(item.detailSong)}">${esc(item.detailSong)}</span>${paraWarn}`;
+        // Not on the YEAR page at all, so nothing to visually bold here — the
+        // data attribute only feeds the tooltip's tour-premiere comparison.
+        html += `<span class="bb-song-detail-only" data-detail-song="${esc(item.detailSong)}" data-detail-premiere="${detailPrem}">${esc(item.detailSong)}</span>${paraWarn}`;
       } else if (item.type === 'char-diff') {
-        const inner = buildCharDiffHtml(item.yearSong, item.detailSong);
-        html += `<span class="bb-song-char-diff" data-year-song="${esc(item.yearSong)}" data-detail-song="${esc(item.detailSong)}">${inner}</span>${paraWarn}`;
+        const diffHtml = buildCharDiffHtml(item.yearSong, item.detailSong);
+        const inner = `<span class="bb-song-char-diff" data-year-song="${esc(item.yearSong)}" data-detail-song="${esc(item.detailSong)}" data-year-premiere="${yearPrem}" data-detail-premiere="${detailPrem}">${diffHtml}</span>`;
+        html += (item.yearIsPremiere ? `<strong>${inner}</strong>` : inner) + paraWarn;
       }
     }
 
@@ -4231,7 +4294,9 @@
       const yearSections  = parseYearSetlist(setlistEls);
       const yearFlat      = yearSections.flatMap(s => s.songs);
       const yearRawFlat   = yearSections.flatMap(s => s.rawSongs);
+      const yearPremFlat  = yearSections.flatMap(s => s.premieres);
       const detailFlat    = detailSections.flatMap(s => s.songs);
+      const detailPremFlat = detailSections.flatMap(s => s.premieres || s.songs.map(() => false));
       log(`Detail mode: ${yearFlat.length} year songs, ${detailFlat.length} detail songs`);
       log(`  Year songs:   ${JSON.stringify(yearFlat)}`);
       log(`  Detail songs: ${JSON.stringify(detailFlat)}`);
@@ -4241,8 +4306,16 @@
       const detailParaFlat = detailSections.flatMap(s => s.songs.map(() => !!s.paragraphBased));
       let yp = 0, dp = 0;
       for (const item of diffItems) {
-        if (item.type !== 'detail-only') item.rawYearSong = yearRawFlat[yp++];
-        if (item.type !== 'year-only')   item.paragraphBased = detailParaFlat[dp++];
+        if (item.type !== 'detail-only') {
+          item.rawYearSong    = yearRawFlat[yp];
+          item.yearIsPremiere = !!yearPremFlat[yp];
+          yp++;
+        }
+        if (item.type !== 'year-only') {
+          item.paragraphBased   = detailParaFlat[dp];
+          item.detailIsPremiere = !!detailPremFlat[dp];
+          dp++;
+        }
       }
 
       // Snapshot td content just before rendering so the original is unmodified.
@@ -4795,6 +4868,7 @@
         const newEl = document.createElement(isParagraphBased ? 'p' : 'li');
         newEl.className = 'bb-song-year-only';
         newEl.dataset.yearSong = item.yearSong;
+        newEl.dataset.yearPremiere = item.yearIsPremiere ? '1' : '0';
         newEl.textContent = item.yearSong;
         newEl.addEventListener('mouseenter', e => showSongTooltip(e, newEl));
         newEl.addEventListener('mouseleave', hideTooltip);
@@ -4836,6 +4910,14 @@
   }
 
   function styleDetailLi(li, item) {
+    // The DETAIL page's own bold (<strong>) tour-premiere marking is already
+    // structurally intact at this point (this function only adds classes/
+    // dataset to existing nodes, never rebuilds markup) — both flags are
+    // still threaded through as datasets (rather than reading the DETAIL
+    // side back off the DOM via closest('strong')) so showSongTooltip has
+    // one consistent way to read both sides on either page.
+    const yearPrem   = item.yearIsPremiere   ? '1' : '0';
+    const detailPrem = item.detailIsPremiere ? '1' : '0';
     if (item.type === 'match') {
       // Prefer adding the match class to individual song links so that
       // descriptive <span> nodes (e.g. "(parts)") don't inherit the green colour.
@@ -4844,20 +4926,25 @@
       const matchEls  = songLinks.length > 0 ? songLinks : [li];
       for (const el of matchEls) {
         el.classList.add('bb-song-match');
-        el.dataset.yearSong   = item.yearSong;
-        el.dataset.detailSong = item.detailSong;
+        el.dataset.yearSong       = item.yearSong;
+        el.dataset.detailSong     = item.detailSong;
+        el.dataset.yearPremiere   = yearPrem;
+        el.dataset.detailPremiere = detailPrem;
         el.addEventListener('mouseenter', e => showSongTooltip(e, el));
         el.addEventListener('mouseleave', hideTooltip);
       }
     } else if (item.type === 'detail-only') {
       li.classList.add('bb-song-detail-only');
-      li.dataset.detailSong = item.detailSong;
+      li.dataset.detailSong     = item.detailSong;
+      li.dataset.detailPremiere = detailPrem;
       li.addEventListener('mouseenter', e => showSongTooltip(e, li));
       li.addEventListener('mouseleave', hideTooltip);
     } else if (item.type === 'char-diff') {
       li.classList.add('bb-song-char-diff');
-      li.dataset.yearSong   = item.yearSong;
-      li.dataset.detailSong = item.detailSong;
+      li.dataset.yearSong       = item.yearSong;
+      li.dataset.detailSong     = item.detailSong;
+      li.dataset.yearPremiere   = yearPrem;
+      li.dataset.detailPremiere = detailPrem;
       const a = li.querySelector('a');
       if (a) a.innerHTML = buildCharDiffHtml(item.yearSong, item.detailSong);
       li.addEventListener('mouseenter', e => showSongTooltip(e, li));
@@ -4888,6 +4975,7 @@
           label: currentLabel,
           songs: pendingSongs.map(s => s.name),
           songUrls: pendingSongs.map(s => s.url),
+          premieres: pendingSongs.map(s => !!s.premiere),
           paragraphBased: true,
           hasExplicitLabel
         });
@@ -4895,6 +4983,18 @@
         hasExplicitLabel = false;
         currentLabel = 'show';
       }
+    }
+
+    // A song entry is a tour premiere when BruceBase wraps it in <strong> —
+    // either the song link itself (standard <ol>/<li> layout) or, for a
+    // plain-text entry with no dedicated song page, the whole <li>/<p>
+    // (mirrors countTourPremiereSongs's aggregate DETAIL-page count, at
+    // per-song granularity here). Medley entries (multiple links in one
+    // li/p) are flagged only when the WHOLE entry is bold — a premiere
+    // affecting just one half of a medley isn't distinguishable this way.
+    function isPremiereEntry(container, links) {
+      if (links.length > 0) return links.every(a => !!a.closest('strong'));
+      return !!container.querySelector(':scope > strong');
     }
 
     function parseSongsFromList(listEl) {
@@ -4912,7 +5012,7 @@
           const text = li.textContent.trim();
           if (text && !/^\d{4}-\d{2}-\d{2}/.test(text)) name = cleanSongName(text);
         }
-        if (name) songs.push({ name, url });
+        if (name) songs.push({ name, url, premiere: isPremiereEntry(li, links) });
       }
       return songs;
     }
@@ -4944,7 +5044,7 @@
           if (links.length > 0) {
             const name = cleanSongName(links.map(a => a.textContent.trim()).join(' - '));
             const url = links.length === 1 ? links[0].getAttribute('href') : null;
-            if (name) pendingSongs.push({ name, url });
+            if (name) pendingSongs.push({ name, url, premiere: isPremiereEntry(child, links) });
           }
         }
       } else if (child.tagName === 'OL' || child.tagName === 'UL') {
@@ -4955,6 +5055,7 @@
             label: currentLabel,
             songs: songItems.map(s => s.name),
             songUrls: songItems.map(s => s.url),
+            premieres: songItems.map(s => !!s.premiere),
             hasExplicitLabel
           });
           hasExplicitLabel = false;
@@ -4972,7 +5073,8 @@
         if (songItems.length > 0) sections.push({
           label: currentLabel,
           songs: songItems.map(s => s.name),
-          songUrls: songItems.map(s => s.url)
+          songUrls: songItems.map(s => s.url),
+          premieres: songItems.map(s => !!s.premiere)
         });
       }
     }
@@ -7112,6 +7214,10 @@
     if (/^\d{4}$/.test(tag)) return true;
     // "00" is BruceBase's convention for an unknown day-of-month, alongside real days 1-31.
     if (/^\d{1,2}$/.test(tag) && parseInt(tag, 10) >= 0 && parseInt(tag, 10) <= 31) return true;
+    // Tour-premiere-count tag ("1".."9"/"9+" — see TOUR_PREMIERE_TAG_VALUES). Bare
+    // single digits are already covered by the day-number rule above; only "9+"
+    // needs its own check here.
+    if (tag === '9+') return true;
     // Single lowercase letter: the day-suffix (a/b/c/…) distinguishing multiple
     // same-day events (see extractEventDaySuffix), mirroring isManagedRetailTag's
     // identical rule for retail pages' alphabetical-index tags.
@@ -7140,8 +7246,19 @@
       const exp = [...expectedTags].find(t => DAY_NAMES.includes(t)) || '?';
       return `Weekday tag "${tag}" present but event weekday is "${exp}"`;
     }
+    // Tour-premiere-count tags are always bare (no leading zero) — "1".."9" or
+    // "9+" — while an expected day-of-month tag is always the zero-padded
+    // 2-digit form (e.g. "03"), so the two never collide on shape: checking
+    // this first lets a bare digit like "6" report the right reason instead
+    // of being misread as a day-of-month mismatch.
+    if (/^[1-9]$/.test(tag) || tag === '9+') {
+      const exp = [...expectedTags].find(t => TOUR_PREMIERE_TAG_VALUES.has(t));
+      return exp
+        ? `Tour premiere-count tag "${tag}" present but ${exp} tour-premiere song(s) (bold-marked in the Setlist tab) were found, expected "${exp}"`
+        : `Tour premiere-count tag "${tag}" present but no tour-premiere songs (bold-marked) were found in the Setlist tab`;
+    }
     if (/^\d{1,2}$/.test(tag) && parseInt(tag, 10) <= 31) {
-      const exp = [...expectedTags].find(t => /^\d+$/.test(t) && !/^\d{4}$/.test(t)) || '?';
+      const exp = [...expectedTags].find(t => /^\d{2}$/.test(t)) || '?';
       return `Day tag "${tag}" present but event day is "${exp}"`;
     }
     if (/^[a-z]$/.test(tag)) {
@@ -7167,6 +7284,12 @@
     if (/^\d{4}$/.test(tag))       return `Year tag "${tag}" verified: matches the event date`;
     if (MONTH_NAMES.includes(tag)) return `Month tag "${tag}" verified: matches the event date`;
     if (DAY_NAMES.includes(tag))   return `Weekday tag "${tag}" verified: matches the event date`;
+    // Checked before the day-number rule below (see the matching comment in
+    // spuriousTagMsg) — but only when `tag` is the literal expected premiere
+    // value, not merely premiere-shaped, so a bare-digit day tag that happens
+    // to pass via isTagPresent's zero-pad fallback still gets the day message.
+    if (TOUR_PREMIERE_TAG_VALUES.has(tag) && expectedTags.has(tag))
+                                    return `Tour premiere-count tag "${tag}" verified: matches the number of tour-premiere songs (bold-marked in the Setlist tab)`;
     if (/^\d{1,2}$/.test(tag) && parseInt(tag, 10) <= 31)
                                     return `Day tag "${tag}" verified: matches the event date`;
     if (/^[a-z]$/.test(tag))       return `Day-suffix tag "${tag}" verified: matches the event's URL day-suffix (distinguishes multiple same-day events)`;
@@ -7537,7 +7660,9 @@
    * Computes the set of tags expected on a DETAIL page, derived from the
    * event date/type and tab content (Recording, News/Memorabilia, setlist,
    * Storyteller, Eyewitness). Also expects "underconstruction" when doc
-   * shows BruceBase's "Under Construction" banner (see hasUnderConstructionBanner).
+   * shows BruceBase's "Under Construction" banner (see hasUnderConstructionBanner),
+   * and a tour-premiere-count tag (see computeTourPremiereTagValue) matching
+   * the number of Setlist tab songs rendered in bold.
    * @param {Document}            doc
    * @param {Map<string,number>}  tabMap
    * @param {string|null}         eventDate  - "YYYY-MM-DD" (no day-suffix letter).
@@ -7625,7 +7750,45 @@
     const eyewitnessTab = getTabEl(doc, tabMap, 'Eyewitness');
     if (eyewitnessTab && !SORRY_RE.test(eyewitnessTab.textContent.trim())) expected.add('eyewitness');
 
+    // Tour-premiere count: number of Setlist tab songs BruceBase renders in
+    // bold (its own convention for a song's tour debut). "prem" itself is
+    // always expected alongside the count tag whenever there's at least one.
+    const premiereCount = countTourPremiereSongs(doc);
+    const premiereTag   = computeTourPremiereTagValue(premiereCount);
+    if (premiereTag) {
+      expected.add(premiereTag);
+      expected.add('prem');
+    }
+
     return expected;
+  }
+
+  /**
+   * Counts songs rendered in bold (`<strong>`) within a DETAIL page's Setlist
+   * tab — BruceBase's own convention for flagging a song's tour debut ("tour
+   * premiere"). Scoped to the setlist container (see getSetlistContainer) so
+   * unrelated bold text elsewhere on the page (e.g. a Storyteller quote) is
+   * never counted.
+   * @param {Document} doc
+   * @returns {number}
+   */
+  function countTourPremiereSongs(doc) {
+    const container = getSetlistContainer(doc);
+    if (!container) return 0;
+    return container.querySelectorAll('strong a[href^="/song:"]').length;
+  }
+
+  /**
+   * Converts a tour-premiere song count into BruceBase's tag-value
+   * convention (see TOUR_PREMIERE_TAG_VALUES): bare "1".."9" for 1-9
+   * premieres, "9+" for more than 9. Returns null when there are no
+   * premieres at all — no count tag is expected in that case.
+   * @param {number} count
+   * @returns {string|null}
+   */
+  function computeTourPremiereTagValue(count) {
+    if (count <= 0) return null;
+    return count <= 9 ? String(count) : '9+';
   }
 
   /**
@@ -10294,12 +10457,35 @@
     pageTitle.appendChild(warn);
   }
 
+  /**
+   * Builds the optional "Tour premiere" row for showSongTooltip's .bb-tip-table
+   * (bb-song-match / bb-song-char-diff — the two types where both a YEAR-page
+   * and a DETAIL-page premiere flag are always known). Omitted entirely when
+   * neither side is a tour premiere, so an ordinary song's tooltip isn't
+   * cluttered with a "No · No" line. When exactly one side is bold, that's a
+   * genuine inconsistency between the two pages, flagged the same way as any
+   * other song check (Match ✅ / Mismatch ❌).
+   * @param {boolean} yearPrem
+   * @param {boolean} detailPrem
+   * @returns {string}
+   */
+  function buildTourPremiereRow(yearPrem, detailPrem) {
+    if (!yearPrem && !detailPrem) return '';
+    const yesNo = v => v ? 'Yes 🌟' : 'No';
+    const resultHtml = yearPrem === detailPrem
+      ? '<span class="bb-ok">Match ✅</span>'
+      : '<span class="bb-fail">Mismatch ❌</span>';
+    return `<tr><th>Tour premiere:</th><td>YEAR: ${yesNo(yearPrem)} · DETAIL: ${yesNo(detailPrem)} — ${resultHtml}</td></tr>`;
+  }
+
   function showSongTooltip(evt, el) {
     const tip = document.getElementById('bb-tooltip');
     if (!tip) return;
     const cls        = el.className || '';
     const yearSong   = el.dataset.yearSong   || '';
     const detailSong = el.dataset.detailSong || '';
+    const yearPrem   = el.dataset.yearPremiere   === '1';
+    const detailPrem = el.dataset.detailPremiere === '1';
     let html = '';
 
     if (cls.includes('bb-song-match')) {
@@ -10307,16 +10493,20 @@
         <tr><th>YEAR page:</th><td>${esc(yearSong || el.textContent.trim())}</td></tr>
         <tr><th>DETAIL page:</th><td>${esc(detailSong || yearSong || el.textContent.trim())}</td></tr>
         <tr><th>Result:</th><td><span class="bb-ok">Match ✅</span></td></tr>
+        ${buildTourPremiereRow(yearPrem, detailPrem)}
       </table>`;
     } else if (cls.includes('bb-song-year-only')) {
-      html = `<span class="bb-fail">Only on YEAR page (missing from detail):</span><br>${esc(yearSong || el.textContent.trim())}`;
+      html = `<span class="bb-fail">Only on YEAR page (missing from detail):</span><br>${esc(yearSong || el.textContent.trim())}` +
+        (yearPrem ? '<br>🌟 Tour premiere on the YEAR page' : '');
     } else if (cls.includes('bb-song-detail-only')) {
-      html = `<span class="bb-fail">Only on DETAIL page (missing from year):</span><br>${esc(detailSong || el.textContent.trim())}`;
+      html = `<span class="bb-fail">Only on DETAIL page (missing from year):</span><br>${esc(detailSong || el.textContent.trim())}` +
+        (detailPrem ? '<br>🌟 Tour premiere on the DETAIL page' : '');
     } else if (cls.includes('bb-song-char-diff')) {
       html = `<table class="bb-tip-table">
         <tr><th>YEAR page:</th><td>${esc(yearSong)}</td></tr>
         <tr><th>DETAIL page:</th><td>${esc(detailSong)}</td></tr>
         <tr><th>Diff:</th><td>${buildDiffHtml(yearSong.toUpperCase(), detailSong.toUpperCase())}</td></tr>
+        ${buildTourPremiereRow(yearPrem, detailPrem)}
       </table>`;
     }
 

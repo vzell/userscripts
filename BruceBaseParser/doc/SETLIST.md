@@ -6,7 +6,8 @@
 Section = {
   label:           string,        // 'show' | 'recording' | 'Soundcheck' | custom
   songs:           string[],      // cleaned song names (compareKeys)
-  rawSongs:        string[],      // original text before cleanSongName
+  rawSongs:        string[],      // original text before cleanSongName (YEAR only)
+  premieres:       boolean[],     // per-song tour-premiere flag, same index as songs
   sourceEl:        Element,       // <p> or <blockquote> on YEAR page
   songUrls?:       (string|null)[], // /song:… href per song (detail only)
   paragraphBased?: boolean,       // true when songs came from bare <p> (old pages)
@@ -20,7 +21,9 @@ DiffItem = {
   detailSong?:  string,   // cleaned DETAIL song name
   rawYearSong?: string,   // original YEAR page text (before cleanSongName)
   paragraphBased?: boolean,
-  detailSongUrl?:  string | null  // /song:… href from DETAIL page
+  detailSongUrl?:  string | null,  // /song:… href from DETAIL page
+  yearIsPremiere?:   boolean,  // set whenever the item has a YEAR-side song (i.e. type !== 'detail-only')
+  detailIsPremiere?: boolean  // set whenever the item has a DETAIL-side song (i.e. type !== 'year-only')
 }
 ```
 
@@ -41,6 +44,24 @@ Iterates `setlistEls` (`<p>` and `<blockquote>` elements):
     form `"SONG A, SONG B, and/or SONG C"` is normalised to `"SONG A - SONG B - SONG C"`.
   - Entries whose compareKey contains a run of 2+ lowercase chars are rejected
     (prose lines) — isolated `"c"` in names like `"McGRATH"` is acceptable.
+- Each raw (pre-trim/clean) token also gets a `premieres[i]` flag via
+  `collectYearBoldSongTexts(boldEl)` (`boldEl` = the `<blockquote>`'s inner
+  `<p>`, or `el` itself otherwise — same scoping the text extraction above
+  already uses): the set of `<strong>` element texts (trimmed, uppercased)
+  found in that element. **Unlike the DETAIL page, YEAR-page setlist songs
+  are plain text with no `/song:` link at all** — e.g. `<strong>MY
+  BEAUTIFUL REWARD</strong> / REASON TO BELIEVE / DEVILS &amp; DUST / ...` —
+  so this matches on the `<strong>`'s own text, not an anchor inside it (an
+  earlier version of this check required `strong a[href^="/song:"]`, which
+  silently matched zero songs on every YEAR page and made every premiere
+  song wrongly report a tour-premiere "Mismatch ❌" against the DETAIL page).
+  A token is a premiere only when it *exactly* matches one of those
+  `<strong>` texts — a connective list like `"SONG A, SONG B, and/or SONG
+  C"` never matches even if one of its songs is individually bold, since
+  the whole token (not the individual comma-separated parts) is what's
+  compared. This mirrors BruceBase's own tour-debut bolding convention on
+  the DETAIL page (see `countTourPremiereSongs`/`isPremiereEntry` below),
+  just applied to a link vs. plain-text structure respectively.
 
 ---
 
@@ -66,8 +87,16 @@ Sections carry `paragraphBased: true`.
 `td.querySelectorAll('ol, ul')`.
 
 Each section carries `hasExplicitLabel: boolean` (reset to `false` after each
-push so a header does not propagate to the next list) and
-`songUrls: (string|null)[]`.
+push so a header does not propagate to the next list), `songUrls:
+(string|null)[]`, and `premieres: boolean[]` — per-song tour-premiere flag
+from `isPremiereEntry(container, links)`: true when every `/song:` link in
+the entry has a `<strong>` ancestor (a medley with multiple links is only
+flagged when the *whole* entry is bold — a premiere affecting just one half
+of a medley isn't distinguishable this way), or, for a plain-text entry with
+no dedicated song page, when the container's direct child is a `<strong>`.
+Mirrors `countTourPremiereSongs(doc)`'s page-wide aggregate count (used by
+the DETAIL page's tour-premiere-count *tag* check — see
+[TAGS.md](TAGS.md)) at per-song granularity.
 
 ---
 
@@ -128,15 +157,62 @@ Set on each `yearSection` before rendering:
 | `.bb-sep` | Song separator rendered as ` / ` | `.bb-sep` class; used by list-view builder to split songs |
 
 Every song span/link created by `renderSetlistElement` (including each part of
-a `renderMatchWithConnectives` split) carries `data-year-song`/`data-detail-song`
-and a `mouseenter`/`mouseleave` pair calling `showSongTooltip`, for all four
-song states (`match`, `year-only`, `detail-only`, `char-diff`) — not just the
-mismatch ones. For `.bb-song-match`, `showSongTooltip` renders a
+a `renderMatchWithConnectives` split) carries `data-year-song`/`data-detail-song`,
+`data-year-premiere`/`data-detail-premiere` (see "Tour-premiere consistency
+check" below), and a `mouseenter`/`mouseleave` pair calling `showSongTooltip`,
+for all four song states (`match`, `year-only`, `detail-only`, `char-diff`) —
+not just the mismatch ones. For `.bb-song-match`, `showSongTooltip` renders a
 `.bb-tip-table` with YEAR/DETAIL values and a green `Match ✅` result row
 (same table shape as `showYearTooltip`/`showListTooltip`). This wiring is
 repeated in three places that must stay in sync: `renderSetlistElement` (flat
 view), `buildListDiv` (list view rebuild), and `rewireLoadedPage` (after a
-Save/Load cache round-trip).
+Save/Load cache round-trip) — the latter two only re-wire listeners on
+already-rendered elements (via `outerHTML`/`innerHTML` round-trips), so they
+pick up the `data-*-premiere` attributes automatically without needing their
+own logic.
+
+### Tour-premiere consistency check (`item.yearIsPremiere`/`item.detailIsPremiere`, `buildTourPremiereRow`)
+
+BruceBase renders a tour-debut ("tour premiere") song in bold (`<strong>`) on
+*both* the YEAR page and the DETAIL page's Setlist tab. This is checked and
+displayed independently of the `MANAGED_CONTENT_TAGS` tag system (see
+[TAGS.md](TAGS.md)'s tour-premiere-count *tag* check, which only verifies the
+aggregate count, not per-song agreement).
+
+- **Bold recovery on the YEAR page**: `renderSetlistElement` fully rebuilds
+  each setlist paragraph's HTML from the diff (rather than reusing the
+  original markup), which used to silently drop BruceBase's own bold
+  tour-debut marking. It now wraps the rendered song in `<strong>` whenever
+  `item.yearIsPremiere` is true, for the `match` (both the plain and
+  `renderMatchWithConnectives` branches — the latter wraps each song part,
+  not the separators, matching its existing "separators stay plain"
+  behaviour), `year-only`, and `char-diff` types. `detail-only` items don't
+  exist on the YEAR page at all, so there's nothing to visually bold —
+  `data-detail-premiere` is still set, for the tooltip.
+- **DETAIL page**: needs no equivalent fix — `styleDetailLi` only adds
+  classes/dataset to the existing `<li>`/`<a>` nodes, it never rebuilds
+  markup, so a song's original `<strong>` wrapping simply survives untouched.
+- **Per-song data**: `item.yearIsPremiere`/`item.detailIsPremiere` are set in
+  the same enrichment loop that already threads `rawYearSong`/`detailSongUrl`/
+  `paragraphBased` through the diff — both in `processOneYearEvent` (YEAR
+  page) and `runDetailProcessing` (DETAIL page), each independently building
+  `yearPremFlat`/`detailPremFlat` from its own `parseYearSetlist`/
+  `parseDetailSetlist` call. `yearIsPremiere` is set whenever `item.type !==
+  'detail-only'`; `detailIsPremiere` whenever `item.type !== 'year-only'` —
+  same guard the existing `rawYearSong`/`paragraphBased` assignments use.
+- **Tooltip**: `showSongTooltip` reads `data-year-premiere`/
+  `data-detail-premiere` (`'1'`/`'0'`) off the hovered element — deliberately
+  a dataset on *both* pages (not, on the DETAIL page, read back off the DOM
+  via `closest('strong')`) so there's one consistent way to read both sides
+  regardless of which page rendered the tooltip. `buildTourPremiereRow(yearPrem,
+  detailPrem)` builds the optional `.bb-tip-table` row: omitted when neither
+  side is a premiere (so an ordinary song's tooltip isn't cluttered with a
+  "No · No" line), otherwise `Match ✅` when both sides agree or `Mismatch ❌`
+  when they don't — shown for `bb-song-match` and `bb-song-char-diff` (the
+  two states where both sides are always known). For `bb-song-year-only` /
+  `bb-song-detail-only` (only one side exists), a plain "🌟 Tour premiere on
+  the YEAR/DETAIL page" line is appended instead — there's no second side to
+  compare against, so no Match/Mismatch verdict.
 
 **Section label mismatch — char-diff + rich tooltip**: of the three
 `.bb-section-label-warn` message variants (section missing entirely from one
