@@ -1,5 +1,17 @@
 [
     {
+        "version": "3.22",
+        "date": "2026-07-10",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Added a \"rescheduled\" tag consistency check to DETAIL pages: the tag is now expected whenever the free-text notes preamble (extractPageNotesText) mentions \"rescheduled from\" (e.g. \"This show was rescheduled from March 12, 2020.\"). Added to MANAGED_CONTENT_TAGS with matching SPURIOUS_TAG_REASONS/PASSING_TAG_REASONS entries and a new computeExpectedTags rule, so it's checked/colored the same way as soundcheck and every other managed content tag on both the DETAIL page (annotateDetailPageTags) and the YEAR page's Tags button (addTagsButton)."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.21",
         "date": "2026-07-10",
         "sections": [

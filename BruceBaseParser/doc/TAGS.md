@@ -61,7 +61,8 @@ which each get their own separate check independent of
 `MANAGED_CONTENT_TAGS` covers: event types (`gig`, `interview`, `nobruce`,
 `nogig`, `offstage`, `onstage`, `recording`, `rehearsal`, `soundcheck`) plus
 `bootleg`, `livedl`, `news`, `memorabilia`, `ticket`, `setlist`, `handwritten`,
-`printed`, `storyteller`, `help`, `prem`.
+`printed`, `storyteller`, `eyewitness`, `help`, `underconstruction`, `featured`,
+`prem`, `rescheduled`.
 
 ---
 
@@ -84,6 +85,7 @@ which each get their own separate check independent of
 | `handwritten` | Setlist images with `"handwritten"` in `src` |
 | `printed` | Setlist images with `"printed"` in `src` |
 | `soundcheck` | `<p><strong>Soundcheck</strong></p>` header found in the setlist container, OR `#page-content` text matches `/\bsoundcheck\s*:/i` |
+| `rescheduled` | The free-text notes preamble (`extractPageNotesText(doc)`) matches `/rescheduled\s+from/i` |
 | `storyteller` | Storyteller tab has non-Sorry content |
 | `help` | The YEAR page shows a "Help Us" call-to-action icon for this event (see "Help-icon tag check" below) — passed in as `computeExpectedTags`'s optional `hasHelp` argument, since the icon lives on the YEAR page, not (as far as observed) the DETAIL page itself |
 | Tour-premiere count | `computeTourPremiereTagValue(countTourPremiereSongs(doc))` — see "Tour-premiere-count tag check" below. Omitted entirely (no tag expected) when the count is 0 |

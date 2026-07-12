@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.21
+// @version      3.22
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -96,7 +96,7 @@
     'gig', 'interview', 'nobruce', 'nogig', 'offstage', 'onstage', 'recording', 'rehearsal', 'soundcheck',
     'bootleg', 'livedl', 'news', 'memorabilia', 'ticket',
     'setlist', 'handwritten', 'printed', 'storyteller', 'eyewitness', 'help', 'underconstruction',
-    'featured', 'prem',
+    'featured', 'prem', 'rescheduled',
   ]);
 
   /**
@@ -173,6 +173,7 @@
     underconstruction: 'Page does not show the "Under Construction" banner',
     featured:    'No "Featured" icon found on the YEAR page or the DETAIL page itself for this event',
     prem:        'No tour-premiere songs (bold-marked in the Setlist tab) were found',
+    rescheduled: 'Page notes do not mention "rescheduled from"',
   };
 
   /** Human-readable reasons why each managed tag is correctly present ("passing"). */
@@ -192,6 +193,7 @@
     underconstruction: 'Page shows the "Under Construction" banner',
     featured:    '"Featured" icon found on the YEAR page or the DETAIL page itself for this event',
     prem:        'At least one tour-premiere song (bold-marked in the Setlist tab) was found',
+    rescheduled: 'Page notes mention "rescheduled from"',
   };
 
   /**
@@ -7991,6 +7993,12 @@
       : false;
     if (hasSoundcheckHeader || /\bsoundcheck\s*:/i.test(pageContent.textContent)) {
       expected.add('soundcheck');
+    }
+
+    // Rescheduled: the free-text notes preamble mentions "rescheduled from"
+    // (e.g. "This show was rescheduled from March 12, 2020.").
+    if (/rescheduled\s+from/i.test(extractPageNotesText(doc))) {
+      expected.add('rescheduled');
     }
 
     // Storyteller tab.
