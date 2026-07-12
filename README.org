@@ -4488,8 +4488,8 @@ This leads to false tooltip messages about "Mismatch ❌" on the DETAIL pages
 
 add "'devils & dust':'dad'" to SONG_TAG_ALIAS_OVERRIDES
 
-** plan: tour_<tourname> tag check within the tour ranges
-*** initial
+** TODO plan: tour_<tourname> tag check within the tour ranges
+*** DONE initial
 
 Implement a new tag value consistency check which checks if a Springsteen event from a specific date is part of a
 specific Springsteen tour on the EVENT DETAIL page,
@@ -4536,11 +4536,11 @@ line.
 Then check the deduced tag value (from the above table) against the tags present on the page and colorize it/them
 "green" if present, otherwise flag it/them as usual with a warning icon and a descriptive tooltip mentioning the official tour name.
 
-*** act on @debug/tour.org
+*** DONE act on @debug/tour.org
 
 act on @debug/tour.org
 
-*** also add an event alias (if present) on the DETAIL page at the same place where we currently add the official tour name
+*** DONE also add an event alias (if present) on the DETAIL page at the same place where we currently add the official tour name
 
 1.)
 
@@ -4564,7 +4564,7 @@ e.g. http://brucebase.wikidot.com/2026#180426
 
 e.g. http://brucebase.wikidot.com/rehearsal:2026-03-24-youth-temple-ocean-grove-nj
 
-** lohad.pgr
+** DONE lohad.pgr
 
 1.)
 
@@ -4611,17 +4611,23 @@ ever do the tour premiere check for song names which are in BOLD on eiher the YE
 
 Right now we get too many ...
 
-
 ** TODO make the fonts/colors configurable
-** when "lohad.pgr" is presetn as a tag, "lohad" shouldn't be there anymore
-** check for "littlesteven" in addition to "stevenvanzandt"
+** TODO when "lohad.pgr" is present as a tag, "lohad" shouldn't be there anymore
+** TODO check for "littlesteven" in addition to "stevenvanzandt"
 
 http://brucebase.wikidot.com/gig:2026-04-18-pollak-theatre-west-long-branch-nj
 
-** TODO "rescheduled" tag if "Show rescheduled from May 8." is present in the notes
+** DONE "rescheduled" tag if "Show rescheduled from May 8." is present in the notes
 
-** "solo" tag if "solo" present in the notes
+The "rescheduled" tag should be present on EVEN DETAIL pages if "rescheduled from" is present in the free-form text notes section of the event
 
+** TODO the solo" tag if "solo" present in the notes
+** TODO override for the first event on a tour, the tag "prem" and "9+" shouldn't be present
+** TODO "video" tag
+
+Correction: We do use the video-tag, but only on the recnote-pages. This indicates if there is a video-bootleg (stream,
+dvd, BR, etc.) for the show. We do NOT use the video-tag on gig-pages, only the icon on the year-page indicates if there
+is video available on the media-tab.
 
 
 * Problems
