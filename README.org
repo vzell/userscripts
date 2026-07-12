@@ -4621,6 +4621,19 @@ http://brucebase.wikidot.com/gig:2026-04-18-pollak-theatre-west-long-branch-nj
 
 The "rescheduled" tag should be present on EVEN DETAIL pages if "rescheduled from" is present in the free-form text notes section of the event
 
+** DONE "cancelled" tag if "canceled" is present in the notes
+
+The "cancelled" tag should be present on EVEN DETAIL pages if "cancelled" is present in the free-form text notes section
+of the event. It also overrides the "rescheduled" tag if both are present in the notes
+
+** "college" tag if present in the event name or event alias
+
+"college" tag if present in the event name or event alias
+
+** "preshow" tag
+
+"Pre-Set" in the setlist heading
+
 ** TODO the solo" tag if "solo" present in the notes
 ** TODO override for the first event on a tour, the tag "prem" and "9+" shouldn't be present
 ** TODO "video" tag
