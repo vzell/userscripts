@@ -1,5 +1,17 @@
 [
     {
+        "version": "3.23",
+        "date": "2026-07-12",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Added missing tours."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.22",
         "date": "2026-07-10",
         "sections": [
