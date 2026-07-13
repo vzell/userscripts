@@ -1,5 +1,23 @@
 [
     {
+        "version": "3.32",
+        "date": "2026-07-13",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Increased #bb-year-progress's font-size (0.9em -> 1.15em) on all three pages that render it (HOME, YEAR, LIST)."
+                ]
+            },
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added an opt-in relation-name warning glyph on YEAR pages (bbp_enable_relation_tag_warnings, default off, new RELATIONS settings section): flags a ⚠️ next to any relation name in .bb-relations-flat/.bb-relations-list that has no corresponding tag on the event's DETAIL page, mirroring the existing setlist-song equivalent (bbp_enable_setlist_tag_warnings). processOneYearEvent re-runs checkOnStageRelationTags(doc, eventTabMap, actualTags, eventType) right after injectEventRelations renders both relation views, filters to unmatched results, and flags every matching .bb-rel-name in one pass (covering both renderings at once, and naturally skipping the tab-wide 'fixed' method's unmatched onstage/studio tag, which has no single relation to blame). Renamed the shared glyph builder makeSetlistSongTagWarningGlyph -> makeTagWarningGlyph now that it serves both setlist songs and relation names. actualTags now also merges in onstageResult's companion \"onstage:\" page tags before the check, same as addTagsButton already does - without it, every relation on an event with enough participants to spill tags onto that companion page (BruceBase caps tags-per-page) was wrongly flagged as untagged, since doc's own .page-tags alone was missing most of the real tags."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.31",
         "date": "2026-07-13",
         "sections": [

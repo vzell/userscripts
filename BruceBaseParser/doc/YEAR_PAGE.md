@@ -215,6 +215,10 @@ Called at the end of the `setlistEls.length > 0` block, after `renderYearSetlist
   out `label === 'setlist'` preview sections (case d). Top-level entries use `•`
   bullets; band members use `◦` bullets; both hyperlinked to `/relation:` pages.
   Extra info (e.g. `(Guest)`) is rendered inline as `.bb-rel-extra`.
+- Immediately after: when `bbp_enable_relation_tag_warnings` is on, appends a
+  ⚠️ `makeTagWarningGlyph` next to every `.bb-rel-name` (in both renderings)
+  whose relation has no corresponding tag on the DETAIL page — see
+  `doc/TAGS.md`'s "Opt-in relation-name glyph" section.
 
 The list view (`showView('list')` in `insertSectionToggle`) toggles `.bb-relations-flat`
 hidden and `.bb-relations-list` visible, showing the original nested hierarchy.

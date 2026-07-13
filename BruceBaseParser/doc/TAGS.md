@@ -793,7 +793,7 @@ Sibling override tables for other page types (`RELATION_TAG_ALIAS_OVERRIDES`,
 
 | Setting | Type | Default | Effect |
 |---|---|---|---|
-| `bbp_enable_setlist_tag_warnings` | checkbox | `false` | Shows a ⚠️ warning icon/tooltip (`makeSetlistSongTagWarningGlyph`) directly next to an unmatched setlist song's own name, in addition to the `.bb-tag-missing` entry already appended to `.page-tags` |
+| `bbp_enable_setlist_tag_warnings` | checkbox | `false` | Shows a ⚠️ warning icon/tooltip (`makeTagWarningGlyph`) directly next to an unmatched setlist song's own name, in addition to the `.bb-tag-missing` entry already appended to `.page-tags` |
 
 Independent of the `.page-tags`-side annotation above, this setting places
 the same ⚠️/tooltip right on the song name itself:
@@ -816,6 +816,37 @@ the same ⚠️/tooltip right on the song name itself:
   setting is on, and threads it through `renderYearSetlist`/
   `renderSetlistElement`, which does one `querySelectorAll('[data-detail-song]')`
   pass per section right after rebuilding its `innerHTML`.
+
+**Opt-in relation-name glyph** (`bbp_enable_relation_tag_warnings`, default
+off) — the YEAR-page-only counterpart to the setlist glyph above, for
+`.bb-relations-flat`/`.bb-relations-list` (see `injectEventRelations`,
+`doc/ARCHITECTURE.md`):
+
+| Setting | Type | Default | Effect |
+|---|---|---|---|
+| `bbp_enable_relation_tag_warnings` | checkbox | `false` | Shows a ⚠️ warning icon/tooltip (`makeTagWarningGlyph`) directly next to a relation name in the inline `.bb-relations-flat`/`.bb-relations-list` views that has no corresponding tag on the event's DETAIL page |
+
+`processOneYearEvent`, right after `injectEventRelations` renders both
+views into `processedDiv`: builds `actualTags` from `doc`'s own
+`.page-tags` **merged with `onstageResult.tags`** (the companion
+`"onstage:"` page's tags, already fetched earlier in the same function) —
+required, not optional, since BruceBase caps tags-per-page and an event
+with enough participants routinely spills most of its relation tags onto
+that companion page; skipping the merge (an earlier version of this
+feature did) means `actualTags` only ever has `doc`'s own near-empty
+`.page-tags` and *every* relation on such an event wrongly shows as
+untagged. Then re-runs `checkOnStageRelationTags(doc, eventTabMap,
+actualTags, eventType)` (the same function `addTagsButton`'s own
+`unmatchedRelations`/relation-tag check uses — which merges the same way),
+filters to unmatched results, and flattens each result's `names` field into
+a lowercased `Set<string>` — `names` is `[]` for the tab-wide `'fixed'`
+method (no single relation to blame), so that case is naturally excluded
+(an unmatched `onstage`/`studio` fixed tag isn't any one relation's fault).
+Then a single `processedDiv.querySelectorAll('.bb-rel-name')` pass appends
+the glyph after every name (both main and band-member `<a>`s) found in the
+set — this naturally covers **both** `.bb-relations-flat` (visible) and
+`.bb-relations-list` (hidden, `☰ List` toggle) renderings in one pass, since
+each relation name is rendered once into each.
 
 ---
 

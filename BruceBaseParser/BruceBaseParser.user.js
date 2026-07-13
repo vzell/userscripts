@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.31
+// @version      3.32
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -588,6 +588,21 @@
           type: 'checkbox',
           default: false,
           description: 'Show a ⚠️ warning icon next to setlist songs (DETAIL page Setlist tab, and YEAR page inline setlist) that have no corresponding tag on the event\'s DETAIL page.'
+      },
+
+      // ============================================================
+      // RELATIONS SECTION
+      // ============================================================
+      divider_relations: {
+          type: 'divider',
+          label: '🔗 RELATIONS'
+      },
+
+      bbp_enable_relation_tag_warnings: {
+          label: 'Flag Untagged Relations',
+          type: 'checkbox',
+          default: false,
+          description: 'On YEAR pages, show a ⚠️ warning icon next to a relation name in the inline participant list (.bb-relations-flat/.bb-relations-list) that has no corresponding tag on the event\'s DETAIL page.'
       },
 
       // ============================================================
@@ -4092,7 +4107,40 @@
         const relGroups = extractRelations(doc);
         if (relGroups.length > 0) {
           const processedDiv = element.closest('.bb-section-processed');
-          if (processedDiv) injectEventRelations(processedDiv, relGroups, yearSections);
+          if (processedDiv) {
+            injectEventRelations(processedDiv, relGroups, yearSections);
+
+            // Relation names with no corresponding DETAIL-page tag, flagged
+            // inline next to the name — mirrors the setlist-song equivalent
+            // above (opt-in, bbp_enable_relation_tag_warnings). Checked
+            // against BOTH .bb-relations-flat and .bb-relations-list (each
+            // relation name appears once in each rendering). Must merge in
+            // onstageResult's companion-page tags first, same as
+            // addTagsButton does — BruceBase caps tags-per-page, so an event
+            // with many relations (like this one) routinely spills most of
+            // its relation tags onto the separate "onstage:" page; without
+            // this merge, actualTags would only ever contain doc's own
+            // (near-empty) .page-tags and every relation would wrongly show
+            // as unmatched.
+            if (Lib.settings.bbp_enable_relation_tag_warnings) {
+              const tagLinks   = [...(doc.querySelector('.page-tags')?.querySelectorAll('a[href]') ?? [])];
+              const actualTags = new Set(tagLinks.map(a => a.textContent.trim().toLowerCase()));
+              if (onstageResult) for (const t of onstageResult.tags) actualTags.add(t);
+              const unmatchedRelationNames = new Set(
+                checkOnStageRelationTags(doc, eventTabMap, actualTags, eventType)
+                  .filter(r => !r.matchedTag)
+                  .flatMap(r => r.names.map(n => n.toLowerCase()))
+              );
+              if (unmatchedRelationNames.size > 0) {
+                processedDiv.querySelectorAll('.bb-rel-name').forEach(a => {
+                  const name = a.textContent.trim();
+                  if (unmatchedRelationNames.has(name.toLowerCase())) {
+                    a.after(makeTagWarningGlyph(`No tag found for relation "${name}" on this event's DETAIL page.`));
+                  }
+                });
+              }
+            }
+          }
         }
       }
 
@@ -4273,7 +4321,7 @@
       el.querySelectorAll('[data-detail-song]').forEach(node => {
         const detailSong = node.dataset.detailSong;
         if (detailSong && unmatchedSongNames.has(detailSong.toLowerCase())) {
-          node.after(makeSetlistSongTagWarningGlyph(`No tag found for setlist song "${detailSong}" on this event's DETAIL page.`));
+          node.after(makeTagWarningGlyph(`No tag found for setlist song "${detailSong}" on this event's DETAIL page.`));
         }
       });
     }
@@ -9999,7 +10047,7 @@
 
       if (setlistAnchorByName) {
         const a = setlistAnchorByName.get(r.song.toLowerCase());
-        if (a) a.after(makeSetlistSongTagWarningGlyph(msg));
+        if (a) a.after(makeTagWarningGlyph(msg));
       }
     }
 
@@ -11046,14 +11094,16 @@
   }
 
   /**
-   * Builds a ⚠️ warning glyph span for a setlist song lacking a tag, matching
-   * the style of flagFeaturedIconIfTagMissing's icon. Gated behind
-   * bbp_enable_setlist_tag_warnings (default off) at both call sites (DETAIL
-   * page's Setlist tab, YEAR page's inline setlist).
+   * Builds a ⚠️ warning glyph span for a setlist song or relation name
+   * lacking a tag, matching the style of flagFeaturedIconIfTagMissing's
+   * icon. Gated behind bbp_enable_setlist_tag_warnings (setlist songs,
+   * DETAIL page's Setlist tab + YEAR page's inline setlist) or
+   * bbp_enable_relation_tag_warnings (relation names, YEAR page's
+   * .bb-relations-flat/.bb-relations-list) at each call site.
    * @param {string} msg
    * @returns {HTMLSpanElement}
    */
-  function makeSetlistSongTagWarningGlyph(msg) {
+  function makeTagWarningGlyph(msg) {
     const warn = document.createElement('span');
     warn.className = 'bb-glyph bb-icon-sorry';
     warn.textContent = ' ⚠️';
@@ -11895,7 +11945,7 @@
       .bb-song-tab-btn.bb-icon-active { background: #4a90d9; color: #fff; border-color: #357abd; }
       .bb-song-tab-label { flex-shrink: 0; font-size: 0.78em; color: #888; font-style: italic; max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #bb-fetch-all-btn  { margin: 6px 6px 2px 0; }
-      #bb-year-progress  { color: #666; font-style: italic; margin: 0; font-size: 0.9em; font-family: monospace; }
+      #bb-year-progress  { color: #666; font-style: italic; margin: 0; font-size: 1.15em; font-family: monospace; }
 
       /* SmartTable trigger button inside our bar — match .bb-toggle-btn appearance */
       #bb-btn-container .st-btn-trigger {
