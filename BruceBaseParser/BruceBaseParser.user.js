@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.25
+// @version      3.28
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -610,6 +610,21 @@
           type: 'checkbox',
           default: true,
           description: 'On the DETAIL page, append a ⚠️ to the event\'s first tab label ("On Stage"/"In Studio"/"On Audio"/"On Set") when any relation listed there has no matching tag, or color it green when everything matches.'
+      },
+
+      // ============================================================
+      // TAG SOURCE HIGHLIGHT SECTION
+      // ============================================================
+      divider_tag_source_highlight: {
+          type: 'divider',
+          label: '🔍 TAG SOURCE HIGHLIGHT'
+      },
+
+      bbp_enable_tag_source_highlight: {
+          label: 'Highlight Tag Source on Hover',
+          type: 'checkbox',
+          default: false,
+          description: 'On DETAIL/VENUE/RETAIL/SONG/RELATION pages, hovering a verified (green) tag also draws a green box around the tag itself and, when its on-page source is identifiable (e.g. a matching setlist song, an "On Stage"/"In Studio"/"On Audio"/"On Set" relation name, a page title, a "Commercially Released" date, or a "Bands"/"Members" name), around that source too.'
       },
 
       // ============================================================
@@ -6230,7 +6245,7 @@
    * @param {boolean}     [preferDottedTag] - Report the dotted tag (not the
    *   plain one) as the expected/missing tag when this name is one of
    *   ESTREETBAND_DOTTED_TAG_OVERRIDES and neither form is present.
-   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: 'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'estreetband-dotted'|'override'|null}}
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: 'exact'|'the-stripped'|'suffix-stripped'|'nickname-stripped'|'estreetband-dotted'|'override'|null, names: string[]}}
    */
   function checkSingleRelationName(name, actualTags, preferDottedTag = false) {
     const theStripped = name.replace(/^the\s+/i, '');
@@ -6252,14 +6267,14 @@
       if (isTagPresent(c.tag, actualTags)) { match = c; break; }
     }
     if (match) {
-      return { label: `Relation: ${name}`, candidateTag: match.tag, matchedTag: match.tag, method: match.method };
+      return { label: `Relation: ${name}`, candidateTag: match.tag, matchedTag: match.tag, method: match.method, names: [name] };
     }
     const overrideTag = RELATION_TAG_ALIAS_OVERRIDES[name.toLowerCase().trim()];
     if (overrideTag && isTagPresent(overrideTag, actualTags)) {
-      return { label: `Relation: ${name}`, candidateTag: overrideTag, matchedTag: overrideTag, method: 'override' };
+      return { label: `Relation: ${name}`, candidateTag: overrideTag, matchedTag: overrideTag, method: 'override', names: [name] };
     }
     const fallbackTag = (preferDottedTag && dottedTag) ? dottedTag : candidates[0].tag;
-    return { label: `Relation: ${name}`, candidateTag: fallbackTag, matchedTag: null, method: null };
+    return { label: `Relation: ${name}`, candidateTag: fallbackTag, matchedTag: null, method: null, names: [name] };
   }
 
   /**
@@ -6275,7 +6290,7 @@
    * @param {string}      name
    * @param {Set<string>} actualTags
    * @param {boolean}     [preferDottedTag] - See checkSingleRelationName.
-   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null}[]}
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null, names: string[]}[]}
    */
   function checkRelationNameTags(name, actualTags, preferDottedTag = false) {
     const ampM = name.match(/^(.+?)\s*&\s*(.+)$/);
@@ -6285,7 +6300,7 @@
     if (partA.matchedTag && partB.matchedTag) return [partA, partB];
     const combinedTag = relationTagSlug(name.replace(/^the\s+/i, '').replace(/\s*&\s*/g, ''));
     if (isTagPresent(combinedTag, actualTags)) {
-      return [{ label: `Relation: ${name}`, candidateTag: combinedTag, matchedTag: combinedTag, method: 'ampersand-combined' }];
+      return [{ label: `Relation: ${name}`, candidateTag: combinedTag, matchedTag: combinedTag, method: 'ampersand-combined', names: [ampM[1].trim(), ampM[2].trim()] }];
     }
     return [partA, partB];
   }
@@ -6343,7 +6358,7 @@
    *   (e.g. "gig", "interview"). Used to suppress the "On Stage" tab's
    *   fixedTag expectation for interview pages, and to scope the dotted-tag
    *   preference to gig/rehearsal pages only.
-   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null, tabLabel: string}[]}
+   * @returns {{label: string, candidateTag: string, matchedTag: string|null, method: string|null, tabLabel: string, names: string[]}[]}
    */
   function checkOnStageRelationTags(doc, tabMap, actualTags, eventType) {
     const tabEntry = Object.entries(RELATION_TAB_CONFIGS).find(([label]) => tabMap.has(label));
@@ -6360,6 +6375,7 @@
         matchedTag: isTagPresent(config.fixedTag, actualTags) ? config.fixedTag : null,
         method: 'fixed',
         tabLabel,
+        names: [], // no single relation — tab-wide fixed tag, no artefact to highlight
       });
     }
     const guestNames = extractGuestMarkedRelationNames(doc);
@@ -6372,6 +6388,7 @@
         matchedTag: isTagPresent('guest', actualTags) ? 'guest' : null,
         method: 'guest',
         tabLabel,
+        names: guestNames,
       });
     }
     for (const name of relationNames) {
@@ -7560,13 +7577,73 @@
   }
 
   /**
+   * Returns the live #page-title <h1> (or the #page-title container itself
+   * as a fallback), for the tag-source-highlight feature's "whole title"
+   * artefact (bbp_enable_tag_source_highlight) — used wherever a matched tag
+   * was deduced from the page's own title (event-name/venue-name location
+   * parts, a song page's exact-title-slug/derived-alias tag, etc.) rather
+   * than a specific sub-element, since the title isn't split into
+   * per-component spans.
+   * @param {Document} [doc=document]
+   * @returns {Element|null}
+   */
+  function getPageTitleElement(doc = document) {
+    return doc.querySelector('#page-title h1') || doc.getElementById('page-title');
+  }
+
+  /**
+   * Wires a verified tag <a> (already marked .bb-tag-ok by
+   * markPassingTagLinks) so hovering it also draws a highlight box around
+   * the tag itself and around the "source" element(s) it was verified
+   * against (e.g. the matching setlist song or relation name). Deliberately
+   * does NOT switch tabs to reveal a hidden source — an earlier version
+   * did (via a click-simulated tab switch), but hovering between tags
+   * belonging to different tabs made the page constantly jump tabs, losing
+   * scroll position/focus; the box on a hidden source now sits inert in the
+   * DOM until the user switches tabs themselves. No-op when `source` is
+   * null/empty. The listener bodies are wrapped in try/catch: a failure
+   * here must never take down the rest of the page's tag annotation (only
+   * this optional hover effect).
+   * @param {HTMLAnchorElement} tagEl
+   * @param {Element|Element[]} source
+   */
+  function wireTagSourceHighlight(tagEl, source) {
+    const sources = (Array.isArray(source) ? source : [source]).filter(Boolean);
+    if (!sources.length) return;
+    tagEl.addEventListener('mouseenter', () => {
+      try {
+        tagEl.classList.add('bb-tag-hover-highlight');
+        for (const el of sources) el.classList.add('bb-tag-source-highlight');
+      } catch (e) {
+        logErr('wireTagSourceHighlight/mouseenter', e);
+      }
+    });
+    tagEl.addEventListener('mouseleave', () => {
+      try {
+        tagEl.classList.remove('bb-tag-hover-highlight');
+        for (const el of sources) el.classList.remove('bb-tag-source-highlight');
+      } catch (e) {
+        logErr('wireTagSourceHighlight/mouseleave', e);
+      }
+    });
+  }
+
+  /**
    * Styles tag <a> links that passed their consistency check in green and
    * sets a native title tooltip explaining what was verified (single-line
    * message — native tooltip only, no custom rich tooltip needed).
+   * Optionally (bbp_enable_tag_source_highlight) also wires a hover
+   * highlight around the tag and its verification source(s) — see
+   * wireTagSourceHighlight. Used wherever a single source (or one shared by
+   * every link in `links`) applies; a batch covering tags with different
+   * sources instead layers wireTagSourceHighlight directly on top after the
+   * call (see e.g. annotateRetailPageTags/annotateRelationPageTags).
    * @param {HTMLAnchorElement[]}     links - Tag links confirmed to match their expected condition.
    * @param {(tag: string) => string} msgFn - Builds the explanatory tooltip message for a tag.
+   * @param {Element|Element[]|null} [sourceEl] - The on-page verification
+   *   source element(s) for every link in `links`, when identifiable.
    */
-  function markPassingTagLinks(links, msgFn) {
+  function markPassingTagLinks(links, msgFn, sourceEl = null) {
     for (const a of links) {
       const tag = a.textContent.trim().toLowerCase();
       a.classList.add('bb-tag-ok');
@@ -7574,6 +7651,9 @@
       a.style.fontWeight = 'bold';
       a.style.cursor = 'help';
       a.title = msgFn(tag);
+      if (sourceEl && Lib.settings.bbp_enable_tag_source_highlight) {
+        wireTagSourceHighlight(a, sourceEl);
+      }
     }
   }
 
@@ -9281,6 +9361,31 @@
     });
     markPassingTagLinks(passingLinks, tag => passingTagMsg(tag, expectedTags, tourCheck));
 
+    // Tag-source-highlight artefact lookups (bbp_enable_tag_source_highlight)
+    // — only built when the setting is on, since each is an extra DOM scan.
+    // Wrapped in try/catch: any failure resolving an optional highlight
+    // source must never break the tag annotation that follows.
+    const highlightOn = Lib.settings.bbp_enable_tag_source_highlight;
+    let songAnchorByName = null;
+    let relationElByName = null;
+    if (highlightOn) {
+      try {
+        songAnchorByName = new Map([...(getSetlistContainer(document)?.querySelectorAll('a[href^="/song:"]') ?? [])]
+          .map(a => [a.textContent.trim().toLowerCase(), a]));
+        relationElByName = new Map();
+        for (const group of extractRelations(document)) {
+          for (const item of group.items) {
+            relationElByName.set(item.name.toLowerCase(), item.el);
+            for (const m of item.members) relationElByName.set(m.name.toLowerCase(), m.el);
+          }
+        }
+      } catch (e) {
+        logErr('annotateDetailPageTags/tag-source-highlight setup', e);
+        songAnchorByName = null;
+        relationElByName = null;
+      }
+    }
+
     // Setlist song → tag check: every song in the Setlist tab should have a
     // corresponding tag (exact match, derived alias, or manual override).
     const songResults   = checkSetlistSongTags(detailSections, actualTags);
@@ -9289,7 +9394,8 @@
     const songMethodLabel = { exact: 'exact match', alias: 'derived alias', override: 'manual override', combination: 'song combination override' };
     for (const r of matchedSongs) {
       const a = tagToAnchor.get(r.matchedTag);
-      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches setlist song "${r.song}" (${songMethodLabel[r.method]})`);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches setlist song "${r.song}" (${songMethodLabel[r.method]})`,
+        songAnchorByName?.get(r.song.toLowerCase()) ?? null);
     }
 
     // Event-name → tag check: venue/city/state/country parts of the page
@@ -9307,7 +9413,8 @@
     // "On Stage"/"In Studio" tab relation matches (computed earlier, before spurious/passing).
     for (const r of relationResults.filter(res => res.matchedTag)) {
       const a = tagToAnchor.get(r.matchedTag);
-      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label} — ${relationMethodLabel(r.method, r.tabLabel)}`);
+      const sources = relationElByName ? r.names.map(n => relationElByName.get(n.toLowerCase())).filter(Boolean) : null;
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label} — ${relationMethodLabel(r.method, r.tabLabel)}`, sources);
     }
 
     // Fuzzy substring tag check: generic tags (FUZZY_SUBSTRING_TAGS) that are
@@ -9470,13 +9577,17 @@
     });
 
     // Venue-name → tag check: venue/city/state/country parts of the venue
-    // page's own title should each have a corresponding tag.
+    // page's own title should each have a corresponding tag. No per-
+    // component split exists in #page-title, so the whole title element is
+    // used as a best-effort tag-source-highlight artefact for all of them.
+    const highlightOn = Lib.settings.bbp_enable_tag_source_highlight;
+    const titleEl = highlightOn ? getPageTitleElement() : null;
     const locationResults    = checkVenuePageLocationTags(venueName, actualTags);
     const matchedLocations   = locationResults.filter(r => r.matchedTag);
     const unmatchedLocations = locationResults.filter(r => !r.matchedTag);
     for (const r of matchedLocations) {
       const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.matchedTag);
-      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches venue ${r.label}`);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches venue ${r.label}`, titleEl);
     }
 
     // Fuzzy substring tag check: generic tags (FUZZY_SUBSTRING_TAGS) that are
@@ -9688,6 +9799,21 @@
       return describeDateTag(tag, 'verified') || `Tag "${tag}" verified: matches the "Commercially Released" date`;
     });
 
+    // Tag-source-highlight (bbp_enable_tag_source_highlight): only date tags
+    // (month/day/year) have an identifiable single source — the
+    // "Commercially Released:" <pre><code> metadata block — so this is
+    // layered on top of the generic marking above (which covers every
+    // passing tag, including "retail"/letter/"underconstruction", with no
+    // source) rather than threaded through it.
+    if (Lib.settings.bbp_enable_tag_source_highlight) {
+      const codeEl = document.querySelector('div.code pre code, pre code');
+      if (codeEl) {
+        for (const a of passingLinks) {
+          if (describeDateTag(a.textContent.trim().toLowerCase(), 'verified')) wireTagSourceHighlight(a, codeEl);
+        }
+      }
+    }
+
     if (missingTags.length === 0 && spuriousLinks.length === 0) {
       const okWrapper = document.createElement('div');
       okWrapper.className = 'bb-tags-box';
@@ -9812,18 +9938,23 @@
       ? 'Tag "underconstruction" verified: page shows the "Under Construction" banner'
       : `Tag "${tag}" verified: matches the first letter of song title "${songName}"`);
 
+    // Tag-source-highlight (bbp_enable_tag_source_highlight): both title-
+    // derived tags below share the whole title element as their artefact,
+    // same "no per-component split" reasoning as the DETAIL/VENUE location check.
+    const titleEl = Lib.settings.bbp_enable_tag_source_highlight ? getPageTitleElement() : null;
+
     // Exact-title-slug tag: a hard requirement, e.g. "BORN TO RUN" -> "borntorun".
     const exactCheck = checkSongExactTitleTag(songName, actualTags);
     if (exactCheck.matchedTag) {
       const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === exactCheck.matchedTag);
-      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches the song title "${songName}" (lowercase, punctuation stripped)`);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches the song title "${songName}" (lowercase, punctuation stripped)`, titleEl);
     }
 
     // Derived-alias tag: recognized (but not required) — e.g. "BORN TO RUN" -> "btr".
     const aliasCheck = checkSongAliasTagRecognition(songName, actualTags, exactCheck.tag);
     if (aliasCheck && aliasCheck.matchedTag) {
       const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === aliasCheck.matchedTag);
-      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" recognized: matches the derived first-letter-per-word alias of song title "${songName}"`);
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" recognized: matches the derived first-letter-per-word alias of song title "${songName}"`, titleEl);
     }
 
     // Fuzzy substring tag check: generic tags (FUZZY_SUBSTRING_TAGS) that are
@@ -10178,6 +10309,17 @@
       expectedNameTags.has(a.textContent.trim().toLowerCase())
     );
     markPassingTagLinks(passingNameLinks, tag => expectedNameTags.get(tag).message);
+
+    // Tag-source-highlight (bbp_enable_tag_source_highlight): each name tag
+    // has its own source band/member link(s) (expectedNameTags's `links`) —
+    // heterogeneous per tag, so layered on top via a follow-up loop rather
+    // than threaded through the batch markPassingTagLinks call above.
+    if (Lib.settings.bbp_enable_tag_source_highlight) {
+      for (const a of passingNameLinks) {
+        const info = expectedNameTags.get(a.textContent.trim().toLowerCase());
+        if (info?.links?.length) wireTagSourceHighlight(a, info.links);
+      }
+    }
 
     // Colorize each verified tag's own source band/member name link(s) on
     // the "Bands"/"Members" tab (e.g. "The Rogues", "Bittan, Roy") green.
@@ -11232,6 +11374,19 @@
 
       /* Tag that passed its consistency check (DETAIL/VENUE/RETAIL/SONG/RELATION pages) */
       .bb-tag-ok { color: #2a2 !important; font-weight: bold; cursor: help; }
+
+      /* bbp_enable_tag_source_highlight: hovering a verified (.bb-tag-ok)
+         tag draws this box around the tag itself, and — via
+         wireTagSourceHighlight — the same box around the on-page source
+         element(s) it was verified against. outline (not border) so it
+         never affects layout/reflows the surrounding text. */
+      .bb-tag-hover-highlight,
+      .bb-tag-source-highlight {
+        outline: 2px solid #2a2;
+        outline-offset: 1px;
+        border-radius: 3px;
+      }
+      .bb-tag-source-highlight { background: rgba(42, 170, 42, 0.12); }
 
       /* RELATION page: a band/member name link under the "Bands"/"Members"
          tab whose derived tag is verified present in .page-tags. Also used

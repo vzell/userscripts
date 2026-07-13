@@ -1,5 +1,41 @@
 [
     {
+        "version": "3.28",
+        "date": "2026-07-13",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Extended the tag source highlight feature (bbp_enable_tag_source_highlight) to the remaining four tags-box pages, previously DETAIL-only: VENUE (venue-name location tags -> the page title, no per-component split), RETAIL (month/day/year tags -> the \"Commercially Released:\" <pre><code> metadata block), SONG (exact-title/derived-alias tags -> the page title), and RELATION (each Bands/Members name tag -> its own source name link(s), the same expectedNameTags.links already used for the adjacent green-coloring loop). RETAIL and RELATION cover tags with heterogeneous sources in one batch, so their highlight wiring is layered on top of the existing markPassingTagLinks call via a direct wireTagSourceHighlight loop rather than threaded through it. Added getPageTitleElement, a small shared helper for the \"whole title\" artefact reused by VENUE and SONG."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.27",
+        "date": "2026-07-13",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Removed the automatic tab switch (ensureTabVisible) from the tag source highlight feature's hover handler (bbp_enable_tag_source_highlight): it was jumping between tabs whenever the mouse crossed between tags belonging to different tabs, losing scroll position/focus. The highlight box on a source in a currently-hidden tab now just sits inert in the DOM until the tab is switched manually - only the visible highlight behavior changed, the source-resolution logic (setlist song / relation name lookup) is unchanged."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.26",
+        "date": "2026-07-13",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added an opt-in \"tag source highlight\" feature (bbp_enable_tag_source_highlight, default false, new \"🔍 TAG SOURCE HIGHLIGHT\" configSchema section), scoped to the DETAIL page for now: hovering a verified (green) tag whose source is a matching setlist song or an \"On Stage\"/\"In Studio\"/\"On Audio\"/\"On Set\" relation name now also draws a green outline box around the tag and around that source, switching to its tab first (new ensureTabVisible, reusing restorePaginatedTab's click-simulation approach) if it's currently hidden. Wired via a new optional sourceEl parameter on markPassingTagLinks. checkSingleRelationName/checkRelationNameTags/checkOnStageRelationTags now also return a names field per result, needed to resolve a matched relation tag back to its source name link(s). The hover-listener bodies (wireTagSourceHighlight) are wrapped in try/catch so a failure in this optional feature can never break the surrounding tag annotation. Superseded a broader but broken same-named feature briefly present in an uncommitted 3.26 that took down the tags box, Setlist tab coloring, and title glyphs/alias/tour-name on affected pages - this version is deliberately narrower in scope and defensively wrapped."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.25",
         "date": "2026-07-13",
         "sections": [

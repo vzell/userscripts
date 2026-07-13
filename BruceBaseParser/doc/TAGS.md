@@ -265,10 +265,11 @@ rendered green, in addition to the existing red (missing) / orange (spurious)
 handling. This lets the user see that a consistency check was performed and
 passed, without needing to open a panel or hunt for a ⚠️.
 
-- **Live pages** (DETAIL/VENUE/RETAIL/SONG/RELATION): `markPassingTagLinks(links, msgFn)`
+- **Live pages** (DETAIL/VENUE/RETAIL/SONG/RELATION): `markPassingTagLinks(links, msgFn, sourceEl)`
   adds the `.bb-tag-ok` class, sets inline `color:#2a2; font-weight:bold`, and
   wires a `mouseenter`/`mouseleave` pair that shows the rich floating tooltip
-  (`showOkTooltip`, styled with `.bb-ok`) via `msgFn(tag)`.
+  (`showOkTooltip`, styled with `.bb-ok`) via `msgFn(tag)`. The optional third
+  parameter, `sourceEl`, wires the "tag source highlight" hover feature below.
 - **YEAR page panels** (`addTagsButton` / `addVenueTagsButton` / `addSongTagsButton`):
   the tag `<a>` element (from the fetched `Document`) gets the same inline
   style plus a native `title` attribute — no custom tooltip wiring, since the
@@ -282,6 +283,65 @@ passed, without needing to open a panel or hunt for a ⚠️.
 - Marking happens **unconditionally**, before the missing/spurious early-return
   in each `annotate*PageTags` function — so a fully clean `.page-tags` block
   still gets its tags colored green, even though no warning box is drawn.
+
+---
+
+## Tag source highlight (`bbp_enable_tag_source_highlight`, default `false`)
+
+Opt-in (checkbox, "🔍 TAG SOURCE HIGHLIGHT" configSchema section). Started
+DETAIL-only (after a broader first attempt covering all five tag-box pages
+plus event-name/alias/notes sources broke other DETAIL-page annotations —
+see the CHANGELOG's 3.26 entry) and was then extended to VENUE/RETAIL/SONG/
+RELATION once the DETAIL-only version was confirmed solid (3.28 entry).
+When on, hovering a verified (`.bb-tag-ok`) tag whose source is currently
+identifiable also draws a green outline box (`.bb-tag-hover-highlight`)
+around the tag itself and the same box (`.bb-tag-source-highlight`) around
+that source. Deliberately does **not** switch tabs to reveal a hidden source
+(e.g. DETAIL's "Setlist" tab, or the "On Stage"/"In Studio"/"On Audio"/"On
+Set" first tab) — an earlier version did this via a click-simulated tab
+switch, but hovering between tags belonging to different tabs made the page
+constantly jump tabs, losing scroll position/focus; the box on a hidden
+source now just sits inert in the DOM until the user switches tabs
+themselves.
+
+**Source resolution, per page** (each `annotate*PageTags` builds its own
+lookup(s) only when the setting is on; DETAIL's are wrapped in try/catch so
+a lookup failure can't break the rest of the tag annotation):
+- **DETAIL — setlist song tags**: the song's own `<a href="/song:…">` in the
+  live Setlist tab, looked up by name (`songAnchorByName`).
+- **DETAIL — "On Stage"/"In Studio"/"On Audio"/"On Set" relation tags**: the
+  matching relation name link(s) in `extractRelations(document)`
+  (`relationElByName`), resolved via each result's `names: string[]` field
+  (added to
+  `checkSingleRelationName`/`checkRelationNameTags`/`checkOnStageRelationTags`
+  specifically for this feature) — empty for the tab-wide `'fixed'` method
+  (no single relation to point at), one name for a plain match, two for
+  `'ampersand-combined'`/multi-name `'guest'`.
+- **VENUE — location tags**: no per-component split exists in `#page-title`
+  (see "Event-name / venue-name location tag check" above), so the whole
+  title element (`getPageTitleElement`) is used as a best-effort artefact
+  for every venue/city/state/country tag alike.
+- **RETAIL — month/day/year tags**: the single `<pre><code>` metadata block
+  (`parseRetailReleaseDates`'s source), shared by every date tag. The
+  batch's other passing tags (`retail`/letter/`underconstruction`) have no
+  single source, so the highlight is layered on top via a direct
+  `wireTagSourceHighlight` loop (checking `describeDateTag(tag, 'verified')`
+  per tag) rather than threaded through the one `markPassingTagLinks` call
+  that sets every passing tag's message.
+- **SONG — exact-title/derived-alias tags**: the whole title element
+  (`getPageTitleElement`), same reasoning as VENUE.
+- **RELATION — Bands/Members name tags**: `computeExpectedRelationNameTags()`'s
+  `info.links` (the real name link(s) for that specific tag) — heterogeneous
+  per tag, so also layered on top via a direct `wireTagSourceHighlight` loop
+  after the batch `markPassingTagLinks` call, reusing the same `links` the
+  adjacent unconditional green-coloring loop already uses.
+- Every other passing-tag call site (generic managed tags on any page;
+  DETAIL's event-name-location/alias/notes checks) still simply omits
+  `sourceEl` — not yet extended to those.
+
+**No cache-reload persistence yet**: unlike other listener types in this
+file, the `mouseenter`/`mouseleave` pair wired here is not currently restored
+after a 📂 Load — a known limitation rather than an oversight.
 
 ---
 
