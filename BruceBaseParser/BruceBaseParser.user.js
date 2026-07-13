@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.30
+// @version      3.31
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -624,7 +624,7 @@
           label: 'Highlight Tag Source on Hover',
           type: 'checkbox',
           default: false,
-          description: 'On DETAIL/VENUE/RETAIL/SONG/RELATION pages, hovering a verified (green) tag also draws a green box around the tag itself and, when its on-page source is identifiable (e.g. a matching setlist song, an "On Stage"/"In Studio"/"On Audio"/"On Set" relation name, a page title, a "Commercially Released" date, or a "Bands"/"Members" name), around that source too.'
+          description: 'On DETAIL/VENUE/RETAIL/SONG/RELATION pages, hovering a verified (green) tag also draws a green box around the tag itself and, when its on-page source is identifiable (e.g. a matching setlist song, an "On Stage"/"In Studio"/"On Audio"/"On Set" relation name, a page title, a "Commercially Released" date, or a "Bands"/"Members" name), around that source too. On YEAR pages, the same applies inside each event\'s own "Tags" panel, highlighting the source within that event\'s own section.'
       },
 
       // ============================================================
@@ -7697,10 +7697,36 @@
   }
 
   /**
-   * Live-DOM counterpart to extractPageNotes: returns the actual top-level
-   * #page-content children (before the first .yui-navset) whose own text
-   * contains the given (lowercase) substring — for the tag-source-highlight
-   * feature's FUZZY_SUBSTRING_TAGS notes-match artefact resolution. Unlike
+   * Descends into `el`'s own children to find the deepest/most specific
+   * descendant that still contains `substringLower` in its `textContent`,
+   * stopping as soon as no child does — i.e. `el` itself, once none of its
+   * children contain the match. Needed because BruceBase wraps virtually
+   * all free-text content in nested `<div class="list-pages-box"><div
+   * class="list-pages-item">...</div></div>` wrappers, whose OWN direct
+   * text-node children are empty (all real text lives 2+ levels deeper) —
+   * `wrapTextSubstring` only ever scans a parent's direct text nodes (by
+   * design), so handing it one of these outer wrapper divs always silently
+   * fails to find anything. Used by both findPageNotesSourceElements and
+   * findYearEventNotesSourceElements.
+   * @param {Element} el
+   * @param {string}  substringLower
+   * @returns {Element}
+   */
+  function findDeepestTextContainer(el, substringLower) {
+    for (const child of el.children) {
+      if ((child.textContent || '').toLowerCase().includes(substringLower)) {
+        return findDeepestTextContainer(child, substringLower);
+      }
+    }
+    return el;
+  }
+
+  /**
+   * Live-DOM counterpart to extractPageNotes: returns the deepest elements
+   * (see findDeepestTextContainer) among the actual top-level #page-content
+   * children (before the first .yui-navset) whose own text contains the
+   * given (lowercase) substring — for the tag-source-highlight feature's
+   * FUZZY_SUBSTRING_TAGS notes-match artefact resolution. Unlike
    * extractPageNotes, these are the live elements themselves, not detached
    * clones.
    * @param {Document} doc
@@ -7713,7 +7739,37 @@
     const matches = [];
     for (const child of pageContent.children) {
       if (child.classList.contains('yui-navset')) break;
-      if ((child.textContent || '').toLowerCase().includes(substringLower)) matches.push(child);
+      if ((child.textContent || '').toLowerCase().includes(substringLower)) {
+        matches.push(findDeepestTextContainer(child, substringLower));
+      }
+    }
+    return matches;
+  }
+
+  /**
+   * YEAR-page counterpart to findPageNotesSourceElements: unlike the DETAIL
+   * page (where the free-text notes preamble lives in #page-content, wholly
+   * separate from the .yui-navset tab widget), the YEAR page embeds an
+   * event's entire native write-up — heading, setlist, notes prose, "Help
+   * Us" icon, etc. — as flat sibling children of one .bb-section-processed,
+   * with no boundary marker distinguishing "notes" from the rest. Skips this
+   * script's own injected UI (bb-* rows/panels) and any child containing a
+   * setlist song ([data-detail-song]), so a song name mentioning a
+   * FUZZY_SUBSTRING_TAGS word can't be mistaken for prose.
+   * @param {Element} section - .bb-section-processed for one event.
+   * @param {string}  substringLower
+   * @returns {Element[]}
+   */
+  function findYearEventNotesSourceElements(section, substringLower) {
+    const skipClasses = ['bb-event-heading', 'bb-scheduled', 'bb-relations-flat', 'bb-relations-list',
+      'bb-event-tab-row', 'bb-venue-tab-row', 'bb-song-tab-row', 'bb-relation-tab-row', 'bb-icon-panel'];
+    const matches = [];
+    for (const child of section.children) {
+      if (skipClasses.some(c => child.classList.contains(c))) continue;
+      if (child.querySelector('[data-detail-song]')) continue;
+      if ((child.textContent || '').toLowerCase().includes(substringLower)) {
+        matches.push(findDeepestTextContainer(child, substringLower));
+      }
     }
     return matches;
   }
@@ -8469,6 +8525,16 @@
     const aliasResults         = checkAliasSubstringTags(eventAlias, actualTags);
     const matchedAliasByTag    = new Map(aliasResults.map(r => [r.tag, r]));
 
+    // Notes-substring tag check: same FUZZY_SUBSTRING_TAGS table, checked
+    // against the fetched DETAIL page's free-text notes preamble instead of
+    // its alias (e.g. "benefit" matched by a notes paragraph mentioning
+    // "...Light Of Day Benefit."). Mirrors annotateDetailPageTags's
+    // notesResults check, previously missing here entirely — without it, a
+    // tag only verifiable via notes text (not the alias) was never
+    // recognized as passing on the YEAR page.
+    const notesResults      = checkNotesSubstringTags(extractPageNotesText(doc), actualTags);
+    const matchedNotesByTag = new Map(notesResults.map(r => [r.tag, r]));
+
     // Merge existing tag links (with spurious/passing flag) + missing placeholders → sorted.
     const existingItems = tagLinks.map(a => {
       const tag         = a.textContent.trim().toLowerCase();
@@ -8476,8 +8542,9 @@
       const locationMatch = matchedLocationsByTag.get(tag);
       const relationMatch = matchedRelationsByTag.get(tag);
       const aliasMatch  = matchedAliasByTag.get(tag);
+      const notesMatch  = matchedNotesByTag.get(tag);
       const spurious    = isManagedTag(tag) && !isTagPresent(tag, expectedTags) && !relationMatch;
-      const passing     = (isManagedTag(tag) && isTagPresent(tag, expectedTags)) || !!songMatch || !!locationMatch || !!relationMatch || !!aliasMatch;
+      const passing     = (isManagedTag(tag) && isTagPresent(tag, expectedTags)) || !!songMatch || !!locationMatch || !!relationMatch || !!aliasMatch || !!notesMatch;
       if (passing) {
         a.style.color = '#2a2';
         a.style.fontWeight = 'bold';
@@ -8489,6 +8556,8 @@
           ? `Tag "${tag}" verified: ${relationMatch.label} — ${relationMethodLabel(relationMatch.method, relationMatch.tabLabel)}`
           : aliasMatch
           ? `Tag "${tag}" verified: ${aliasMatch.label}`
+          : notesMatch
+          ? `Tag "${tag}" verified: ${notesMatch.label}`
           : passingTagMsg(tag, expectedTags, tourCheck);
       }
       return { tag, html: a.outerHTML, missing: false, spurious, tooltip: spurious ? spuriousTagMsg(tag, expectedTags, tourCheck) : '' };
@@ -8532,6 +8601,168 @@
       return { tag, html: `<a href="/system:page-tags/tag/${esc(tag)}#pages" class="bb-tag-onstage" title="${esc(`Tag "${tag}" found on the companion "On Stage" page (${onstageResult.url})`)}">${esc(tag)}</a>`,
         missing: false, spurious: false, tooltip: '' };
     });
+
+    // Tag-source-highlight (bbp_enable_tag_source_highlight): live-DOM
+    // counterpart to annotateDetailPageTags's highlightOn block (see
+    // doc/TAGS.md), resolving each verified tag's on-page source against
+    // THIS event's own live YEAR-page elements (eventLink/section) instead
+    // of the fetched `doc`. Built lazily by buildYearTagSourceMap() below,
+    // called at first panel-open time rather than here — addTagsButton runs
+    // from wireIconHandlers, which processOneYearEvent calls BEFORE
+    // renderYearSetlist/injectEventRelations render the setlist/relation
+    // blocks into `section`, so building this map eagerly here would find
+    // no setlist/relation elements yet. By the time a user can actually
+    // click the button, that event's whole processing pipeline has long
+    // finished, so section/eventLink are guaranteed fully rendered.
+    const highlightOn = Lib.settings.bbp_enable_tag_source_highlight;
+
+    /**
+     * Builds the tag -> Element|Element[] source map for this event's Tags
+     * panel (see the highlightOn comment above for why this runs lazily).
+     * Wrapped in try/catch by the caller — a resolution failure here must
+     * never break the Tags button itself.
+     */
+    function buildYearTagSourceMap() {
+      const tagSourceMap = new Map();
+
+      const songAnchorByName = new Map([...section.querySelectorAll('[data-detail-song]')]
+        .map(el => [el.dataset.detailSong.toLowerCase(), el]));
+
+      // .bb-rel-name appears twice per relation (visible .bb-relations-flat
+      // + hidden .bb-relations-list), so collect into arrays — both get
+      // boxed on hover, same as wireTagSourceHighlight's multi-source support.
+      const relationElByName = new Map();
+      const guestElByName    = new Map();
+      for (const a of section.querySelectorAll('.bb-rel-name')) {
+        const name = a.textContent.trim().toLowerCase();
+        if (!relationElByName.has(name)) relationElByName.set(name, []);
+        relationElByName.get(name).push(a);
+        if (a.nextElementSibling?.classList.contains('bb-rel-extra')) {
+          if (!guestElByName.has(name)) guestElByName.set(name, []);
+          guestElByName.get(name).push(a.nextElementSibling);
+        }
+      }
+
+      const dateSpan = wrapTextSubstring(eventLink, eventDate);
+      let dateTagMap = null;
+      if (dateSpan) {
+        const [yr, mo, dd] = eventDate.split('-');
+        const yearSpan  = wrapTextSubstring(dateSpan, yr);
+        const monthSpan = wrapTextSubstring(dateSpan, mo);
+        const daySpan   = wrapTextSubstring(dateSpan, dd);
+        dateTagMap = new Map();
+        dateTagMap.set(yr, yearSpan || dateSpan);
+        const moNum = parseInt(mo, 10);
+        if (moNum >= 1 && moNum <= 12) dateTagMap.set(MONTH_NAMES[moNum - 1], monthSpan || dateSpan);
+        dateTagMap.set(dd, daySpan || dateSpan);
+      }
+
+      // Venue/city/state/country substrings: wrapped within eventLink's own
+      // (untouched-until-now) text — parsed from eventLink's OWN text
+      // (yearRawName), not rawEventName (the DETAIL page's title used for
+      // the tag-check above): the YEAR page renders its own event link in
+      // ALL CAPS with a "- " separator between date and venue (e.g.
+      // "2016-01-00 - EXPO THEATER, FORT MONMOUTH, NJ"), neither of which
+      // match rawEventName's DETAIL-style "date, then a single space, then
+      // Title Case venue" format (e.g. "2016-01-00 Expo Theater, Fort
+      // Monmouth, NJ") — parseEventNameLocation's regex requires the latter,
+      // so reusing rawEventName here would find nothing to wrap. matchedTag
+      // lookups above stay anchored to rawEventName/DETAIL truth; only the
+      // highlight SOURCE is re-derived against what's actually on this page.
+      let venueLoc = null, venueStringSpan = null;
+      const yearRawName = eventLink.textContent.trim();
+      const venueM = yearRawName.match(/^\d{4}-\d{2}-\d{2}\s*-?\s*(.+)$/);
+      if (venueM) {
+        const withoutSuffix = venueM[1].replace(/\s*\((?:Early|Late|Afternoon|Evening)\)\s*$/i, '');
+        venueLoc = parseLocationParts(withoutSuffix.split(',').map(s => s.trim()).filter(Boolean));
+        venueStringSpan = wrapTextSubstring(eventLink, venueM[1]);
+      }
+
+      const eventTypeEl = section.querySelector('.bb-event-type');
+      const tourNameEl  = section.querySelector('.bb-year-tour-name');
+      const aliasEl     = section.querySelector('.bb-event-alias');
+      const helpIconEl  = section.querySelector('img.image[title="Help Us"]');
+      // Soundcheck section label: renderSetlistElement renders one
+      // <span class="bb-section-label"> per setlist section (e.g.
+      // "Show:"/"Soundcheck:"/"Recording:"), so filter by text rather than
+      // just taking the first one found.
+      const soundcheckEl = [...section.querySelectorAll('.bb-section-label')]
+        .find(s => /^soundcheck/i.test(s.textContent.trim())) || null;
+      // Every setlist song this event's diff-merge marked as a tour premiere
+      // (renderSetlistElement/renderMatchWithConnectives sets
+      // data-year-premiere="1" on the song's own name element).
+      const premiereEls = [...section.querySelectorAll('[data-year-premiere="1"]')];
+
+      for (const [tag, r] of matchedSongsByTag) {
+        const src = songAnchorByName.get(r.song.toLowerCase());
+        if (src) tagSourceMap.set(tag, src);
+      }
+      for (const [tag, r] of matchedLocationsByTag) {
+        if (!venueStringSpan) continue;
+        const src = resolveLocationSourceEl(r, venueLoc, venueStringSpan, venueStringSpan);
+        if (src) tagSourceMap.set(tag, src);
+      }
+      for (const [tag, r] of matchedRelationsByTag) {
+        const nameMap = r.method === 'guest' ? guestElByName : relationElByName;
+        const src = r.names.flatMap(n => nameMap.get(n.toLowerCase()) || []);
+        if (src.length) tagSourceMap.set(tag, src);
+      }
+      for (const [tag, r] of matchedAliasByTag) {
+        const src = aliasEl ? wrapFuzzyMatchSubstring(aliasEl, r.matched) : null;
+        if (src) tagSourceMap.set(tag, src);
+      }
+      for (const [tag, r] of matchedNotesByTag) {
+        const src = wrapFuzzyMatchSubstring(findYearEventNotesSourceElements(section, r.matched)[0], r.matched);
+        if (src) tagSourceMap.set(tag, src);
+      }
+
+      // Generic managed tags (date/weekday/event-type/tour): gated on
+      // isManagedTag+isTagPresent(expectedTags), same predicate
+      // existingItems uses for its "passing" flag, so a spurious tag that
+      // happens to equal e.g. a weekday name never gets wired as if verified.
+      if (eventTypeEl) {
+        const t = eventType.toLowerCase();
+        if (isManagedTag(t) && isTagPresent(t, expectedTags)) tagSourceMap.set(t, eventTypeEl);
+      }
+      if (dateTagMap) {
+        for (const [t, el] of dateTagMap) {
+          if (isManagedTag(t) && isTagPresent(t, expectedTags)) tagSourceMap.set(t, el);
+        }
+      }
+      if (dateSpan) {
+        for (const day of DAY_NAMES) {
+          if (isManagedTag(day) && isTagPresent(day, expectedTags)) tagSourceMap.set(day, dateSpan);
+        }
+      }
+      if (tourNameEl && tourCheck && !tourCheck.isTourNo) {
+        for (const t of tourCheck.expectedTags) {
+          if (TOUR_TAG_SET.has(t) && isManagedTag(t) && isTagPresent(t, expectedTags)) tagSourceMap.set(t, tourNameEl);
+        }
+      }
+      if (soundcheckEl && isManagedTag('soundcheck') && isTagPresent('soundcheck', expectedTags)) {
+        tagSourceMap.set('soundcheck', soundcheckEl);
+      }
+      // "prem" + whichever bare-number/"9+" tag matches the actual premiere
+      // count (TOUR_PREMIERE_TAG_VALUES) both point at the same set of
+      // premiere song elements — day-of-month tags never collide with these
+      // since BruceBase always zero-pads the day tag ("03") while premiere
+      // counts are always bare ("3").
+      if (premiereEls.length) {
+        for (const t of ['prem', ...TOUR_PREMIERE_TAG_VALUES]) {
+          if (isManagedTag(t) && isTagPresent(t, expectedTags)) tagSourceMap.set(t, premiereEls);
+        }
+      }
+      // "help" tag: the native "Help Us" call-to-action <img> BruceBase
+      // itself renders on the YEAR page for undocumented events (same
+      // element hasHelpIcon(section) already checks for). No live source
+      // when the icon only exists on the fetched DETAIL page instead (see
+      // addTagsButton's hasHelp = hasHelpIcon(section) || hasHelpIcon(doc)).
+      if (helpIconEl && isManagedTag('help') && isTagPresent('help', expectedTags)) {
+        tagSourceMap.set('help', helpIconEl);
+      }
+      return tagSourceMap;
+    }
+
     const allItems = [...existingItems, ...onstageItems, ...missingItems].sort((a, b) => a.tag.localeCompare(b.tag));
 
     const spuriousCount = existingItems.filter(i => i.spurious).length;
@@ -8583,6 +8814,17 @@
         btn._bbPanel = buildIconPanel(content);
         btn._bbPanel._bbIcon = btn;
         section.appendChild(btn._bbPanel);
+        if (highlightOn) {
+          try {
+            const tagSourceMap = buildYearTagSourceMap();
+            for (const a of btn._bbPanel.querySelectorAll('.bb-tags-list a')) {
+              const source = tagSourceMap.get(a.textContent.trim().toLowerCase());
+              if (source) wireTagSourceHighlight(a, source);
+            }
+          } catch (e) {
+            logErr('addTagsButton/tag-source-highlight wiring', e);
+          }
+        }
       }
       const open = btn._bbPanel.style.display !== 'none';
       btn._bbPanel.style.display = open ? 'none' : '';
@@ -9525,6 +9767,8 @@
     let tourTagAnchors = []; // <a> link(s) for whichever TOUR_TAG_SET tag(s) matched — .bb-tour-name
     // doesn't exist yet at this point (added by the caller, runDetailProcessing,
     // after this function returns), so the caller wires these post-hoc.
+    let soundcheckEl = null; // the <strong>Soundcheck</strong> header in the Setlist tab, if any
+    let premiereEls = []; // every <strong><a href="/song:...">...</a></strong> in the Setlist tab
     if (highlightOn) {
       try {
         songAnchorByName = new Map([...(getSetlistContainer(document)?.querySelectorAll('a[href^="/song:"]') ?? [])]
@@ -9541,6 +9785,13 @@
             }
           }
         }
+
+        // Same containers countTourPremiereSongs/computeExpectedTags's
+        // soundcheck-header check already use — see doc/TAGS.md.
+        const setlistContainer = getSetlistContainer(document);
+        soundcheckEl = [...(setlistContainer?.querySelectorAll('p strong') ?? [])]
+          .find(s => /^soundcheck$/i.test(s.textContent.trim())) || null;
+        premiereEls = [...(setlistContainer?.querySelectorAll('strong a[href^="/song:"]') ?? [])];
 
         eventTypeEl = document.querySelector('#page-title .bb-event-type-detail');
 
@@ -9579,12 +9830,13 @@
         songAnchorByName = null; relationElByName = null; guestElByName = null;
         eventTypeEl = null; dateTagMap = null; dateSpan = null;
         venueLoc = null; venueStringSpan = null; tourTagAnchors = [];
+        soundcheckEl = null; premiereEls = [];
       }
     }
 
-    // Generic managed tags (date/weekday/event-type/tour/etc.): most have no
-    // single identifiable source, so this is layered on top via a direct
-    // wireTagSourceHighlight loop rather than threaded through the
+    // Generic managed tags (date/weekday/event-type/tour/soundcheck/prem/etc.):
+    // most have no single identifiable source, so this is layered on top via
+    // a direct wireTagSourceHighlight loop rather than threaded through the
     // markPassingTagLinks call above (same pattern as RETAIL's date tags).
     if (highlightOn) {
       for (const a of passingLinks) {
@@ -9593,6 +9845,8 @@
         if (tag === eventType.toLowerCase()) source = eventTypeEl;
         else if (dateTagMap?.has(tag)) source = dateTagMap.get(tag);
         else if (DAY_NAMES.includes(tag)) source = dateSpan;
+        else if (tag === 'soundcheck') source = soundcheckEl;
+        else if ((tag === 'prem' || TOUR_PREMIERE_TAG_VALUES.has(tag)) && premiereEls.length) source = premiereEls;
         if (source) wireTagSourceHighlight(a, source);
       }
     }

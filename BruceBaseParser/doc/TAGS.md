@@ -388,6 +388,21 @@ RELATION page's own tag computation, not just this feature):
   (the `<a>` link(s) for whichever `TOUR_TAG_SET` tag(s) matched), and the
   caller wires `wireTagSourceHighlight` post-hoc, right after
   `addTourNameSpan(...)` runs.
+- **DETAIL — `soundcheck` tag**: the native `<p><strong>Soundcheck</strong></p>`
+  header inside `getSetlistContainer(document)` — the same element
+  `computeExpectedTags`'s own soundcheck-header check
+  (`hasSoundcheckHeader`) looks for, found via
+  `[...setlistContainer.querySelectorAll('p strong')].find(s =>
+  /^soundcheck$/i.test(s.textContent.trim()))`. No source for the older
+  bare-text `"Soundcheck:"` fallback (no dedicated element to point at).
+- **DETAIL — `prem` and its premiere-count tag** (`TOUR_PREMIERE_TAG_VALUES`
+  — bare `"1"`.."9"`/`"9+"`, e.g. `"3"`): every
+  `<strong><a href="/song:…">` in `getSetlistContainer(document)` — the same
+  elements `countTourPremiereSongs` counts to derive the expected count tag
+  in the first place — highlighted all at once via a single `Element[]`
+  passed to `wireTagSourceHighlight`. Never collides with a day-of-month tag
+  despite both being small plain numbers: BruceBase's day tag is always
+  zero-padded (`"03"`), while a premiere-count tag is always bare (`"3"`).
 - **DETAIL — `FUZZY_SUBSTRING_TAGS` matches** (alias/notes, e.g. `grammy`,
   `benefit`): `checkAliasSubstringTags`/`checkNotesSubstringTags` now also
   return the specific lowercase `matched` substring (previously computed
@@ -397,7 +412,18 @@ RELATION page's own tag computation, not just this feature):
   `findEventAliasElement(document)` (the first tab's `<strong>` header, not
   the `.bb-event-alias` span shown next to the page title, which is just a
   display copy); for notes matches, whichever `findPageNotesSourceElements`
-  element actually contains the match.
+  element actually contains the match — `findPageNotesSourceElements`
+  drills down via **`findDeepestTextContainer(el, substringLower)`**
+  (descends into whichever child still contains the match, until none do)
+  before returning, since BruceBase wraps virtually all free-text content in
+  nested `<div class="list-pages-box"><div class="list-pages-item">...
+  </div></div>` containers whose own direct text-node children are empty —
+  `wrapTextSubstring` only ever scans a parent's *direct* text nodes (by
+  design), so handing it one of these outer wrapper divs (as an earlier
+  version did, checking only `#page-content`'s immediate children) always
+  silently failed to find anything to wrap; `findDeepestTextContainer` lands
+  on the actual leaf element (typically the `<p>` itself, or a nested inline
+  element like `<em>` if the match straddles inline formatting).
 - **RETAIL — month/day/year tags**: each `parseRetailReleaseDates` entry's
   whole `raw` match (e.g. `"April 18, 2026 (Vinyl)"`) is wrapped first, then
   its `monthRaw`/`dayRaw`/`year` are wrapped *within* that span — `monthRaw`/
@@ -428,6 +454,90 @@ RELATION page's own tag computation, not just this feature):
   permanently green/bold instead of only highlighting on hover. The
   hover-highlight wiring in `annotateRelationPageTags` reads both `links`
   and `highlightSpan`; the colorization loop only ever reads `links`.
+- **YEAR page — `addTagsButton`'s own event Tags panel**: the live-DOM
+  counterpart to the DETAIL-page resolution above, scoped to this one
+  event's `.bb-section-processed` (`section`) and its own event link
+  (`eventLink`) instead of the fetched `doc`. Built by
+  `buildYearTagSourceMap()`, called **lazily at first click** (right where
+  the panel's `<ol class="bb-tags-list">` is first parsed into the DOM),
+  *not* eagerly when `addTagsButton` itself runs — `addTagsButton` is called
+  from `wireIconHandlers`, which `processOneYearEvent` invokes *before*
+  `renderYearSetlist`/`injectEventRelations` render the setlist/relation
+  blocks into `section`; building the map at that point would find no
+  setlist/relation elements yet. By the time a user can actually click the
+  button, that event's whole processing pipeline has long finished, so
+  `section`/`eventLink` are guaranteed fully rendered. Date/venue substrings
+  wrap `eventLink` itself (its text is never touched by anything upstream —
+  `addYearGlyph` only ever appends siblings via `.after(...)`); the
+  event-type/tour-name/alias sources are the sibling spans YEAR already
+  renders (`.bb-event-type`, `.bb-year-tour-name`, `.bb-event-alias`);
+  relation names/guest markers are `.bb-rel-name`/`.bb-rel-extra` (collected
+  from *both* the visible `.bb-relations-flat` and hidden
+  `.bb-relations-list` renderings — both get boxed on hover); setlist songs
+  are `[data-detail-song]` elements; the `help` tag's source is the native
+  `img.image[title="Help Us"]` call-to-action icon (same selector
+  `hasHelpIcon()` uses) when it's actually rendered on the YEAR page itself
+  (no source when it only exists on the fetched DETAIL page — same
+  `hasHelp = hasHelpIcon(section) || hasHelpIcon(doc)` duality `addTagsButton`
+  already has to account for); the `soundcheck` tag's source is whichever
+  `.bb-section-label` span (`renderSetlistElement` renders one per setlist
+  section — `"Show:"`, `"Soundcheck:"`, etc.) matches `/^soundcheck/i`,
+  found by filtering `section.querySelectorAll('.bb-section-label')` by
+  text, not just taking the first one; `prem`/its premiere-count tag source
+  is every `[data-year-premiere="1"]` element in `section` (set by the
+  existing setlist diff-merge rendering — see `renderSetlistElement`/
+  `renderMatchWithConnectives`), highlighted all at once as one array — same
+  zero-padded-day-vs-bare-premiere-count non-collision as the DETAIL-page
+  entry above. The generic date/weekday/event-type/tour/help/soundcheck/prem
+  categories are gated on `isManagedTag(tag) && isTagPresent(tag,
+  expectedTags)` (the same predicate `existingItems` uses for its `passing`
+  flag) so a spurious tag that happens to equal e.g. a weekday name is never
+  wired as if verified.
+  **`FUZZY_SUBSTRING_TAGS` notes matches** — previously entirely unverified
+  on this page (`addTagsButton` never called `checkNotesSubstringTags` at
+  all, alias-only), now checked via the same
+  `checkNotesSubstringTags(extractPageNotesText(doc), actualTags)` DETAIL
+  uses (`matchedNotesByTag`, folded into `existingItems`'s `passing`
+  computation alongside `songMatch`/`locationMatch`/`relationMatch`/
+  `aliasMatch`). The highlight source comes from a new
+  **`findYearEventNotesSourceElements(section, substringLower)`** — the
+  YEAR-page counterpart to `findPageNotesSourceElements`: unlike DETAIL,
+  where the free-text notes preamble lives in `#page-content` wholly
+  separate from the `.yui-navset` tab widget, the YEAR page embeds an
+  event's entire native write-up (heading, setlist, notes prose, "Help Us"
+  icon, etc.) as flat sibling children of one `.bb-section-processed` with
+  no boundary marker distinguishing "notes" from the rest — so it skips this
+  script's own injected `bb-*` rows/panels and any child containing a
+  setlist song (`[data-detail-song]`), so a song name that happens to
+  mention a `FUZZY_SUBSTRING_TAGS` word can't be mistaken for prose. Like
+  `findPageNotesSourceElements`, it drills down via
+  `findDeepestTextContainer` before returning — BruceBase's native notes
+  markup (`<div class="list-pages-box"><div class="list-pages-item"><p>…
+  </p></div></div>`) is embedded directly as a `section` child on the YEAR
+  page too, so the same "outer wrapper div has no direct text nodes of its
+  own" problem applies here verbatim.
+  **Venue/city/state/country substrings are parsed from `eventLink`'s own
+  text, not `rawEventName`**: BruceBase renders the YEAR page's event link in
+  ALL CAPS with an extra `"- "` separator between date and venue (e.g.
+  `"2016-01-00 - EXPO THEATER, FORT MONMOUTH, NJ"`), which doesn't literally
+  occur inside `rawEventName` (the fetched DETAIL page's Title Case title,
+  e.g. `"2016-01-00 Expo Theater, Fort Monmouth, NJ"`, no extra dash) —
+  wrapping the latter's parsed substring inside the former's text always
+  failed silently. `venueLoc` is instead parsed straight from `eventLink`'s
+  own text (tolerating the optional `"- "` separator); the `matchedTag`
+  lookups themselves (`matchedLocationsByTag`, computed earlier from
+  `rawEventName`) are untouched — only the highlight *source* is re-derived
+  against what's actually on this page. This is also why `usa`/`canada`/
+  `Region: …` tags (which fall back to the whole venue-string span) started
+  working again in the same fix.
+  **Known caveat**: the YEAR page's text-filter bar (see `doc/FILTERING.md`)
+  rewrites `eventLink`/`.bb-event-type`/`.bb-event-alias`'s `innerHTML` while
+  a text query is active and restores it from a snapshot when cleared —
+  while active, the wrapped `.bb-tag-source-part` spans are transiently
+  replaced, and after restore they exist again but as new DOM nodes, so an
+  *already-open* Tags panel's hover wiring for that substring goes stale
+  until the event is reprocessed (▶ Start again). Same class of accepted
+  limitation as the hidden-tab-source and cache-reload caveats below.
 - Every other passing-tag call site (generic managed tags with no single
   source on any page; RETAIL's `retail`/letter/`underconstruction`) still
   simply omits `sourceEl`.
@@ -449,8 +559,10 @@ itself. It:
 2. Merges in any onstage-companion tags not already present (same pattern as
    `annotateDetailPageTags` — see "Onstage companion page tags" below), then
    computes expected tags and compares against the merged actual set.
-3. Also runs the setlist-song, event-location, and "On Stage" tab relation
-   tag checks (same functions `annotateDetailPageTags` uses, against `doc`),
+3. Also runs the setlist-song, event-location, "On Stage" tab relation,
+   alias-substring, and notes-substring (`checkNotesSubstringTags` — added
+   alongside the alias check, previously missing entirely on this page) tag
+   checks (same functions `annotateDetailPageTags` uses, against `doc`),
    contributing matched tags to the green/passing set and unmatched ones to
    the missing-tag count.
 4. Merges existing links (styled green if passing, with spurious ⚠️ if not) +
@@ -467,6 +579,10 @@ itself. It:
    plain text (`titleSpan.textContent`) by `buildIconPanel`, so no escaping
    is needed. `addVenueTagsButton`'s panel caption is likewise the complete
    venue-page title plus `" Tags"`, not `"Venue Tags"`.
+8. When `bbp_enable_tag_source_highlight` is on, hovering a verified tag in
+   the opened panel highlights its source within this event's own section —
+   see the "YEAR page — `addTagsButton`'s own event Tags panel" bullet under
+   "Tag source highlight" above.
 
 `addVenueTagsButton` (nested in `.bb-venue-tab-row`, class `bb-venue-tab-btn`),
 `addSongTagsButton` (nested in the song tab row, class `bb-song-tab-btn`), and
