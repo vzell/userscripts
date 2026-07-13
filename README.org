@@ -4415,7 +4415,6 @@ snippet of "Death To My Hometown"
 exists in the event "notes" section
 
 ** TODO more "Issues" buttons (sub-types) - ALL, names, setlist, relations, anchors, venue, tags, etc
-
 ** why yellow highlightning of "Set details" on e.g. http://brucebase.wikidot.com/2026#240326 of the string "Set details may be inaccurate."
 
 ** song alias
@@ -4560,7 +4559,7 @@ e.g. http://brucebase.wikidot.com/2026#180426
 <strong><a href="/gig:2026-04-18-pollak-theatre-west-long-branch-nj" target="_blank" rel="noopener noreferrer">2026-04-18 - POLLAK THEATRE, MONMOUTH UNIVERSITY, WEST LONG BRANCH, NJ</a><span class="bb-event-type"> (gig)</span><span class="bb-glyph"> ✅</span><span class="bb-glyph"> 🏷️</span><span class="bb-event-alias"> — American Music Honors</span><span class="bb-event-collapse-toggle" title="Click to collapse · Ctrl+Click to collapse all events"> ▾</span></strong></p>
 #+end_example
 
-*** TODO add tour and event alias together configurable
+*** TODO add tour and event alias together - configurable
 
 e.g. http://brucebase.wikidot.com/rehearsal:2026-03-24-youth-temple-ocean-grove-nj
 
@@ -4575,7 +4574,7 @@ Use the same font color as on the DETAIL pages for the tour names on YEAR pages,
 <strong><a href="/gig:2026-05-27-nationals-park-washington-dc" target="_blank" rel="noopener noreferrer">2026-05-27 - NATIONALS PARK, WASHINGTON, DC</a><span class="bb-event-type"> (gig)</span><span class="bb-glyph"> ✅</span><span class="bb-glyph"> 🏷️</span><span class="bb-event-title-warn" style="cursor: help;"> ⚠️</span><span class="bb-year-tour-name"> — Land Of Hope And Dreams - No Kings</span><span class="bb-event-collapse-toggle" title="Click to collapse · Ctrl+Click to collapse all events"> ▾</span></strong></p>
 #+end_example
 
-which is the same color as for evetn alias names
+which is the same color as for event alias names
 
 2.)
 
@@ -4583,6 +4582,7 @@ The song name combination "LAND OF HOPE AND DREAMS - PEOPLE GET READY" need a sp
 song names when it comes to deducing the tag name to compare against. In this case it should actually by compared
 against the fixed value "lohad.pgr". Prepare for future end-user overridable song name combinations.
 
+** TODO when "lohad.pgr" is present as a tag, "lohad" shouldn't be there anymore
 ** jsdom/browser
 
 Is it recommended to system wide install a jsdom/browser for userscript development, so that it doesn't need to be
@@ -4612,7 +4612,94 @@ ever do the tour premiere check for song names which are in BOLD on eiher the YE
 Right now we get too many ...
 
 ** TODO make the fonts/colors configurable
-** TODO when "lohad.pgr" is present as a tag, "lohad" shouldn't be there anymore
+*** DONE initial
+
+Add configuration options for the color of the event alias and tour name
+
+#+begin_src bash
+<span class="bb-event-alias"> — Streets Of Minneapolis Recording Session</span>
+<span class="bb-tour-name"> — Land Of Hope And Dreams - No Kings</span>
+#+end_src
+
+on EVENT DETAIL and YEAR pages via a 'color_picker' type in the 'const configSchema' (use the current colors as defaults)
+
+For details see the following example
+
+#+begin_example
+        sa_global_filter_border_active: {
+            label: 'Global filter border — active (has filter text)',
+            type: 'color_picker',
+            default: 'orange',
+            description: 'Border color of the global filter input while it holds a valid filter string'
+        },
+#+end_example
+
+in the section
+
+#+begin_example
+        // ============================================================
+        // UI APPEARANCE SECTION
+        // Condensed pipe-separated config strings for every interactive
+        // UI element in the script. Format is documented per entry.
+        // ============================================================
+#+end_example
+
+of @/home/vzell/git/musicbrainz-userscripts/ShowAllEntityData/ShowAllEntityData.user.js
+
+See also @/home/vzell/git/musicbrainz-userscripts/lib/VZ_MBLibrary.user.js
+
+and the require userscript directive in ShowAllEntityData.user.js to support this
+
+*** DONE act on @debug/color-picker.org
+
+act on @debug/color-picker.org
+
+*** jsfontpicker
+
+jsfontpicker (Best All-in-One Vanilla JS Library) jsfontpicker is a lightweight, modern, zero-dependency vanilla JS
+library. It supports both system fonts and Google Fonts, includes fuzzy search, a dark/light theme, and can be easily
+injected into a userscript via @require.GitHub: wipeautcrafter/jsfontpickerPros: Free, no dependencies, dark-theme
+support, handles fuzzy searching and lazy-loading previews natively.  How to use it in a userscript:
+
+#+begin_example
+// ==UserScript==
+// @name         My Configurable Userscript
+// @match        https://example.com/*
+// @grant        GM_addStyle
+// @require      https://cdn.jsdelivr.net/npm/jsfontpicker@latest/dist/fontpicker.min.js
+// ==UserScript==
+
+// 1. Inject the necessary stylesheet
+GM_addStyle(`
+    @import url("https://cdn.jsdelivr.net/npm/jsfontpicker@latest/dist/fontpicker.css");
+    /* Add some spacing for your config layout if needed */
+    .font-picker-container { margin: 10px 0; }
+`);
+
+// 2. Create your configuration UI container
+const configDialog = document.createElement('div');
+configDialog.innerHTML = `
+    <div class="font-picker-container">
+        <label>Select Font: </label>
+        <input type="text" id="my-userscript-font-input">
+    </div>
+`;
+document.body.appendChild(configDialog);
+
+// 3. Initialize the font picker
+const fontInputElement = document.getElementById('my-userscript-font-input');
+const picker = new FontPicker(fontInputElement, {
+    theme: 'dark', // or 'light'
+    // You can customize it to show only local system fonts or Google fonts
+});
+
+// 4. Listen for selection changes
+picker.on('pick', (font) => {
+    console.log('User chose font:', font.family.name);
+    // Save to GM_setValue or apply style dynamically
+});
+#+end_example
+
 ** TODO check for "littlesteven" in addition to "stevenvanzandt"
 
 http://brucebase.wikidot.com/gig:2026-04-18-pollak-theatre-west-long-branch-nj
@@ -4642,6 +4729,63 @@ Correction: We do use the video-tag, but only on the recnote-pages. This indicat
 dvd, BR, etc.) for the show. We do NOT use the video-tag on gig-pages, only the icon on the year-page indicates if there
 is video available on the media-tab.
 
+** highlight tags <-> song names when hovering over
+*** initial
+
+Currently on pages where we display the tags box '<div class="bb-tags-box"' we colorize in "green" all the tags which could somehow be verified/deduced.
+Implement the following feature:
+
+1.)
+
+When hovering over a tag colorized in "green", do not only display the tooltip which explains the reason why it's
+colorized, but additionally surround the tag with a green bold box and at the same time sourround the corresponding
+artefact from which the tag is deduced (if it's located on the same page).
+
+2.)
+
+Take into account that some information on the same event page is only visible when the corresponding tab is
+activated/selected (like e.g. the first tab, with the relation information, or the "Setlist" tab)
+
+Make the feature configurable in 'const configSchema' (default: false)
+
+*** bugs
+
+The feature is completely buggy. Before fixing anything it is probably better to commit the working features introduced in version "3.24" and 3.25" .
+
+Heree the visible bugs:
+
+1.)
+
+the tags box '<div class="bb-tags-box"' completely vanished from all relevant pages
+
+2.)
+
+the "green" colorization from the "Setlist" tab and all the song names plus their tags vanished too
+
+3.)
+
+the '<span class="bb-glyph"> 🏷️</span>' vanished from the title lines
+
+4.)
+
+the event alias/tour name vanished from the title line
+
+
+** DONE colorize "Relation" tab
+
+Look at e.g. the following EVENT DETAIL page http://brucebase.wikidot.com/gig:2026-06-04-oceanfirst-bank-center-west-long-branch-nj
+Currently when there are problems/misses/mismatches on the "Setlist" tab, e.g.
+
+#+begin_example
+<em>Setlist<span class="bb-setlist-tab-ann" data-msg="Setlist has differences between YEAR and DETAIL page" title="Setlist has differences between YEAR and DETAIL page" style="cursor: help;"> ⚠️</span></em>
+#+end_example
+
+it's flagged with the "⚠️" icon
+We want the same for the first tab of an event page (on this page called "On Stage), when there are relations flagged with a warning symbol
+
+Make both features (first tab and "Setlist" tab) configurable in 'const configSchema' (default: true)
+
+Also colorise the tab text of the first tab in green (like the text "Setlist") when there are NO problems detected
 
 * Problems
 ** http://brucebase.wikidot.com/content:five-rings-farm-wellington-fl tag "appearnaces"
