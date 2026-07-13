@@ -1,5 +1,34 @@
 [
     {
+        "version": "3.30",
+        "date": "2026-07-13",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed the RELATION page's own-title letter tag (bbp_enable_tag_source_highlight, added in 3.29): its wrapped first-character span was being stored in expectedNameTags's shared links field, which annotateRelationPageTags' pre-existing unconditional \"colorize every name link green\" loop also reads - so the span ended up permanently styled .bb-relation-name-ok (green/bold) instead of only highlighting on hover. computeExpectedRelationNameTags now stores it in a separate highlightSpan field the colorization loop never touches; the hover-highlight wiring in annotateRelationPageTags reads both links and highlightSpan."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.29",
+        "date": "2026-07-13",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Tag source highlight (bbp_enable_tag_source_highlight) now highlights the precise substring a tag was deduced from wherever possible, instead of a whole title/element: new wrapTextSubstring splits a text node and wraps just the matching run in a <span class=\"bb-tag-source-part\">, applied hierarchically (wrap the containing span first, then wrap sub-parts within it) so multiple substrings of the same text can each get their own independent highlight without interfering with one another.",
+                    "VENUE pages: venue-name/city/state-or-country location tags now highlight just their own part of the title (\"universityofmichigan\" -> \"University Of Michigan\", \"annarbor\" -> \"Ann Arbor\", \"michigan(mi)\" -> \"MI\") via the new resolveLocationSourceEl, falling back to the whole title for usa/canada/COUNTRY_EXTRA_TAGS tags (no literal substring exists for those). The first-letter tag now highlights just the title's first character, nested inside the venue-name span when one exists.",
+                    "DETAIL pages: the same per-component venue highlighting now applies to the event title's venue portion (isolated from the leading date via a new venue-string span); the event-type tag (e.g. \"gig\") now highlights the existing .bb-event-type-detail span; year/month/day/weekday tags now highlight the corresponding part of the leading YYYY-MM-DD (weekday highlights the whole date, since no weekday name is literally written); the \"guest\" tag now highlights the \"(Guest)\" marker itself (extractRelations now also exposes extraEl/mExtraEl) instead of the relation name link; a tour tag (e.g. \"tour_rvr\") now highlights the .bb-tour-name span - wired post-hoc from the caller (runDetailProcessing) via a new tourTagAnchors field on annotateDetailPageTags's return value, since .bb-tour-name doesn't exist until after that function returns; and FUZZY_SUBSTRING_TAGS matches (e.g. \"grammy\", \"benefit\") now highlight just the matched word in the alias/notes text (checkAliasSubstringTags/checkNotesSubstringTags now also return the matched substring) instead of the whole element.",
+                    "SONG and RETAIL pages: the first-letter tag now highlights just the title's first character (previously had no source at all). RELATION pages: the page's own-title letter tag (computeExpectedRelationNameTags's Bands/surname or Members/band-name case) now also highlights the title's first character, flowing through the existing expectedNameTags/links wiring.",
+                    "RETAIL pages: month/day/year tags now highlight just that specific date's own substring inside the <pre><code> metadata block (wrapped hierarchically - the whole raw match first, then month/day/year nested within it) instead of the whole code block, correctly distinguishing between multiple release dates listed on one line. parseRetailReleaseDates now also returns monthRaw/dayRaw (the literal, unpadded/un-normalized text) alongside the existing normalized month/day fields, since the normalized forms don't always match the raw text verbatim.",
+                    "Every new highlight-resolution code path (VENUE/SONG/RETAIL page-level, and computeExpectedRelationNameTags, whose result is load-bearing for the RELATION page's own tag computation) is wrapped in try/catch, matching DETAIL's existing pattern - a failure resolving an optional highlight source can never break the surrounding tag annotation."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.28",
         "date": "2026-07-13",
         "sections": [

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.28
+// @version      3.30
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -4432,6 +4432,14 @@
         }
         if (tagResult.tourCheck && !tagResult.tourCheck.isTourNo && tagResult.tourCheck.mostSpecificTour) {
           addTourNameSpan(tagResult.tourCheck.mostSpecificTour.name);
+          // Tag-source-highlight: .bb-tour-name doesn't exist until the line
+          // above runs, so this can't be wired inside annotateDetailPageTags
+          // itself — tourTagAnchors (the tour tag's own <a> link(s) in
+          // .page-tags) was computed there and returned for exactly this.
+          if (Lib.settings.bbp_enable_tag_source_highlight && tagResult.tourTagAnchors?.length) {
+            const tourNameEl = document.querySelector('#page-title .bb-tour-name');
+            if (tourNameEl) for (const a of tagResult.tourTagAnchors) wireTagSourceHighlight(a, tourNameEl);
+          }
         }
       }
 
@@ -6049,7 +6057,7 @@
    * see FUZZY_SUBSTRING_TAGS doc).
    * @param {string|null} alias
    * @param {Set<string>} actualTags
-   * @returns {{tag: string, label: string}[]}
+   * @returns {{tag: string, label: string, matched: string}[]}
    */
   function checkAliasSubstringTags(alias, actualTags) {
     if (!alias) return [];
@@ -6059,7 +6067,7 @@
       if (!isTagPresent(tag, actualTags)) continue;
       const matched = substrings.find(s => aliasLower.includes(s));
       if (matched) {
-        results.push({ tag, label: `matches event alias "${alias}" (contains "${matched}", case-insensitive)` });
+        results.push({ tag, label: `matches event alias "${alias}" (contains "${matched}", case-insensitive)`, matched });
       }
     }
     return results;
@@ -6073,7 +6081,7 @@
    * mentioning "...the twenty-sixth annual Light Of Day Benefit."
    * @param {string} notesText
    * @param {Set<string>} actualTags
-   * @returns {{tag: string, label: string}[]}
+   * @returns {{tag: string, label: string, matched: string}[]}
    */
   function checkNotesSubstringTags(notesText, actualTags) {
     if (!notesText) return [];
@@ -6083,7 +6091,7 @@
       if (!isTagPresent(tag, actualTags)) continue;
       const matched = substrings.find(s => notesLower.includes(s));
       if (matched) {
-        results.push({ tag, label: `matches page notes (contains "${matched}", case-insensitive)` });
+        results.push({ tag, label: `matches page notes (contains "${matched}", case-insensitive)`, matched });
       }
     }
     return results;
@@ -6141,10 +6149,11 @@
                 if (!ma) return null;
                 const mExtra = mli.querySelector('span[style*="font-size"]');
                 return {
-                  href:  ma.getAttribute('href'),
-                  name:  ma.textContent.trim(),
-                  extra: mExtra ? mExtra.textContent.trim() : null,
-                  el:    ma,
+                  href:    ma.getAttribute('href'),
+                  name:    ma.textContent.trim(),
+                  extra:   mExtra ? mExtra.textContent.trim() : null,
+                  extraEl: mExtra || null,
+                  el:      ma,
                 };
               }).filter(Boolean)
             : [];
@@ -6152,6 +6161,7 @@
             href:    a.getAttribute('href'),
             name:    a.textContent.trim(),
             extra:   extraEl ? extraEl.textContent.trim() : null,
+            extraEl: extraEl || null,
             el:      a,
             members
           });
@@ -7589,6 +7599,143 @@
    */
   function getPageTitleElement(doc = document) {
     return doc.querySelector('#page-title h1') || doc.getElementById('page-title');
+  }
+
+  /**
+   * Wraps the first occurrence of `substring` (exact, case-sensitive) found
+   * among `parent`'s own DIRECT text-node children in a new
+   * `<span class="bb-tag-source-part">`, via `Text.splitText`. Deliberately
+   * does NOT recurse into child elements — this is what makes repeated
+   * calls against the same `parent` safe: once a substring is wrapped, its
+   * text is no longer a text-node child of `parent` (it's inside the new
+   * span), so a later call can't match inside it or re-wrap it, and a
+   * pre-existing sibling element (e.g. `.bb-event-type-detail`,
+   * `.bb-tour-name`) can never be searched into by accident.
+   * @param {Element} parent
+   * @param {string}  substring
+   * @returns {Element|null} the new span, or null if `substring` wasn't found.
+   */
+  function wrapTextSubstring(parent, substring) {
+    if (!substring) return null;
+    for (const node of [...parent.childNodes]) {
+      if (node.nodeType !== Node.TEXT_NODE) continue;
+      const idx = node.textContent.indexOf(substring);
+      if (idx === -1) continue;
+      const match = node.splitText(idx);
+      match.splitText(substring.length);
+      const span = document.createElement('span');
+      span.className = 'bb-tag-source-part';
+      match.replaceWith(span);
+      span.appendChild(match);
+      return span;
+    }
+    return null;
+  }
+
+  /**
+   * Resolves a `checkParsedLocationTags` result (`{label, candidateTag,
+   * matchedTag, method}` — see `checkVenuePageLocationTags`/
+   * `checkEventNameLocationTags`) to its tag-source-highlight artefact:
+   * wraps and returns the specific substring of `scope`'s text that the
+   * result was deduced from (venue name, the "At The" split halves, venue
+   * detail, city, or state abbreviation / bare-country name), by matching
+   * `r.label`'s prefix — mirrors (without duplicating) the exact label
+   * strings `checkLocationNameTag`/`checkVenueNameTag`/`checkParsedLocationTags`
+   * build. Falls back to `fallbackEl` (the whole title, or the whole
+   * venue-string span on DETAIL pages) for the `usa`/`canada`/
+   * `COUNTRY_EXTRA_TAGS` ("Region: ...") results, which have no literal
+   * substring in the title at all — and for any label this function
+   * doesn't recognize, or where the expected substring isn't actually
+   * found (e.g. already consumed by an earlier wrap).
+   * @param {{label: string}} r
+   * @param {ReturnType<typeof parseLocationParts>} loc
+   * @param {Element} scope - where to search for the substring.
+   * @param {Element} fallbackEl
+   * @returns {Element|null}
+   */
+  function resolveLocationSourceEl(r, loc, scope, fallbackEl) {
+    if (!loc) return fallbackEl;
+    if (r.label === 'Country: USA' || r.label === 'Country: Canada' || r.label.startsWith('Region:')) {
+      return fallbackEl;
+    }
+    let substring = null;
+    if (r.label.startsWith('Venue part before') || r.label.startsWith('Venue part after')) {
+      const m = loc.venueName.match(/^(.+?)\s+at\s+the\s+(.+)$/i);
+      if (m) substring = r.label.startsWith('Venue part before') ? m[1].trim() : m[2].trim();
+    } else if (r.label.startsWith('Venue detail:')) {
+      substring = loc.venueDetail;
+    } else if (r.label.startsWith('Venue:')) {
+      substring = loc.venueName;
+    } else if (r.label.startsWith('City:')) {
+      substring = loc.city;
+    } else if (r.label.startsWith('State:')) {
+      substring = loc.stateAbbr;
+    } else if (r.label.startsWith('Country:')) {
+      substring = loc.country;
+    }
+    return (substring && wrapTextSubstring(scope, substring)) || fallbackEl;
+  }
+
+  /**
+   * Same shape-matching logic as extractEventAlias, but returns the live
+   * <strong> element instead of its text — for the tag-source-highlight
+   * feature's (bbp_enable_tag_source_highlight) FUZZY_SUBSTRING_TAGS
+   * alias-match artefact resolution.
+   * @param {Document} doc
+   * @returns {Element|null}
+   */
+  function findEventAliasElement(doc) {
+    const tab = doc.getElementById('wiki-tab-0-0');
+    if (!tab) return null;
+    const kids = tab.children;
+    if (kids.length < 2 || kids[1].tagName !== 'HR') return null;
+    const first = kids[0];
+    if (first.tagName !== 'P') return null;
+    const strong = first.querySelector('strong');
+    if (!strong || first.textContent.trim() !== strong.textContent.trim()) return null;
+    return strong;
+  }
+
+  /**
+   * Live-DOM counterpart to extractPageNotes: returns the actual top-level
+   * #page-content children (before the first .yui-navset) whose own text
+   * contains the given (lowercase) substring — for the tag-source-highlight
+   * feature's FUZZY_SUBSTRING_TAGS notes-match artefact resolution. Unlike
+   * extractPageNotes, these are the live elements themselves, not detached
+   * clones.
+   * @param {Document} doc
+   * @param {string} substringLower
+   * @returns {Element[]}
+   */
+  function findPageNotesSourceElements(doc, substringLower) {
+    const pageContent = doc.querySelector('#page-content');
+    if (!pageContent) return [];
+    const matches = [];
+    for (const child of pageContent.children) {
+      if (child.classList.contains('yui-navset')) break;
+      if ((child.textContent || '').toLowerCase().includes(substringLower)) matches.push(child);
+    }
+    return matches;
+  }
+
+  /**
+   * Resolves a FUZZY_SUBSTRING_TAGS match (checkAliasSubstringTags's/
+   * checkNotesSubstringTags's `matched` field — always lowercase, since
+   * it's one of the literal substrings from the FUZZY_SUBSTRING_TAGS table)
+   * back to its original-cased occurrence in `el`'s live text, then wraps
+   * just that substring. Returns null when `el` is null or doesn't actually
+   * contain it (shouldn't happen — the check just confirmed it does — but
+   * defensive, since this runs after other wraps may have already
+   * consumed part of the text).
+   * @param {Element|null} el
+   * @param {string} matched - lowercase substring to find.
+   * @returns {Element|null}
+   */
+  function wrapFuzzyMatchSubstring(el, matched) {
+    if (!el) return null;
+    const idx = el.textContent.toLowerCase().indexOf(matched);
+    if (idx === -1) return null;
+    return wrapTextSubstring(el, el.textContent.slice(idx, idx + matched.length));
   }
 
   /**
@@ -9274,7 +9421,7 @@
     const eventAlias = extractEventAlias(document);
 
     const tagsContainer = document.querySelector('.page-tags');
-    if (!tagsContainer) return { additionalTags: [], onstageUrl: null, tourCheck: null, eventAlias };
+    if (!tagsContainer) return { additionalTags: [], onstageUrl: null, tourCheck: null, eventAlias, tourTagAnchors: [] };
     hasHelp = hasHelp || hasHelpIcon(document);
     hasFeatured = hasFeatured || hasFeaturedIcon(document);
 
@@ -9362,27 +9509,91 @@
     markPassingTagLinks(passingLinks, tag => passingTagMsg(tag, expectedTags, tourCheck));
 
     // Tag-source-highlight artefact lookups (bbp_enable_tag_source_highlight)
-    // — only built when the setting is on, since each is an extra DOM scan.
-    // Wrapped in try/catch: any failure resolving an optional highlight
-    // source must never break the tag annotation that follows.
+    // — only built when the setting is on, since each is an extra DOM scan
+    // (several of them mutate #page-title's text into wrapped spans via
+    // wrapTextSubstring). Wrapped in try/catch: any failure resolving an
+    // optional highlight source must never break the tag annotation that follows.
     const highlightOn = Lib.settings.bbp_enable_tag_source_highlight;
     let songAnchorByName = null;
     let relationElByName = null;
+    let guestElByName = null;
+    let eventTypeEl = null;
+    let dateTagMap = null; // tag ("1980"/"october"/"03") -> span; whole-date span for weekday tags
+    let dateSpan = null;
+    let venueLoc = null;
+    let venueStringSpan = null; // whole "Venue, City, ST" portion of the title, after the date
+    let tourTagAnchors = []; // <a> link(s) for whichever TOUR_TAG_SET tag(s) matched — .bb-tour-name
+    // doesn't exist yet at this point (added by the caller, runDetailProcessing,
+    // after this function returns), so the caller wires these post-hoc.
     if (highlightOn) {
       try {
         songAnchorByName = new Map([...(getSetlistContainer(document)?.querySelectorAll('a[href^="/song:"]') ?? [])]
           .map(a => [a.textContent.trim().toLowerCase(), a]));
         relationElByName = new Map();
+        guestElByName = new Map();
         for (const group of extractRelations(document)) {
           for (const item of group.items) {
             relationElByName.set(item.name.toLowerCase(), item.el);
-            for (const m of item.members) relationElByName.set(m.name.toLowerCase(), m.el);
+            if (item.extraEl) guestElByName.set(item.name.toLowerCase(), item.extraEl);
+            for (const m of item.members) {
+              relationElByName.set(m.name.toLowerCase(), m.el);
+              if (m.extraEl) guestElByName.set(m.name.toLowerCase(), m.extraEl);
+            }
+          }
+        }
+
+        eventTypeEl = document.querySelector('#page-title .bb-event-type-detail');
+
+        const h1 = getPageTitleElement();
+        if (h1) {
+          dateSpan = wrapTextSubstring(h1, eventDate);
+          if (dateSpan) {
+            const [yr, mo, dd] = eventDate.split('-');
+            const yearSpan  = wrapTextSubstring(dateSpan, yr);
+            const monthSpan = wrapTextSubstring(dateSpan, mo);
+            const daySpan   = wrapTextSubstring(dateSpan, dd);
+            dateTagMap = new Map();
+            dateTagMap.set(yr, yearSpan || dateSpan);
+            const moNum = parseInt(mo, 10);
+            if (moNum >= 1 && moNum <= 12) dateTagMap.set(MONTH_NAMES[moNum - 1], monthSpan || dateSpan);
+            dateTagMap.set(dd, daySpan || dateSpan);
+          }
+
+          const dateM = rawDetailName.trim().match(/^\d{4}-\d{2}-\d{2}\s+(.+)$/);
+          if (dateM) {
+            venueLoc = parseEventNameLocation(rawDetailName);
+            venueStringSpan = wrapTextSubstring(h1, dateM[1]);
+          }
+        }
+
+        if (tourCheck && !tourCheck.isTourNo) {
+          for (const t of tourCheck.expectedTags) {
+            if (TOUR_TAG_SET.has(t)) {
+              const a = tagToAnchor.get(t);
+              if (a) tourTagAnchors.push(a);
+            }
           }
         }
       } catch (e) {
         logErr('annotateDetailPageTags/tag-source-highlight setup', e);
-        songAnchorByName = null;
-        relationElByName = null;
+        songAnchorByName = null; relationElByName = null; guestElByName = null;
+        eventTypeEl = null; dateTagMap = null; dateSpan = null;
+        venueLoc = null; venueStringSpan = null; tourTagAnchors = [];
+      }
+    }
+
+    // Generic managed tags (date/weekday/event-type/tour/etc.): most have no
+    // single identifiable source, so this is layered on top via a direct
+    // wireTagSourceHighlight loop rather than threaded through the
+    // markPassingTagLinks call above (same pattern as RETAIL's date tags).
+    if (highlightOn) {
+      for (const a of passingLinks) {
+        const tag = a.textContent.trim().toLowerCase();
+        let source = null;
+        if (tag === eventType.toLowerCase()) source = eventTypeEl;
+        else if (dateTagMap?.has(tag)) source = dateTagMap.get(tag);
+        else if (DAY_NAMES.includes(tag)) source = dateSpan;
+        if (source) wireTagSourceHighlight(a, source);
       }
     }
 
@@ -9399,7 +9610,11 @@
     }
 
     // Event-name → tag check: venue/city/state/country parts of the page
-    // title should each have a corresponding tag (exact match or manual override).
+    // title should each have a corresponding tag (exact match or manual
+    // override) — each result is resolved to its own substring of the
+    // venue-string portion of the title (resolveLocationSourceEl), falling
+    // back to the whole venue-string span for usa/canada/COUNTRY_EXTRA_TAGS
+    // results, which have no literal substring at all.
     const locationResults    = checkEventNameLocationTags(rawDetailName, actualTags);
     const matchedLocations   = locationResults.filter(r => r.matchedTag);
     const unmatchedLocations = locationResults.filter(r =>
@@ -9407,13 +9622,18 @@
     );
     for (const r of matchedLocations) {
       const a = tagToAnchor.get(r.matchedTag);
-      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches event ${r.label}`);
+      const source = (highlightOn && venueStringSpan) ? resolveLocationSourceEl(r, venueLoc, venueStringSpan, venueStringSpan) : null;
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches event ${r.label}`, source);
     }
 
-    // "On Stage"/"In Studio" tab relation matches (computed earlier, before spurious/passing).
+    // "On Stage"/"In Studio" tab relation matches (computed earlier, before
+    // spurious/passing). The "guest" method's source is the "(Guest)"
+    // marker(s) next to whichever relation(s) it names, not the relation
+    // name link(s) itself (used by every other method).
     for (const r of relationResults.filter(res => res.matchedTag)) {
       const a = tagToAnchor.get(r.matchedTag);
-      const sources = relationElByName ? r.names.map(n => relationElByName.get(n.toLowerCase())).filter(Boolean) : null;
+      const map = r.method === 'guest' ? guestElByName : relationElByName;
+      const sources = map ? r.names.map(n => map.get(n.toLowerCase())).filter(Boolean) : null;
       if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label} — ${relationMethodLabel(r.method, r.tabLabel)}`, sources);
     }
 
@@ -9422,16 +9642,23 @@
     // "grammy" matched by "68th Annual Grammy Awards Ceremony") or the
     // page's free-text notes (e.g. "benefit" matched by a notes paragraph
     // mentioning "...Light Of Day Benefit.") are verified. Never
-    // contributes to missingTags — absence is not flagged.
+    // contributes to missingTags — absence is not flagged. The
+    // tag-source-highlight artefact is just the matched word itself
+    // (wrapFuzzyMatchSubstring), not the whole alias/notes element.
+    const aliasEl = highlightOn ? findEventAliasElement(document) : null;
     const aliasResults = checkAliasSubstringTags(eventAlias, actualTags);
     for (const r of aliasResults) {
       const a = tagToAnchor.get(r.tag);
-      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
+      const source = highlightOn ? wrapFuzzyMatchSubstring(aliasEl, r.matched) : null;
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`, source);
     }
     const notesResults = checkNotesSubstringTags(extractPageNotesText(document), actualTags);
     for (const r of notesResults) {
       const a = tagToAnchor.get(r.tag);
-      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`);
+      const source = highlightOn
+        ? wrapFuzzyMatchSubstring(findPageNotesSourceElements(document, r.matched)[0], r.matched)
+        : null;
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: ${r.label}`, source);
     }
 
     if (missingTags.length === 0 && spuriousLinks.length === 0 && unmatchedSongs.length === 0
@@ -9452,7 +9679,7 @@
       okWrapper.appendChild(tagsContainer);
       tagsContainer.style.clear = 'none';
       groupTagsIntoLines(tagsContainer);
-      return { additionalTags, onstageUrl, tourCheck, eventAlias };
+      return { additionalTags, onstageUrl, tourCheck, eventAlias, tourTagAnchors };
     }
 
     const wrapper = document.createElement('div');
@@ -9545,7 +9772,7 @@
     }
 
     groupTagsIntoLines(tagsContainer);
-    return { additionalTags, onstageUrl, tourCheck, eventAlias };
+    return { additionalTags, onstageUrl, tourCheck, eventAlias, tourTagAnchors };
   }
 
   /**
@@ -9576,18 +9803,66 @@
       return `Tag "${tag}" verified: matches the first letter of venue name "${venueName}"`;
     });
 
-    // Venue-name → tag check: venue/city/state/country parts of the venue
-    // page's own title should each have a corresponding tag. No per-
-    // component split exists in #page-title, so the whole title element is
-    // used as a best-effort tag-source-highlight artefact for all of them.
+    // Tag-source-highlight setup (bbp_enable_tag_source_highlight) — wrapped
+    // in try/catch: a failure resolving an optional highlight source must
+    // never break the tag annotation/box-wrapping that follows.
     const highlightOn = Lib.settings.bbp_enable_tag_source_highlight;
-    const titleEl = highlightOn ? getPageTitleElement() : null;
+    let titleEl = null, venueLoc = null;
+    if (highlightOn) {
+      try {
+        titleEl = getPageTitleElement();
+        venueLoc = parseVenuePageLocation(venueName);
+      } catch (e) {
+        logErr('annotateVenuePageTags/tag-source-highlight setup', e);
+        titleEl = null; venueLoc = null;
+      }
+    }
+
+    // Venue-name → tag check: venue/city/state/country parts of the venue
+    // page's own title should each have a corresponding tag — each result
+    // is resolved to its own substring of the title (resolveLocationSourceEl),
+    // falling back to the whole title for usa/canada/COUNTRY_EXTRA_TAGS
+    // results, which have no literal substring at all. Captures the
+    // venue-name span (if created) for the first-letter tag below, which
+    // must nest its highlight inside it — wrapping the venue name AFTER
+    // the first character was already wrapped separately would fail to
+    // find it (no longer a contiguous run of plain text).
     const locationResults    = checkVenuePageLocationTags(venueName, actualTags);
     const matchedLocations   = locationResults.filter(r => r.matchedTag);
     const unmatchedLocations = locationResults.filter(r => !r.matchedTag);
+    let venueNameSpan = null;
     for (const r of matchedLocations) {
       const a = tagLinks.find(l => l.textContent.trim().toLowerCase() === r.matchedTag);
-      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches venue ${r.label}`, titleEl);
+      let source = null;
+      if (highlightOn && titleEl) {
+        try {
+          source = resolveLocationSourceEl(r, venueLoc, titleEl, titleEl);
+          if (r.label.startsWith('Venue:') || r.label.startsWith('Venue part before')) venueNameSpan = source;
+        } catch (e) {
+          logErr('annotateVenuePageTags/tag-source-highlight location', e);
+        }
+      }
+      if (a) markPassingTagLinks([a], tag => `Tag "${tag}" verified: matches venue ${r.label}`, source);
+    }
+
+    // Tag-source-highlight: the venue title's first character, for the
+    // first-letter tag — layered on top via a direct wireTagSourceHighlight
+    // call, same pattern as RETAIL's date tags/RELATION's name tags (the
+    // batch above covers other tags with no single source, so it isn't
+    // threaded through markPassingTagLinks). Nested inside venueNameSpan
+    // when one was created above; falls back to titleEl directly when the
+    // venue tag itself didn't match (so no venue-name span was wrapped).
+    if (highlightOn && titleEl) {
+      try {
+        const firstChar = (venueName || '').trim()[0];
+        if (firstChar && /[a-z]/i.test(firstChar)) {
+          const a = passingLinks.find(l => l.textContent.trim().toLowerCase() === firstChar.toLowerCase());
+          const span = a && wrapTextSubstring(venueNameSpan || titleEl, firstChar);
+          if (span) wireTagSourceHighlight(a, span);
+        }
+      } catch (e) {
+        logErr('annotateVenuePageTags/tag-source-highlight first-letter', e);
+      }
     }
 
     // Fuzzy substring tag check: generic tags (FUZZY_SUBSTRING_TAGS) that are
@@ -9685,7 +9960,7 @@
    * 2026 (Vinyl) / May 29, 2026 (CD)"`. Returns `[]` when no such line is
    * found.
    * @param {Document} [doc=document]
-   * @returns {{month: string, day: string, year: string, label: string|null, raw: string}[]}
+   * @returns {{month: string, day: string, year: string, label: string|null, raw: string, monthRaw: string, dayRaw: string}[]}
    */
   function parseRetailReleaseDates(doc = document) {
     const codeEl = doc.querySelector('div.code pre code, pre code');
@@ -9704,6 +9979,13 @@
         year:  m[3],
         label: m[4] ? m[4].trim() : null,
         raw:   m[0].trim(),
+        // Literal, unnormalized text as it actually appears in the source
+        // line — `month`/`day` above are normalized (lowercase name,
+        // zero-padded) for tag comparison, not verbatim, so the
+        // tag-source-highlight feature (bbp_enable_tag_source_highlight)
+        // uses these instead to find-and-wrap the real substring.
+        monthRaw: m[1],
+        dayRaw:   m[2],
       });
     }
     return dates;
@@ -9799,18 +10081,45 @@
       return describeDateTag(tag, 'verified') || `Tag "${tag}" verified: matches the "Commercially Released" date`;
     });
 
-    // Tag-source-highlight (bbp_enable_tag_source_highlight): only date tags
-    // (month/day/year) have an identifiable single source — the
-    // "Commercially Released:" <pre><code> metadata block — so this is
-    // layered on top of the generic marking above (which covers every
-    // passing tag, including "retail"/letter/"underconstruction", with no
-    // source) rather than threaded through it.
+    // Tag-source-highlight (bbp_enable_tag_source_highlight): each date's
+    // month/day/year gets its own substring wrapped — first the whole raw
+    // match (e.g. "April 18, 2026 (Vinyl)"), then month/day/year nested
+    // within it, so a page listing several dates on one line still
+    // highlights only the specific date/component a tag matches. The
+    // first-letter tag gets the title's first character. "retail"/
+    // "underconstruction" have no single source — layered on top of the
+    // generic marking above rather than threaded through it. Wrapped in
+    // try/catch: a failure here must never break the tag annotation/
+    // box-wrapping that follows.
     if (Lib.settings.bbp_enable_tag_source_highlight) {
-      const codeEl = document.querySelector('div.code pre code, pre code');
-      if (codeEl) {
-        for (const a of passingLinks) {
-          if (describeDateTag(a.textContent.trim().toLowerCase(), 'verified')) wireTagSourceHighlight(a, codeEl);
+      try {
+        const codeEl = document.querySelector('div.code pre code, pre code');
+        if (codeEl) {
+          for (const d of releaseDates) {
+            const rawSpan = wrapTextSubstring(codeEl, d.raw);
+            if (!rawSpan) continue;
+            const monthSpan = wrapTextSubstring(rawSpan, d.monthRaw);
+            const daySpan   = wrapTextSubstring(rawSpan, d.dayRaw);
+            const yearSpan  = wrapTextSubstring(rawSpan, d.year);
+            for (const a of passingLinks) {
+              const tag = a.textContent.trim().toLowerCase();
+              if (tag === d.month)     wireTagSourceHighlight(a, monthSpan || rawSpan);
+              else if (tag === d.day)  wireTagSourceHighlight(a, daySpan || rawSpan);
+              else if (tag === d.year) wireTagSourceHighlight(a, yearSpan || rawSpan);
+            }
+          }
         }
+        const titleEl = getPageTitleElement();
+        if (titleEl) {
+          const firstChar = (retailName || '').trim()[0];
+          if (firstChar && /[a-z]/i.test(firstChar)) {
+            const a = passingLinks.find(l => l.textContent.trim().toLowerCase() === firstChar.toLowerCase());
+            const span = a && wrapTextSubstring(titleEl, firstChar);
+            if (span) wireTagSourceHighlight(a, span);
+          }
+        }
+      } catch (e) {
+        logErr('annotateRetailPageTags/tag-source-highlight', e);
       }
     }
 
@@ -9940,8 +10249,30 @@
 
     // Tag-source-highlight (bbp_enable_tag_source_highlight): both title-
     // derived tags below share the whole title element as their artefact,
-    // same "no per-component split" reasoning as the DETAIL/VENUE location check.
-    const titleEl = Lib.settings.bbp_enable_tag_source_highlight ? getPageTitleElement() : null;
+    // same "no per-component split" reasoning as the DETAIL/VENUE location
+    // check. Wrapped in try/catch: a failure here must never break the tag
+    // annotation/box-wrapping that follows.
+    const highlightOn = Lib.settings.bbp_enable_tag_source_highlight;
+    let titleEl = null;
+    if (highlightOn) {
+      try {
+        titleEl = getPageTitleElement();
+        // First-letter tag: just the title's first character — layered on
+        // top via a direct wireTagSourceHighlight call (the batch above
+        // covers "song"/"lyricsheet"/"underconstruction" too, which have
+        // no single source, so it isn't threaded through markPassingTagLinks).
+        if (titleEl) {
+          const firstChar = (songName || '').trim()[0];
+          if (firstChar && /[a-z]/i.test(firstChar)) {
+            const a = passingLinks.find(l => l.textContent.trim().toLowerCase() === firstChar.toLowerCase());
+            const span = a && wrapTextSubstring(titleEl, firstChar);
+            if (span) wireTagSourceHighlight(a, span);
+          }
+        }
+      } catch (e) {
+        logErr('annotateSongPageTags/tag-source-highlight', e);
+      }
+    }
 
     // Exact-title-slug tag: a hard requirement, e.g. "BORN TO RUN" -> "borntorun".
     const exactCheck = checkSongExactTitleTag(songName, actualTags);
@@ -10200,6 +10531,15 @@
         expected.set(tag, { message, links: link ? [link] : [] });
       }
     };
+    // `links` above is also read by annotateRelationPageTags' unconditional
+    // "colorize every real name link green" loop — a span wrapped purely
+    // for tag-source-highlight is NOT a real name link, so it must never go
+    // into `links` (doing so once made a hover-only highlight look
+    // permanently green/bold instead). setHighlightSpan stores it in its
+    // own field, read only by the separate hover-highlight wiring.
+    const setHighlightSpan = (tag, span) => {
+      if (span && expected.has(tag)) expected.get(tag).highlightSpan = span;
+    };
 
     const tabLabels = new Set(
       [...doc.querySelectorAll('.yui-nav em')].map(em => em.textContent.trim())
@@ -10207,12 +10547,31 @@
     const titleEl = doc.getElementById('page-title');
     const titleText = titleEl ? titleEl.textContent.trim() : '';
     const tabMap = buildTabMap(doc);
+    // Tag-source-highlight (bbp_enable_tag_source_highlight), live page
+    // only — this function is also called with a detached fetched
+    // Document (YEAR page's nested Relation Tags button), where wrapping
+    // text would be pointless (never hovered). safeWrapFirstChar is
+    // try/catch-guarded: this function's result feeds the actual expected-
+    // tag computation (missingTags etc.), so a highlight-only failure must
+    // never propagate and break that.
+    const highlightOn = doc === document && Lib.settings.bbp_enable_tag_source_highlight;
+    const titleH1 = highlightOn ? getPageTitleElement(doc) : null;
+    const safeWrapFirstChar = (text) => {
+      if (!titleH1 || !text) return null;
+      try {
+        return wrapTextSubstring(titleH1, text.trim()[0]);
+      } catch (e) {
+        logErr('computeExpectedRelationNameTags/tag-source-highlight', e);
+        return null;
+      }
+    };
 
     if (tabLabels.has('Bands')) {
       const person = parseRelationPersonTitle(titleText);
       if (person) {
         const letterTag = person.surname[0].toLowerCase();
         addExpected(letterTag, `Tag "${letterTag}" verified: first letter of surname "${person.surname}"`, null);
+        setHighlightSpan(letterTag, safeWrapFirstChar(person.surname));
         const nameTag = normalizeRelationTagName(person.name + person.surname);
         addExpected(nameTag, `Tag "${nameTag}" verified: lowercase concatenation of "${person.name}" + "${person.surname}"`, null);
       }
@@ -10233,6 +10592,7 @@
       if (bandName) {
         const letterTag = bandName[0].toLowerCase();
         addExpected(letterTag, `Tag "${letterTag}" verified: first letter of band name "${bandName}"`, null);
+        setHighlightSpan(letterTag, safeWrapFirstChar(bandName));
       }
 
       for (const a of collectRelationListLinks(getTabEl(doc, tabMap, 'Members'))) {
@@ -10313,11 +10673,15 @@
     // Tag-source-highlight (bbp_enable_tag_source_highlight): each name tag
     // has its own source band/member link(s) (expectedNameTags's `links`) —
     // heterogeneous per tag, so layered on top via a follow-up loop rather
-    // than threaded through the batch markPassingTagLinks call above.
+    // than threaded through the batch markPassingTagLinks call above. The
+    // own-title letter tag's source is `highlightSpan` instead (a synthetic
+    // wrapper span, deliberately NOT in `links` — see computeExpectedRelationNameTags —
+    // so the colorization loop below doesn't also mark it permanently green).
     if (Lib.settings.bbp_enable_tag_source_highlight) {
       for (const a of passingNameLinks) {
         const info = expectedNameTags.get(a.textContent.trim().toLowerCase());
-        if (info?.links?.length) wireTagSourceHighlight(a, info.links);
+        const sources = [...(info?.links ?? []), ...(info?.highlightSpan ? [info.highlightSpan] : [])];
+        if (sources.length) wireTagSourceHighlight(a, sources);
       }
     }
 

@@ -291,53 +291,146 @@ passed, without needing to open a panel or hunt for a ⚠️.
 Opt-in (checkbox, "🔍 TAG SOURCE HIGHLIGHT" configSchema section). Started
 DETAIL-only (after a broader first attempt covering all five tag-box pages
 plus event-name/alias/notes sources broke other DETAIL-page annotations —
-see the CHANGELOG's 3.26 entry) and was then extended to VENUE/RETAIL/SONG/
-RELATION once the DETAIL-only version was confirmed solid (3.28 entry).
-When on, hovering a verified (`.bb-tag-ok`) tag whose source is currently
-identifiable also draws a green outline box (`.bb-tag-hover-highlight`)
-around the tag itself and the same box (`.bb-tag-source-highlight`) around
-that source. Deliberately does **not** switch tabs to reveal a hidden source
-(e.g. DETAIL's "Setlist" tab, or the "On Stage"/"In Studio"/"On Audio"/"On
-Set" first tab) — an earlier version did this via a click-simulated tab
-switch, but hovering between tags belonging to different tabs made the page
-constantly jump tabs, losing scroll position/focus; the box on a hidden
-source now just sits inert in the DOM until the user switches tabs
-themselves.
+see the CHANGELOG's 3.26 entry), was then extended to VENUE/RETAIL/SONG/
+RELATION once the DETAIL-only version was confirmed solid (3.28 entry), and
+finally upgraded (3.29 entry) so the highlighted source is the *precise
+substring* a tag was deduced from wherever one exists, rather than a whole
+title/element. When on, hovering a verified (`.bb-tag-ok`) tag whose source
+is currently identifiable also draws a green outline box
+(`.bb-tag-hover-highlight`) around the tag itself and the same box
+(`.bb-tag-source-highlight`) around that source. Deliberately does **not**
+switch tabs to reveal a hidden source (e.g. DETAIL's "Setlist" tab, or the
+"On Stage"/"In Studio"/"On Audio"/"On Set" first tab) — an earlier version
+did this via a click-simulated tab switch, but hovering between tags
+belonging to different tabs made the page constantly jump tabs, losing
+scroll position/focus; the box on a hidden source now just sits inert in
+the DOM until the user switches tabs themselves.
+
+**Precise substring wrapping** (`wrapTextSubstring(parent, substring)`):
+finds the first occurrence of `substring` among `parent`'s own *direct*
+text-node children (never recursing into child elements) and wraps it in a
+new `<span class="bb-tag-source-part">`, via `Text.splitText`. Operating
+only on direct text-node children is what makes repeated calls against the
+same `parent` safe — once a substring is wrapped, its text is no longer a
+text-node child of `parent`, so a later call can't match inside it or
+re-wrap it, and a pre-existing sibling element (e.g. `.bb-event-type-detail`,
+`.bb-tour-name`) can never be searched into by accident. Multiple substrings
+of the same larger text are wrapped **hierarchically**: the containing span
+is wrapped first (e.g. the whole `YYYY-MM-DD` date, or a RETAIL release
+date's whole `raw` match), then sub-parts are wrapped *within* that
+already-created span (year/month/day within the date span; month/day/year
+within a specific release date's span) — this both scopes the sub-search
+correctly (no risk of e.g. a month number "10" accidentally matching a
+street-number-style substring elsewhere in a venue name) and gives the
+containing span itself a usable fallback artefact for tags with no more
+specific substring (see `usa`/`canada` below).
 
 **Source resolution, per page** (each `annotate*PageTags` builds its own
-lookup(s) only when the setting is on; DETAIL's are wrapped in try/catch so
-a lookup failure can't break the rest of the tag annotation):
-- **DETAIL — setlist song tags**: the song's own `<a href="/song:…">` in the
-  live Setlist tab, looked up by name (`songAnchorByName`).
-- **DETAIL — "On Stage"/"In Studio"/"On Audio"/"On Set" relation tags**: the
-  matching relation name link(s) in `extractRelations(document)`
-  (`relationElByName`), resolved via each result's `names: string[]` field
-  (added to
+lookup(s)/wraps only when the setting is on, wrapped in try/catch so a
+resolution failure can't break the rest of the tag annotation — including
+`computeExpectedRelationNameTags`, whose *result* is load-bearing for the
+RELATION page's own tag computation, not just this feature):
+- **DETAIL/VENUE — venue/city/state/country location tags**:
+  `resolveLocationSourceEl(r, loc, scope, fallbackEl)` maps a
+  `checkParsedLocationTags` result's `label` prefix (`"Venue"`, `"Venue
+  detail:"`, `"City:"`, `"State:"`, `"Country: ..."`) back to the literal
+  substring in `loc` (`parseVenuePageLocation`/`parseEventNameLocation`'s
+  return value, re-derived at the call site) and wraps just that — e.g.
+  `universityofmichigan` → "University Of Michigan", `annarbor` → "Ann
+  Arbor", `michigan(mi)` → "MI". Falls back to `fallbackEl` (the whole
+  title on VENUE; the whole venue-string portion of the title on DETAIL,
+  see below) for `usa`/`canada` and any `COUNTRY_EXTRA_TAGS` (`"Region:
+  ..."`) result — these have no literal substring in the title at all. The
+  "At The" venue-name split (`checkVenueNameTag`'s regex) is re-run here to
+  wrap each half separately.
+- **VENUE/SONG/RETAIL — first-letter tag**: just the title's first
+  character, wrapped via `wrapTextSubstring`. On VENUE, nested inside the
+  venue-name span when one was created (wrapping the venue name *after* the
+  first character was already wrapped separately would fail to find it — no
+  longer a contiguous run of plain text), falling back to the whole title
+  when the venue tag itself didn't match.
+- **DETAIL — the venue portion of the title**: isolated first via
+  `venueStringSpan = wrapTextSubstring(h1, textAfterTheDatePrefix)`, then
+  the location-tag substrings above are wrapped *within* it (not `h1`
+  directly) — this scoping is also what makes `venueStringSpan` itself the
+  correct `usa`/`canada`/`"Region: ..."` fallback (the venue portion only,
+  not the date).
+- **DETAIL — event-type tag** (e.g. `gig`): the existing
+  `.bb-event-type-detail` span (`addDetailTitleAnnotation` already appends
+  it to `#page-title` *before* `annotateDetailPageTags` runs) — no wrapping
+  needed, just a direct element reference.
+- **DETAIL — year/month/day/weekday tags**: `eventDate` (`YYYY-MM-DD`) is
+  wrapped as a whole first (`dateSpan`), then year/month/day are wrapped
+  within it (`dateTagMap`, keyed by tag value — the month *tag* is a name
+  like `"october"` but its substring is the numeric `"10"`). A weekday tag
+  (e.g. `friday`, checked via `DAY_NAMES.includes(tag)`) highlights the
+  whole `dateSpan`, since no weekday name is literally written in the title.
+- **DETAIL — `guest`**: the `(Guest)` marker element itself
+  (`extractRelations` now also captures `extraEl`/`mExtraEl` alongside the
+  existing text-only `extra` field), resolved via `guestElByName` — built
+  alongside `relationElByName`, and selected instead of it specifically for
+  results where `r.method === 'guest'`.
+- **DETAIL — "On Stage"/"In Studio"/"On Audio"/"On Set" relation tags**
+  (non-`guest` methods): the matching relation name link(s) in
+  `extractRelations(document)` (`relationElByName`), resolved via each
+  result's `names: string[]` field (added to
   `checkSingleRelationName`/`checkRelationNameTags`/`checkOnStageRelationTags`
   specifically for this feature) — empty for the tab-wide `'fixed'` method
   (no single relation to point at), one name for a plain match, two for
   `'ampersand-combined'`/multi-name `'guest'`.
-- **VENUE — location tags**: no per-component split exists in `#page-title`
-  (see "Event-name / venue-name location tag check" above), so the whole
-  title element (`getPageTitleElement`) is used as a best-effort artefact
-  for every venue/city/state/country tag alike.
-- **RETAIL — month/day/year tags**: the single `<pre><code>` metadata block
-  (`parseRetailReleaseDates`'s source), shared by every date tag. The
-  batch's other passing tags (`retail`/letter/`underconstruction`) have no
-  single source, so the highlight is layered on top via a direct
-  `wireTagSourceHighlight` loop (checking `describeDateTag(tag, 'verified')`
-  per tag) rather than threaded through the one `markPassingTagLinks` call
-  that sets every passing tag's message.
-- **SONG — exact-title/derived-alias tags**: the whole title element
-  (`getPageTitleElement`), same reasoning as VENUE.
+- **DETAIL — setlist song tags**: the song's own `<a href="/song:…">` in the
+  live Setlist tab, looked up by name (`songAnchorByName`).
+- **DETAIL — a tour tag** (e.g. `tour_rvr`): the existing `.bb-tour-name`
+  span — but that span doesn't exist yet when `annotateDetailPageTags` runs
+  (`addTourNameSpan` is called by the caller, `runDetailProcessing`, *after*
+  this function returns, using its `tourCheck` result). So
+  `annotateDetailPageTags` instead computes and returns `tourTagAnchors`
+  (the `<a>` link(s) for whichever `TOUR_TAG_SET` tag(s) matched), and the
+  caller wires `wireTagSourceHighlight` post-hoc, right after
+  `addTourNameSpan(...)` runs.
+- **DETAIL — `FUZZY_SUBSTRING_TAGS` matches** (alias/notes, e.g. `grammy`,
+  `benefit`): `checkAliasSubstringTags`/`checkNotesSubstringTags` now also
+  return the specific lowercase `matched` substring (previously computed
+  internally but discarded). `wrapFuzzyMatchSubstring(el, matched)`
+  re-finds it case-insensitively in `el`'s live text (to recover the
+  original casing) and wraps just that word — for alias matches, `el` is
+  `findEventAliasElement(document)` (the first tab's `<strong>` header, not
+  the `.bb-event-alias` span shown next to the page title, which is just a
+  display copy); for notes matches, whichever `findPageNotesSourceElements`
+  element actually contains the match.
+- **RETAIL — month/day/year tags**: each `parseRetailReleaseDates` entry's
+  whole `raw` match (e.g. `"April 18, 2026 (Vinyl)"`) is wrapped first, then
+  its `monthRaw`/`dayRaw`/`year` are wrapped *within* that span — `monthRaw`/
+  `dayRaw` (added to `parseRetailReleaseDates`'s return alongside the
+  existing fields) are the literal, un-normalized regex-group text, since
+  the existing `month`/`day` fields are normalized (lowercase name,
+  zero-padded) for tag comparison and don't always match the raw text
+  verbatim (e.g. day `"08"` vs. raw `"8"`). This correctly distinguishes
+  between multiple release dates listed on the same line.
 - **RELATION — Bands/Members name tags**: `computeExpectedRelationNameTags()`'s
   `info.links` (the real name link(s) for that specific tag) — heterogeneous
-  per tag, so also layered on top via a direct `wireTagSourceHighlight` loop
+  per tag, so layered on top via a direct `wireTagSourceHighlight` loop
   after the batch `markPassingTagLinks` call, reusing the same `links` the
   adjacent unconditional green-coloring loop already uses.
-- Every other passing-tag call site (generic managed tags on any page;
-  DETAIL's event-name-location/alias/notes checks) still simply omits
-  `sourceEl` — not yet extended to those.
+- **RELATION — the page's own-title letter tag**: (the `letterTag` entries
+  inside `computeExpectedRelationNameTags`, for the "Bands" tab's
+  surname-first-letter case or the "Members" tab's band-name-first-letter
+  case — previously always passed `link: null`) now wraps the title's first
+  character via `safeWrapFirstChar`, gated on `doc === document` (this
+  function is also called with a detached fetched `Document` for the YEAR
+  page's nested Relation Tags button, where wrapping would be pointless).
+  Stored in a **separate `highlightSpan` field**, not `links` — an earlier
+  version stored it in `links` directly, but that field is also read by
+  `annotateRelationPageTags`'s pre-existing unconditional "colorize every
+  name link green" loop (`for (const nameLink of info.links)
+  nameLink.classList.add('bb-relation-name-ok')`, run whenever the tag is
+  simply present — not hover-gated), so the letter span ended up
+  permanently green/bold instead of only highlighting on hover. The
+  hover-highlight wiring in `annotateRelationPageTags` reads both `links`
+  and `highlightSpan`; the colorization loop only ever reads `links`.
+- Every other passing-tag call site (generic managed tags with no single
+  source on any page; RETAIL's `retail`/letter/`underconstruction`) still
+  simply omits `sourceEl`.
 
 **No cache-reload persistence yet**: unlike other listener types in this
 file, the `mouseenter`/`mouseleave` pair wired here is not currently restored
@@ -897,8 +990,12 @@ same structure, just sourced differently:
    `rehearsal` page's "On Stage" tab (via its `"closed"` substring, not the
    tag's own name), and tag `"benefit"` matches a notes paragraph mentioning
    "...Light Of Day Benefit.".
-3. Only matching tags are returned, as `{ tag, label }` (`label` names
-   *which* source and substring matched); there is no "missing" counterpart —
+3. Only matching tags are returned, as `{ tag, label, matched }` (`label`
+   names *which* source and substring matched for display; `matched` is the
+   same substring, lowercase — added for the tag-source-highlight feature's
+   `wrapFuzzyMatchSubstring`, see "Tag source highlight" above, so the
+   caller doesn't need to re-derive which of a tag's several candidate
+   substrings actually hit); there is no "missing" counterpart —
    a tag not in this map, or present but not matching any of its substrings
    in either source, is simply left to whatever other check (or none) already
    governs it. Neither function ever *requires* a tag to exist — both only

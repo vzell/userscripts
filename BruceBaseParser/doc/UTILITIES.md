@@ -180,6 +180,7 @@ both on the same element, since both firing at once produces a duplicate
 | `.bb-year-tour-name` | Italic bold tour name on YEAR page (opt-in); shares `bbp_tour_name_color` with `.bb-tour-name` |
 | `.bb-tag-hover-highlight` | Hover-only outline box around a verified tag `<a>` (opt-in, `bbp_enable_tag_source_highlight`, DETAIL/VENUE/RETAIL/SONG/RELATION) |
 | `.bb-tag-source-highlight` | Hover-only outline box around a verified tag's on-page source element(s) (same setting) — see TAGS.md's "Tag source highlight" |
+| `.bb-tag-source-part` | Marker class on a `<span>` created by `wrapTextSubstring` to isolate one substring of a larger text (e.g. a venue name inside a page title) for the tag-source-highlight feature — no visual style of its own, just a wrapper `.bb-tag-source-highlight` can be toggled on |
 | `.bb-section-processed` | Wrapper div for each event section on YEAR pages |
 | `.bb-section-original` | Hidden div holding pre-processing snapshot |
 | `.bb-section-controls` | Flex div holding ⇄ Original and ☰ List buttons per section |

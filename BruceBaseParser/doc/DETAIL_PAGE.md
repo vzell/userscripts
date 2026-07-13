@@ -67,8 +67,8 @@ g. **Tag annotation** — `annotateDetailPageTags(tabMap, eventDate, eventType,
    after `colorizeOnStageRelationNames` runs (part of the "On Stage"/"In
    Studio"/"On Audio"/"On Set" tab relation tag check), it also calls
    `annotateFirstTab(tabMap)` — see "`annotateFirstTab`" below — and returns
-   `{ additionalTags, onstageUrl, tourCheck, eventAlias }`. When
-   `additionalTags.length > 0`, `addOnstageTagsGlyph(additionalTags,
+   `{ additionalTags, onstageUrl, tourCheck, eventAlias, tourTagAnchors }`.
+   When `additionalTags.length > 0`, `addOnstageTagsGlyph(additionalTags,
    onstageUrl)` appends a 🏷️ glyph to `#page-title h1` with a rich tooltip
    listing the extra tags and linking to the companion page. Then, when
    `eventAlias` is non-null, `addEventAliasSpan(eventAlias)` appends the same
@@ -77,7 +77,13 @@ g. **Tag annotation** — `annotateDetailPageTags(tabMap, eventDate, eventType,
    larger `#page-title`); when `tourCheck` resolves to a genuine tour event
    (not the `tour_no` exception) with a `mostSpecificTour`,
    `addTourNameSpan(tourCheck.mostSpecificTour.name)` appends the tour's
-   official name (`.bb-tour-name`) right after that. Always finishes by
+   official name (`.bb-tour-name`) right after that — and, when
+   `bbp_enable_tag_source_highlight` is on, wires `tourTagAnchors` (the tour
+   tag's own `<a>` link(s) in `.page-tags`, computed inside
+   `annotateDetailPageTags` since it can't be resolved by the caller) to
+   highlight `.bb-tour-name` on hover, right here rather than inside
+   `annotateDetailPageTags` itself since `.bb-tour-name` doesn't exist until
+   this line runs (see TAGS.md's "Tag source highlight"). Always finishes by
    reorganizing `.page-tags` into per-first-letter lines (`groupTagsIntoLines`
    — see TAGS.md), regardless of whether any consistency issues were found.
 
