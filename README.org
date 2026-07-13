@@ -4903,7 +4903,7 @@ in the '<div class="list-pages-box">' free text section there is "Springsteen of
 Same on @YEAR page e.g http://brucebase.wikidot.com/2026#290626
 @debug/year-free-text.html
 
-** increase the font size of '<p id="bb-year-progress">' on all pages where ist used
+** DONE increase the font size of '<p id="bb-year-progress">' on all pages where ist used
 *** initial
 
 1.)
@@ -4948,12 +4948,19 @@ Also colorise the tab text of the first tab in green (like the text "Setlist") w
 
 ** "Friendly Enemies, The" has two column layout and doesn't highlight on second column under "The Sonic People"
 
-http://brucebase.wikidot.com/relation:the-friendly-enemies
+"Friendly Enemies, The" at http://brucebase.wikidot.com/relation:the-friendly-enemies has a two column layout and
+doesn't highlight relation names on the second column under "The Sonic People"
 
-** "brondbyhallen" -> "Brøndbyhallen"
+** DONE "brondbyhallen"
+*** initial
 
-http://brucebase.wikidot.com/gig:1981-05-02-brondbyhallen-copenhagen-denmark
+When deducing the tag from the following venue name at http://brucebase.wikidot.com/gig:1981-05-02-brondbyhallen-copenhagen-denmark
+"Brøndbyhallen", it should be "brondbyhallen"
+The same for all other non ascii chars
 
+*** bug
+
+The last implementation broke almost everything on the RELATION, SONG, VENUE and EVENT DETAIL pages. Not even the "Original Page" button is present anymore. Tags, Setlists and Relations are not colorized anymore.
 
 * Problems
 ** http://brucebase.wikidot.com/content:five-rings-farm-wellington-fl tag "appearnaces"
