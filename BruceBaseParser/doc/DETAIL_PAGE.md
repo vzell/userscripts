@@ -63,7 +63,10 @@ f. **Venue name check (computed early)** — `findVenueLink(document)` → fetch
 g. **Tag annotation** — `annotateDetailPageTags(tabMap, eventDate, eventType,
    detailSections, rawDetailName, onstageResult, hasHelp, hasFeatured,
    venueDetailExtra)`. Merges any onstage-only tags into its internal tag set
-   before running all consistency checks (see [TAGS.md](TAGS.md)), and returns
+   before running all consistency checks (see [TAGS.md](TAGS.md)). Right
+   after `colorizeOnStageRelationNames` runs (part of the "On Stage"/"In
+   Studio"/"On Audio"/"On Set" tab relation tag check), it also calls
+   `annotateFirstTab(tabMap)` — see "`annotateFirstTab`" below — and returns
    `{ additionalTags, onstageUrl, tourCheck, eventAlias }`. When
    `additionalTags.length > 0`, `addOnstageTagsGlyph(additionalTags,
    onstageUrl)` appends a 🏷️ glyph to `#page-title h1` with a rich tooltip
@@ -155,7 +158,33 @@ human-readable description (`"Event name mismatch between YEAR and DETAIL page"`
 and/or `"Setlist has differences between YEAR and DETAIL page"`). The
 `dataset.msg` is required so `collectPageWarnings()` can include the setlist
 issue in the `#page-title` warning annotation. On full match: adds
-`.bb-setlist-tab-match` to the `<em>` (green + bold via CSS class).
+`.bb-setlist-tab-match` to the `<em>` (green + bold via CSS class). Opt-out via
+`bbp_enable_setlist_tab_annotation` (default `true`, "🔖 TAB ANNOTATIONS"
+configSchema section) — a no-op when disabled.
+
+---
+
+## `annotateFirstTab`
+
+Mirrors `annotateSetlistTab`, but for the event's *first* tab — whichever of
+`RELATION_TAB_CONFIGS`'s labels (`"On Stage"`, `"In Studio"`, `"On Audio"`,
+`"On Set"`) is present in `tabMap` (a page has at most one, always tab index
+0 — see [TAGS.md](TAGS.md)'s "On Stage"/"In Studio"/"On Audio"/"On Set" tab
+relation tag check). No-op when none of those labels is present (e.g. an
+interview-only page has no such tab at all). Called from
+`annotateDetailPageTags`, right after `colorizeOnStageRelationNames` — it
+depends on that call having already run, since it detects a mismatch purely
+by checking whether any `.bb-relation-name-warn` span exists anywhere on the
+page (the ⚠️ `colorizeOnStageRelationNames` appends after an unmatched
+relation name's own link). On mismatch: appends
+`<span class="bb-first-tab-ann"> ⚠️</span>` to the tab's `<em>`, with
+`dataset.msg` set to `` `"${tabLabel}" tab has one or more relations with no
+matching tag` ``. On full match: adds `.bb-first-tab-match` to the `<em>`
+(green + bold, same CSS rule `.bb-setlist-tab-match` uses). Opt-out via
+`bbp_enable_first_tab_annotation` (default `true`, same "🔖 TAB ANNOTATIONS"
+configSchema section) — a no-op when disabled; `colorizeOnStageRelationNames`
+itself (the underlying per-relation-name ⚠️/green marking) is unaffected by
+this setting, only the tab-label-level summary annotation is.
 
 ---
 
@@ -166,7 +195,8 @@ called. It collects all warning messages from the live DOM via
 `collectPageWarnings()`:
 - `.bb-tag-missing`, `.bb-tag-spurious`, `.bb-anchor-warn`, `.bb-venue-warn`,
   `.bb-para-warn` → `dataset.msg || title`
-- `.yui-nav em span[data-msg]` → `dataset.msg` (covers `bb-setlist-tab-ann`)
+- `.yui-nav em span[data-msg]` → `dataset.msg` (covers `bb-setlist-tab-ann`
+  and `bb-first-tab-ann`)
 - `.bb-venue-info` is deliberately *not* in this list — it's informational
   (see step i above), not a real issue.
 

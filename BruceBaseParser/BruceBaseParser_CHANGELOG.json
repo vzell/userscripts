@@ -1,5 +1,30 @@
 [
     {
+        "version": "3.25",
+        "date": "2026-07-13",
+        "sections": [
+            {
+                "label": "🚀 Feature",
+                "items": [
+                    "Added a first-tab (\"On Stage\"/\"In Studio\"/\"On Audio\"/\"On Set\", whichever RELATION_TAB_CONFIGS label applies) consistency annotation on DETAIL pages, mirroring the existing \"Setlist\" tab annotation: the new annotateFirstTab appends a ⚠️ to the tab label in the wikidot navigation when colorizeOnStageRelationNames flagged any relation name with no matching tag (.bb-relation-name-warn present), or colors the tab label green/bold (.bb-first-tab-match, same styling as .bb-setlist-tab-match) when every relation passed. Wired into annotateDetailPageTags right after colorizeOnStageRelationNames, and picked up automatically by the existing #page-title \"N issues found\" warning tooltip (collectPageWarnings' generic '.yui-nav em span[data-msg]' selector already covers it).",
+                    "Both the existing \"Setlist\" tab annotation and the new first-tab annotation are now independently configurable via two new checkboxes in a new \"🔖 TAB ANNOTATIONS\" configSchema section: bbp_enable_setlist_tab_annotation and bbp_enable_first_tab_annotation (both default true)."
+                ]
+            }
+        ]
+    },
+    {
+        "version": "3.24",
+        "date": "2026-07-13",
+        "sections": [
+            {
+                "label": "✨ Improve",
+                "items": [
+                    "Added user-configurable colors for the event alias (.bb-event-alias) and tour name (.bb-tour-name / .bb-year-tour-name, kept in sync) spans via two new color-picker settings (bbp_event_alias_color, bbp_tour_name_color, new \"🎨 APPEARANCE\" configSchema section). Requires the newly-added iro.js @require (@jaames/iro@5), same dependency ShowAllEntityData.user.js already uses for its color_picker settings."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.23",
         "date": "2026-07-12",
         "sections": [

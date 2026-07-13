@@ -205,13 +205,15 @@ guarantee; ties break toward whichever entry appears first in
   `.bb-event-type-detail`'s existing proportions) fixes this without
   touching the YEAR page's own (already correctly-sized) usage.
   `.bb-tour-name` carries the same `font-size: 0.6em` directly, plus its own
-  distinct color (`#06c`) so the two are visually distinguishable.
+  distinct color (configurable via `bbp_tour_name_color`, default `#0066cc`)
+  so the two are visually distinguishable.
 - **YEAR page** (opt-in, `bbp_show_tour_name_on_year_page`, default `false`):
   see [YEAR_PAGE.md](YEAR_PAGE.md)'s "1b. Tour name annotation" for the
   `titleTailAnchor`-chained insertion mechanics. Styled via
   `.bb-year-tour-name` — same italic/bold shape as `.bb-event-alias`, but
-  colored to match the DETAIL page's `.bb-tour-name` (blue `#06c`) instead of
-  the alias's gray, so a tour name reads consistently as a tour name on
+  colored to match the DETAIL page's `.bb-tour-name` (via the shared
+  `bbp_tour_name_color` setting) instead of the alias's gray
+  (`bbp_event_alias_color`), so a tour name reads consistently as a tour name on
   either page. No font-size override, unlike DETAIL's `.bb-tour-name`/
   `#page-title .bb-event-alias` — the YEAR page's event-heading line was
   never oversized to begin with.

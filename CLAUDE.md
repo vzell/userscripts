@@ -119,7 +119,10 @@ as `MB_PageEnhancer`. Instantiated as `Lib` with a `bbp_`-prefixed `configSchema
 pointing at `BruceBaseParser_CHANGELOG.json` on GitHub raw (auto-registers the "⚙️ Userscript Settings
 Manager" and "📜 ChangeLog" Tampermonkey menu commands). `log()/logWarn()/logErr()` delegate to
 `Lib.debug/warn/error`; `log()` output is gated on `bbp_enable_debug_logging` (default off), while
-`logWarn()`/`logErr()` remain always-visible.
+`logWarn()`/`logErr()` remain always-visible. Also `@require`s `@jaames/iro@5` (iro.js) directly —
+needed by `VZ_MBLibrary`'s `color_picker` configSchema type (used by `bbp_event_alias_color`/
+`bbp_tour_name_color`), same dependency `ShowAllEntityData.user.js` already carries for its own
+color settings.
 
 ### Keyboard shortcuts engine
 

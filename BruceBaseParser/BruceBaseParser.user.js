@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.23
+// @version      3.25
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -9,6 +9,7 @@
 // @supportURL   https://github.com/vzell/userscripts/issues
 // @downloadURL  https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser.user.js
 // @updateURL    https://raw.githubusercontent.com/vzell/userscripts/master/BruceBaseParser.user.js
+// @require      https://cdn.jsdelivr.net/npm/@jaames/iro@5
 // @require      file:///V:/home/vzell/git/springsteen-site-parser/dist/smarttable.js
 // @require      file:///V:/home/vzell/git/springsteen-site-parser/adapters/brucebase.js
 // @require      file:///V:/home/vzell/git/musicbrainz-userscripts/lib/VZ_MBLibrary.user.js
@@ -587,6 +588,50 @@
           type: 'checkbox',
           default: false,
           description: 'Show a ⚠️ warning icon next to setlist songs (DETAIL page Setlist tab, and YEAR page inline setlist) that have no corresponding tag on the event\'s DETAIL page.'
+      },
+
+      // ============================================================
+      // TAB ANNOTATIONS SECTION
+      // ============================================================
+      divider_tab_annotations: {
+          type: 'divider',
+          label: '🔖 TAB ANNOTATIONS'
+      },
+
+      bbp_enable_setlist_tab_annotation: {
+          label: 'Annotate Setlist Tab',
+          type: 'checkbox',
+          default: true,
+          description: 'On the DETAIL page, append a ⚠️ to the "Setlist" tab label when the event name or setlist differs from the YEAR page, or color it green when everything matches.'
+      },
+
+      bbp_enable_first_tab_annotation: {
+          label: 'Annotate First Tab (On Stage / In Studio / On Audio / On Set)',
+          type: 'checkbox',
+          default: true,
+          description: 'On the DETAIL page, append a ⚠️ to the event\'s first tab label ("On Stage"/"In Studio"/"On Audio"/"On Set") when any relation listed there has no matching tag, or color it green when everything matches.'
+      },
+
+      // ============================================================
+      // APPEARANCE SECTION
+      // ============================================================
+      divider_appearance: {
+          type: 'divider',
+          label: '🎨 APPEARANCE'
+      },
+
+      bbp_event_alias_color: {
+          label: 'Event Alias Color',
+          type: 'color_picker',
+          default: '#555555',
+          description: 'Text color of the event alias span (.bb-event-alias), shown next to the event name on the YEAR page and DETAIL page title. Default: gray (#555555).'
+      },
+
+      bbp_tour_name_color: {
+          label: 'Tour Name Color',
+          type: 'color_picker',
+          default: '#0066cc',
+          description: 'Text color of the matched tour name span, shown on the DETAIL page (.bb-tour-name) and, when "Show Tour Name on YEAR Page" is enabled, the YEAR page (.bb-year-tour-name). Both are kept in sync to this one color. Default: blue (#0066cc).'
       },
 
       // ============================================================
@@ -2058,7 +2103,7 @@
    * their color/cursor (see addStyles' .bb-original-view rules) but can't
    * touch an HTML attribute, so toggleAnnotationTitles handles those.
    */
-  const ORIGINAL_VIEW_TITLE_SELECTOR = '.bb-tag-ok, .bb-relation-name-ok, .bb-setlist-tab-match';
+  const ORIGINAL_VIEW_TITLE_SELECTOR = '.bb-tag-ok, .bb-relation-name-ok, .bb-setlist-tab-match, .bb-first-tab-match';
 
   /**
    * Moves the native `title` tooltip off every ORIGINAL_VIEW_TITLE_SELECTOR
@@ -3471,6 +3516,7 @@
   // it is currently selected: green inline style when everything matches, ⚠️ appended
   // when any name or setlist mismatch is detected.
   function annotateSetlistTab(nameMatch, hasSetlist) {
+    if (!Lib.settings.bbp_enable_setlist_tab_annotation) return;
     // Find the <em> whose text is exactly "Setlist" — works whether the tab is
     // active/selected or not (li[title="active"] only exists for the current tab).
     const em = [...document.querySelectorAll('li em')]
@@ -3503,6 +3549,37 @@
       // Class-based so the toggle can revert it without touching inline styles.
       em.classList.add('bb-setlist-tab-match');
       em.title = 'Setlist tab verified: event name matches and no setlist differences were found between the YEAR and DETAIL page.';
+    }
+  }
+
+  // Annotates the event's first tab ("On Stage"/"In Studio"/"On Audio"/"On
+  // Set" — whichever RELATION_TAB_CONFIGS label is present, always tab index
+  // 0) in the wikidot navigation, mirroring annotateSetlistTab: green inline
+  // style when every relation name under it passed checkOnStageRelationTags
+  // (colorizeOnStageRelationNames left no .bb-relation-name-warn spans), ⚠️
+  // appended when at least one did not. No-op when the page has none of
+  // RELATION_TAB_CONFIGS's tab labels (e.g. an interview-only page).
+  function annotateFirstTab(tabMap) {
+    if (!Lib.settings.bbp_enable_first_tab_annotation) return;
+    const tabLabel = Object.keys(RELATION_TAB_CONFIGS).find(label => tabMap.has(label));
+    if (!tabLabel) return;
+    const em = [...document.querySelectorAll('li em')]
+      .find(el => el.textContent.trim().toLowerCase() === tabLabel.toLowerCase());
+    if (!em) return;
+    const hasRelationWarning = !!document.querySelector('.bb-relation-name-warn');
+    if (hasRelationWarning) {
+      const warnSpan = document.createElement('span');
+      warnSpan.className = 'bb-first-tab-ann';
+      warnSpan.textContent = ' ⚠️';
+      const msg = `"${tabLabel}" tab has one or more relations with no matching tag`;
+      warnSpan.dataset.msg = msg;
+      warnSpan.title = msg;
+      warnSpan.style.cursor = 'help';
+      em.appendChild(warnSpan);
+    } else {
+      // Class-based so the toggle can revert it without touching inline styles.
+      em.classList.add('bb-first-tab-match');
+      em.title = `"${tabLabel}" tab verified: every listed relation has a matching tag.`;
     }
   }
 
@@ -9180,6 +9257,11 @@
       document, actualTags,
       computePreferDottedEStreetTag(tabMap, extractOnStageRelationNames(document), eventType)
     );
+    // Mirrors annotateSetlistTab, but for the event's first tab ("On
+    // Stage"/"In Studio"/"On Audio"/"On Set") — must run after
+    // colorizeOnStageRelationNames above, since it looks for the
+    // .bb-relation-name-warn spans that call just rendered.
+    annotateFirstTab(tabMap);
 
     // Tour association: which known Springsteen tour(s) (if any) this
     // event's date falls within, or the tour_no exception — see
@@ -10990,14 +11072,14 @@
       .bb-fail { color: #f66; }
       .bb-event-type        { color: #888; font-style: italic; font-weight: normal; }
       .bb-event-type-detail { font-size: 0.6em; font-weight: normal; color: #666; font-style: italic; vertical-align: middle; }
-      .bb-event-alias       { font-style: italic; font-weight: bold; color: #555; }
-      .bb-tour-name         { font-style: italic; font-weight: bold; color: #06c; font-size: 0.6em; vertical-align: middle; }
+      .bb-event-alias       { font-style: italic; font-weight: bold; color: ${Lib.settings.bbp_event_alias_color}; }
+      .bb-tour-name         { font-style: italic; font-weight: bold; color: ${Lib.settings.bbp_tour_name_color}; font-size: 0.6em; vertical-align: middle; }
       /* On the DETAIL page, .bb-event-alias sits directly inside the large
          #page-title <h1> (unlike its YEAR-page usage, inside a much smaller
          event-heading line) and would otherwise inherit that oversized font
          — match .bb-event-type-detail/.bb-tour-name's proportions instead. */
       #page-title .bb-event-alias { font-size: 0.6em; vertical-align: middle; }
-      .bb-year-tour-name    { font-style: italic; font-weight: bold; color: #06c; }
+      .bb-year-tour-name    { font-style: italic; font-weight: bold; color: ${Lib.settings.bbp_tour_name_color}; }
       .bb-glyph { cursor: default; font-style: normal; margin-left: 4px; }
       .bb-event-title-warn { cursor: help; font-style: normal; margin-left: 2px; }
       /* Informational (not a real mismatch) venue-detail glyph — see findVenueDetailExtra.
@@ -11144,6 +11226,10 @@
       /* Setlist tab label decoration (DETAIL page) */
       .bb-setlist-tab-match { color: #2a2; font-weight: bold; cursor: help; }
 
+      /* First tab ("On Stage"/"In Studio"/"On Audio"/"On Set") label
+         decoration (DETAIL page) — see annotateFirstTab */
+      .bb-first-tab-match { color: #2a2; font-weight: bold; cursor: help; }
+
       /* Tag that passed its consistency check (DETAIL/VENUE/RETAIL/SONG/RELATION pages) */
       .bb-tag-ok { color: #2a2 !important; font-weight: bold; cursor: help; }
 
@@ -11186,7 +11272,8 @@
       .bb-original-view .bb-icon-sorry,
       .bb-original-view .bb-relation-tab-warn,
       .bb-original-view .bb-relation-name-warn,
-      .bb-original-view .bb-setlist-tab-ann { display: none !important; }
+      .bb-original-view .bb-setlist-tab-ann,
+      .bb-original-view .bb-first-tab-ann { display: none !important; }
       .bb-original-view .bb-tags-warn-box   { border: none !important; background: none !important; padding: 0 !important; }
       .bb-original-view .bb-tags-box        { border: none !important; background: none !important; padding: 0 !important; }
       /* .bb-setlist-tab-match sits on an <em> nested inside the tab's own
@@ -11199,7 +11286,8 @@
          the site's) author rules to the browser's native link styling
          (blue, underlined, pointer cursor), restoring the exact "clickable
          hyperlink" look these had before we ever touched them. */
-      .bb-original-view .bb-setlist-tab-match { color: inherit !important; font-weight: inherit !important; cursor: inherit !important; }
+      .bb-original-view .bb-setlist-tab-match,
+      .bb-original-view .bb-first-tab-match { color: inherit !important; font-weight: inherit !important; cursor: inherit !important; }
       .bb-original-view .bb-tag-ok,
       .bb-original-view .bb-relation-name-ok { color: revert !important; font-weight: revert !important; cursor: revert !important; }
       /* Original view: collapse the letter-grouped lines back into

@@ -102,7 +102,8 @@ both on the same element, since both firing at once produces a duplicate
   or table needed): set `.title = msg` only. No JS listener. This covers
   every `spuriousTagMsg`/`passingTagMsg` result, `.bb-tag-spurious` /
   `.bb-tag-ok` / `.bb-para-warn` / `.bb-setlist-tab-ann` / `.bb-setlist-tab-match`
-  / empty-tab warnings, etc. Native tooltips render fine without any JS, so
+  / `.bb-first-tab-ann` / `.bb-first-tab-match` / empty-tab warnings, etc.
+  Native tooltips render fine without any JS, so
   these need **no cache-reload rewiring either** — `title` is a plain HTML
   attribute and survives the `innerHTML` save/load round-trip on its own.
 - **Genuinely rich content** (a `<table>`, per-character diff, or a message
@@ -174,7 +175,9 @@ both on the same element, since both firing at once produces a duplicate
 | `.bb-glyph` | Inline glyph spans (✅ ❌ ⚠️ ❓) appended after event links |
 | `.bb-event-type` | Grey italic `(type)` suffix on YEAR page event links |
 | `.bb-event-type-detail` | Small grey italic `(type)` in DETAIL page `#page-title` |
-| `.bb-event-alias` | Italic bold event alias shown in YEAR glyph tooltip |
+| `.bb-event-alias` | Italic bold event alias shown in YEAR glyph tooltip and DETAIL page title; color configurable via `bbp_event_alias_color` |
+| `.bb-tour-name` | Small italic bold tour name in DETAIL page `#page-title`; color configurable via `bbp_tour_name_color` |
+| `.bb-year-tour-name` | Italic bold tour name on YEAR page (opt-in); shares `bbp_tour_name_color` with `.bb-tour-name` |
 | `.bb-section-processed` | Wrapper div for each event section on YEAR pages |
 | `.bb-section-original` | Hidden div holding pre-processing snapshot |
 | `.bb-section-controls` | Flex div holding ⇄ Original and ☰ List buttons per section |
