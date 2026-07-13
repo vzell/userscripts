@@ -1,5 +1,18 @@
 [
     {
+        "version": "3.33",
+        "date": "2026-07-13",
+        "sections": [
+            {
+                "label": "🐛 Fix",
+                "items": [
+                    "Fixed tag deduction for venue/city/relation/song names containing Latin letters Unicode normalization doesn't decompose into a base letter + combining accent (e.g. o/O-with-stroke, ae/AE, ss, eth, thorn, l/L-with-stroke, d/D-with-stroke) - e.g. \"Brondbyhallen\" (venue name spelled with o-with-stroke) deduced tag \"brndbyhallen\" instead of \"brondbyhallen\". stripDiacritics previously only handled combining-mark accents (\"e\"-acute = \"e\" + combining acute, via String.normalize('NFD')); these letters are their own distinct codepoints that survive normalize('NFD') untouched, so every slug function's final \"delete every non-alphanumeric character\" step was silently DELETING them instead of transliterating them. Added an explicit NON_DECOMPOSABLE_LETTERS substitution table covering the Scandinavian/Icelandic/German/French/Polish/Croatian letters most likely to appear in BruceBase venue/city/relation names. Fixed once in the single shared stripDiacritics helper, so every *Slug/*TagAlias function that already calls it (relationTagSlug, toLocationTagSlug, songTagSlug, computeSongTagAlias, etc.) picks up the fix automatically.",
+                    "A first attempt at this fix declared NON_DECOMPOSABLE_LETTERS as a new top-level const positioned among the helper functions (far down the file), which broke DETAIL/RELATION/SONG/VENUE pages entirely with a runtime ReferenceError (\"Cannot access 'NON_DECOMPOSABLE_LETTERS' before initialization\"): this file's boot dispatch (an `await runDetailPage()`/etc. call) sits very early (~line 1255), and since it's a top-level await, the rest of the file's top-level statements - including that const - never get a chance to run before runDetailPage()'s own (fully-hoisted) function calls reach stripDiacritics() and try to read it. Every other top-level const lookup table in this file (MANAGED_CONTENT_TAGS, FUZZY_SUBSTRING_TAGS, etc.) is declared before that dispatch point for exactly this reason; NON_DECOMPOSABLE_LETTERS now lives there too, right after FUZZY_SUBSTRING_TAGS."
+                ]
+            }
+        ]
+    },
+    {
         "version": "3.32",
         "date": "2026-07-13",
         "sections": [

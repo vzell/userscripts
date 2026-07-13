@@ -77,6 +77,35 @@ appends `#bb-tooltip` to `document.body`.
 
 ---
 
+## Top-level `const`/`let` placement — must come before the boot dispatch
+
+The whole file is one big IIFE. Near its top (~line 1255) the boot dispatch does
+`const path = location.pathname...` then `await runHomePage()`/`await runYearPage()`/
+`await runDetailPage()`/etc. — a **top-level `await`**. Because of that, this file's
+own remaining top-level statements (everything textually *after* the dispatch,
+which given the dispatch's early position is effectively the entire rest of the
+file) do not get a chance to run until the awaited `run*Page()` call fully settles.
+
+`function` declarations are unaffected — they're fully hoisted (name *and* body)
+and callable from anywhere in the enclosing scope regardless of their source
+position, so the hundreds of helper functions defined after the dispatch work
+fine. But a **new top-level `const`/`let`** placed after the dispatch is not
+initialized until its own declaration line executes — and since `run*Page()`'s
+internal (fully-hoisted) function calls can reach code that reads it *while the
+outer `await run*Page()` is still suspended*, i.e. long before control flow would
+ever fall through to that later position, referencing it throws `ReferenceError:
+Cannot access '<name>' before initialization`. This bit a real fix once — see the
+`NON_DECOMPOSABLE_LETTERS` entry in `BruceBaseParser_CHANGELOG.json` (v3.33) and
+its declaration site (right after `FUZZY_SUBSTRING_TAGS`, ~line 418).
+
+**Every existing top-level `const` lookup table (`MANAGED_CONTENT_TAGS`,
+`FUZZY_SUBSTRING_TAGS`, `TOUR_DEFINITIONS`, `NON_DECOMPOSABLE_LETTERS`, etc.) is
+declared before the boot dispatch for exactly this reason.** Any new top-level
+data constant must go there too — near the top of the file, alongside the others
+— never interspersed among the helper functions further down.
+
+---
+
 ## RECENT CHANGES page (`system:recent-changes`)
 
 The page uses Wikidot's `SiteChangesModule` for JavaScript-driven pagination.

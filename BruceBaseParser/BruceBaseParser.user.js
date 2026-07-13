@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VZ: BruceBase Parser
 // @namespace    https://github.com/vzell/userscripts
-// @version      3.32
+// @version      3.33
 // @description  Validates event name and setlist consistency between year overview and detail pages
 // @author       vzell
 // @tag          AI generated
@@ -423,6 +423,34 @@
     anniversary: ['anniversary'],
     interview: ['interview'],
     funeral: ['funeral'],
+  };
+
+  // Substitutions for Latin-script letters that Unicode NFD normalization
+  // does NOT decompose into a base letter + combining mark (unlike "e" +
+  // combining acute for e-acute) - these are their own distinct codepoints,
+  // so without this table stripDiacritics's NFD step leaves them untouched,
+  // and every slug function's later "delete every non-a-z0-9 character"
+  // step then silently DELETES them instead of transliterating them, e.g.
+  // venue name "Brondbyhallen" (with o-with-stroke) -> "brndbyhallen"
+  // instead of "brondbyhallen". Covers Scandinavian/Icelandic/German/
+  // French/Polish/Croatian letters. MUST stay up here, near the top of the
+  // file's other top-level lookup tables and before the boot dispatch's
+  // top-level `await run*Page()` calls (~line 1255) - a version of this
+  // declared further down (among the helper functions, past the dispatch
+  // point) threw "Cannot access 'NON_DECOMPOSABLE_LETTERS' before
+  // initialization": run*Page()'s own internal (fully-hoisted) function
+  // calls reach stripDiacritics() while this file's own top-level `await
+  // run*Page()` call is still suspended, long before control flow would
+  // ever fall through to a later-positioned `const`.
+  const NON_DECOMPOSABLE_LETTERS = {
+    'ø': 'o', 'Ø': 'O',
+    'æ': 'ae', 'Æ': 'AE',
+    'œ': 'oe', 'Œ': 'OE',
+    'ß': 'ss',
+    'ð': 'd', 'Ð': 'D',
+    'þ': 'th', 'Þ': 'Th',
+    'ł': 'l', 'Ł': 'L',
+    'đ': 'd', 'Đ': 'D',
   };
 
   /**
@@ -7909,12 +7937,15 @@
   }
 
   /**
-   * Removes accents/diacritics from a string, e.g. "JOLÉ BLON" -> "JOLE BLON".
+   * Removes accents/diacritics from a string, e.g. "JOLÉ BLON" -> "JOLE BLON",
+   * plus the letters in NON_DECOMPOSABLE_LETTERS (declared near the top of
+   * this file, well before the boot dispatch - see that constant's comment).
    * @param {string} str
    * @returns {string}
    */
   function stripDiacritics(str) {
-    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\u00f8\u00d8\u00e6\u00c6\u0153\u0152\u00df\u00f0\u00d0\u00fe\u00de\u0142\u0141\u0111\u0110]/g, function (ch) { return NON_DECOMPOSABLE_LETTERS[ch]; });
   }
 
   /**

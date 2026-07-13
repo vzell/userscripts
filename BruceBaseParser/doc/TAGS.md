@@ -747,7 +747,24 @@ actual tag wins:
    and every non-alphanumeric character deleted (not just whitespace), e.g.
    `"WRECKING BALL"` → `wreckingball`, `"LIVIN' IN THE FUTURE"` →
    `livininthefuture`, `"DEVIL'S ARCADE"` → `devilsarcade`, `"JOLÉ BLON"` →
-   `joleblon`.
+   `joleblon`. `stripDiacritics` handles two distinct cases: combining-mark
+   accents (`"É"` = `"E"` + a combining acute, stripped via
+   `String.normalize('NFD')` + deleting the combining-mark range) AND Latin
+   letters Unicode normalization does NOT decompose at all — their own
+   distinct codepoints, e.g. o/O-with-stroke, ae/AE, ß, eth, thorn,
+   l/L-with-stroke, d/D-with-stroke — transliterated via the explicit
+   `NON_DECOMPOSABLE_LETTERS` table since without it they'd survive
+   `normalize('NFD')` untouched and then simply be *deleted* (not
+   transliterated) by every slug function's final "delete every
+   non-a-z0-9 character" step — e.g. a venue named with an o-with-stroke
+   letter deduces its tag correctly instead of dropping the letter
+   entirely. `NON_DECOMPOSABLE_LETTERS` is declared near the top of the
+   file (right after `FUZZY_SUBSTRING_TAGS`) rather than near
+   `stripDiacritics` itself — see `doc/ARCHITECTURE.md`'s "Top-level
+   `const`/`let` placement" note for why a top-level lookup table must
+   live before the boot dispatch. Shared by every `*Slug`/`*TagAlias`
+   function in this file (`relationTagSlug`, `toLocationTagSlug`,
+   `songTagSlug`, `computeSongTagAlias`, etc.), so fixed once, centrally.
 2. **Derived alias** (`computeSongTagAlias(title)`): splits the title on
    whitespace and, per word:
    - a dotted initialism (`^([A-Za-z]\.)+$`, e.g. `"U.S.A."`) contributes ALL
@@ -910,7 +927,11 @@ Tag derivation, per component:
   leading/trailing `"The"`/`"Le"`/`"De"` article (including the `"(The)"`
   parenthetical form), lowercase, delete every non-alphanumeric character —
   no acronym, unlike `computeSongTagAlias`. E.g. `"West Long Branch"` →
-  `westlongbranch`, `"Co-op Live"` → `cooplive`, `"Adelphi (The)"` → `adelphi`.
+  `westlongbranch`, `"Co-op Live"` → `cooplive`, `"Adelphi (The)"` → `adelphi`,
+  a venue name spelled with an o-with-stroke letter → the same word with a
+  plain `o` (see `stripDiacritics`'s `NON_DECOMPOSABLE_LETTERS` note above —
+  without it this silently deleted the letter entirely instead of
+  transliterating it).
 - **US state**: tag is `` `${toLocationTagSlug(fullName)}(${abbr.toLowerCase()})` ``,
   e.g. `NJ` → `newjersey(nj)`, plus a separate `usa` tag.
 - **Canadian province**: same shape, e.g. `ON` → `ontario(on)`, plus `canada`.
