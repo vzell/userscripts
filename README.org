@@ -4728,9 +4728,8 @@ of the event. It also overrides the "rescheduled" tag if both are present in the
 Correction: We do use the video-tag, but only on the recnote-pages. This indicates if there is a video-bootleg (stream,
 dvd, BR, etc.) for the show. We do NOT use the video-tag on gig-pages, only the icon on the year-page indicates if there
 is video available on the media-tab.
-
-** highlight tags <-> song names when hovering over
-*** initial
+** TODO highlight tags <-> artefacts when hovering over
+*** DONE initial
 
 Currently on pages where we display the tags box '<div class="bb-tags-box"' we colorize in "green" all the tags which could somehow be verified/deduced.
 Implement the following feature:
@@ -4748,7 +4747,7 @@ activated/selected (like e.g. the first tab, with the relation information, or t
 
 Make the feature configurable in 'const configSchema' (default: false)
 
-*** bugs
+*** DONE bugs
 
 The feature is completely buggy. Before fixing anything it is probably better to commit the working features introduced in version "3.24" and 3.25" .
 
@@ -4770,6 +4769,166 @@ the '<span class="bb-glyph"> 🏷️</span>' vanished from the title lines
 
 the event alias/tour name vanished from the title line
 
+*** DONE flickering
+
+Now it works. But switch of the automatic tab switching when hovering between tags which belong to different tabs, as we loose focus and it's actually irritating
+
+*** DONE also implement on the other pages where we have the tags box
+
+also implement on the other pages where we have the tags box
+
+*** DONE also implement partial highlightning like parts of a venue
+
+1.)
+
+On VENUE pages e.g. http://brucebase.wikidot.com/venue:university-of-michigan-ann-arbor-mi currently we have highlightning for: location tags → whole page title element 
+
+a.) Also implement partial highlightning like location parts of a venue
+
+- "universityofmichigan" → "University Of Michigan"
+- "annarbor" → "Ann Arbor"
+- "michigan(mi)" → "MI"
+- "usa" → Highlight the whole venue name (same for "canada")
+- "u" → first char of venue title
+
+2.)
+
+On EVENT DETAIL pages e.g. http://brucebase.wikidot.com/gig:1980-10-03-crisler-arena-ann-arbor-mi (see also the VENUE page from point 1. above)
+
+a.)
+
+- also highlight the specific source parts of the venue in the event title line, we should have the information available. 
+
+- Additionally the venue name itself like e.g.
+
+"crislerarena" → "Crisler Arena"
+
+- For "usa", "canada" higlight e.g.
+
+"usa" → Highlight the whole venue name "Crisler Arena, University Of Michigan, Ann Arbor, MI"
+
+b.)
+
+the event type e.g "gig" tag should be higlighted together with the event type in the title line on e.g. EVENT DETAIL pages
+
+c.)
+
+the different year parts of the event title should be highlighted
+
+- "1980" → "1980" from "1980-10-03"
+- "october" → "10" from "1980-10-03"
+- "03" → "03" from "1980-10-03"
+- "friday" → the whole date "1980-10-03"
+  
+d.)
+
+"guest" → "(Guest)" after a relation name
+
+e.)
+
+When an event has a tourname
+
+"tour_rvr" → highlight the tour name in the event tile line
+
+f.)
+
+for the tags from FUZZY_SUBSTRING_TAGS their matchers should be highlighted
+
+3.)
+
+On SONG/RELATION/RETAIL pages additionally the first char of song title
+
+4.)
+
+On RETAIL pages the different parts inside the '<pre><code' section
+
+*** DONE plan: act on @debug/partial.org
+
+act on @debug/partial.org
+
+*** DONE bugs
+
+On RELATION pages, the first char of song title is ALWAYS highlighted
+
+*** DONE implement the same on YEAR pages for each event
+
+Implement the same what we did in version "3.29"/"3.30" for EVENT DETAIL pages now on YEAR pages for each event.
+
+In detail, when on the event e.g. http://brucebase.wikidot.com/2016#000116 from the 2016 YEAR page
+and the button
+
+#+begin_example
+<button class="bb-event-tab-btn bb-icon-active" title="Tags panel — issues detected: 2 missing, 3 spurious" data-msg="Tag issues: 2 missing, 3 spurious" style="color: red;">Tags ⚠️ (2 missing, 3 spurious)</button>
+#+end_example
+
+has been clicked so that the tags from the corresponding event are displayed in a panel under the '<ol class="bb-tags-list"'
+when hovering over a tag the corresponding entity should be highlighted in the event section on the YEAR page
+
+*** DONE bug
+
+@debug/source-highlight.html
+It seems to work only for the date part tags, the "rehearsal" and "private" tag.
+
+The '<p class="bb-relations-flat">' and the song names are never highlighted when hovering the corresponding tag
+
+*** DONE OK, relations and song names work now. What's still missing and NOT highlightning yet:
+
+OK, relations and song names work now. What's still missing and NOT highlightning yet:
+
+- "even venue name", "event city", "event state", inside the event title
+- the complete event name without the date when there is "usa", "canada" tag
+- "help" tag, the "Help Us" call-to-action icon
+
+*** DONE still missing
+
+still missing on YEAR and EVENT DETAIL pages:
+- when "prem", "1", "2", "3", etc "9+" are present as tags, highlight all song names which are tour premieres
+- when "soundcheck" tag is present, hightlight the occurence also before the soundcheck songlist
+- when tags from the FUZZY_SUBSTRING_TAGS variable are present, the occurences should also be highlighted in the free note text
+
+*** DONE YEAR page has no live rendering of a DETAIL page's free-text notes preamble — no source exists to highlight; leave unresolved (no highlight), same as any other unresolvable case
+
+YEAR page has no live rendering of a DETAIL page's free-text notes preamble — no source exists to highlight; leave
+unresolved (no highlight), same as any other unresolvable case
+
+*** DONE when tags from the FUZZY_SUBSTRING_TAGS variable are present, the occurences should ARE NOT highlighted in the free note text
+
+when tags from the FUZZY_SUBSTRING_TAGS variable are present, the occurences ARE still NOT highlighted in the free note text, e.g. "funeral"
+
+EVENT DETAIL page e.g http://brucebase.wikidot.com/nogig:2026-06-29-central-synagogue-new-york-city-ny
+@debug/detail-free-text.html
+
+in the '<div class="list-pages-box">' free text section there is "Springsteen offers the final eulogy at the star-studded funeral service for Clive Davis." with "funeral" included.
+
+Same on @YEAR page e.g http://brucebase.wikidot.com/2026#290626
+@debug/year-free-text.html
+
+** increase the font size of '<p id="bb-year-progress">' on all pages where ist used
+*** initial
+
+1.)
+
+increase the font size of '<p id="bb-year-progress">' on all pages where ist used
+
+2.)
+
+on YEAR pages implement flagging(warning icon ⚠️) when a relation in the section '<p class="bb-relations-flat">' has no associated tag on panel under the '<ol class="bb-tags-list"'
+
+*** bug
+
+buggy, now ALL relations on the YEAR pages are flagged with warning icons, e.g. on http://brucebase.wikidot.com/2026#180626
+@debug/all-relations.html
+there should be ONLY one, " Lil' John Roberts" according to the DETAIL page http://brucebase.wikidot.com/gig:2026-06-18-barack-obama-presidential-center-chicago-il
+@debug/dd.html
+
+** "offvid" tag when embeded widget container
+
+"offvid" tag when embedded widget container e.g. http://brucebase.wikidot.com/song:racing-in-the-street
+
+#+begin_example
+<div data-testid="embed-widget-container" class="encore-dark-theme encore-layout-themes TrackWidget_widgetContainer__gADzr"
+
+#+end_example
 
 ** DONE colorize "Relation" tab
 
@@ -4786,6 +4945,15 @@ We want the same for the first tab of an event page (on this page called "On Sta
 Make both features (first tab and "Setlist" tab) configurable in 'const configSchema' (default: true)
 
 Also colorise the tab text of the first tab in green (like the text "Setlist") when there are NO problems detected
+
+** "Friendly Enemies, The" has two column layout and doesn't highlight on second column under "The Sonic People"
+
+http://brucebase.wikidot.com/relation:the-friendly-enemies
+
+** "brondbyhallen" -> "Brøndbyhallen"
+
+http://brucebase.wikidot.com/gig:1981-05-02-brondbyhallen-copenhagen-denmark
+
 
 * Problems
 ** http://brucebase.wikidot.com/content:five-rings-farm-wellington-fl tag "appearnaces"
