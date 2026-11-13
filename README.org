@@ -29,7 +29,7 @@ e.g. "http://brucebase.wikidot.com/2024"
 Typical event name looks like (in all UPPERCAE and a "-" between the date and venue) and hyperlinked to their event
 DETAIL page (Capitalized and "The" inside "(" and ") before the ",") in
 
-| YEAR page (event name)                             | Anchor in YEAR page   | Link                                                                          | DETAIL page (event name)                                       |
+| YEAR page (event name)                             | Anchor in YEAR page   | Link                                                                          | DETAIL page (event name)                           |
 |----------------------------------------------------+-----------------------+-------------------------------------------------------------------------------+----------------------------------------------------|
 | 2024-01-07 - THE BEVERLY HILTON, BEVERLY HILLS, CA | <a name="070124"></a> | http://brucebase.wikidot.com/nogig:2024-01-07-beverly-hilton-beverly-hills-ca | 2024-01-07 Beverly Hilton (The), Beverly Hills, CA |
 | 2024-01-19 - FIVE RINGS FARM, WELLINGTON, FL       | <a name="190124"></a> | http://brucebase.wikidot.com/gig:2024-01-19-five-rings-farm-wellington-fl     | 2024-01-19 Five Rings Farm, Wellington, FL         |
